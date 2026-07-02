@@ -81,6 +81,25 @@ App.Views = (function () {
       return pf.asc ? av - bv : bv - av;
     });
 
+    // 目前分頁小計（單位跟隨列表：全部/台股=NT$、美股=$）
+    {
+      let fMv = 0, fCost = 0, fUnreal = 0, fDay = 0;
+      for (const p of list) {
+        const c = (U.normalizeMarketKey(p.market) === U.Market.us && pf.filter === 'all') ? rate : 1;
+        fMv += p.marketValue * c;
+        fCost += p.cost * c;
+        fUnreal += p.unrealizedPnl * c;
+        fDay += (p.dailyChange || 0) * p.shares * c;
+      }
+      const fPct = fCost > 1e-9 ? fUnreal / fCost * 100 : null;
+      const cur = pf.filter === 'us' ? '$ ' : 'NT$ ';
+      html += `<div class="card filter-sum">
+        <div><div class="k">市值總和</div><div class="v">${cur}${U.fmtKMBB(fMv)}</div></div>
+        <div><div class="k">當前損益</div><div class="v" style="color:${UI.pnlColor(fUnreal)}">${U.fmtBannerSigned(fUnreal)}<span class="pct">${fPct != null ? ' (' + U.fmtPct(fPct) + ')' : ''}</span></div></div>
+        <div><div class="k">今日漲跌</div><div class="v" style="color:${UI.pnlColor(fDay)}">${U.fmtBannerSigned(fDay)}</div></div>
+      </div>`;
+    }
+
     let listHtml = '';
     if (!list.length) {
       listHtml = `<div class="empty">尚無持倉，點右下角 ＋ 新增交易</div>`;
