@@ -471,8 +471,11 @@ App.Views = (function () {
     const denom = gTotal => basis === 'group' ? (gTotal || sum.investTwd) : basis === 'invest' ? sum.investTwd : sum.netWorth;
 
     let html = `<div class="nw-hero">
-      <div class="nw-cap">我的淨資產 (TWD)</div>
-      <div class="nw-num">${U.fmtWhole(sum.netWorth)}</div>
+      <div>
+        <div class="nw-cap">我的淨資產 (TWD)</div>
+        <div class="nw-num">${U.fmtWhole(sum.netWorth)}</div>
+      </div>
+      <button class="nw-add" id="as-add-btn" aria-label="新增">＋</button>
     </div>`;
 
     // ── 流動資金 ─────────────────────────────────────────
@@ -492,7 +495,8 @@ App.Views = (function () {
           <div class="as-val" style="color:#2E7D32">${U.fmtWhole(twd)}</div>
         </div>`;
       }
-      html += `<button class="as-add" id="add-cash">＋ 新增現金帳戶</button></div>`;
+      if (!cashAccts.length) html += `<div class="empty" style="padding:14px">尚無現金帳戶，點右上角 ＋ 新增</div>`;
+      html += `</div>`;
     }
     html += `</div>`;
 
@@ -549,8 +553,8 @@ App.Views = (function () {
           <div class="as-val">${U.fmtWhole(mv)}</div>
         </div>`;
       }
-      if (!positions.length) html += `<div class="empty" style="padding:16px">尚無持倉</div>`;
-      html += `<button class="as-add" id="add-group">＋ 新增群組</button></div>`;
+      if (!positions.length) html += `<div class="empty" style="padding:16px">尚無持倉，點右上角 ＋ 新增投資</div>`;
+      html += `</div>`;
     }
     html += `</div>`;
 
@@ -571,7 +575,8 @@ App.Views = (function () {
           <div class="as-val" style="color:${UI.GAIN}">−${U.fmtWhole(twd)}</div>
         </div>`;
       }
-      html += `<button class="as-add" id="add-liab">＋ 新增負債</button></div>`;
+      if (!liabs.length) html += `<div class="empty" style="padding:14px">尚無負債，點右上角 ＋ 新增</div>`;
+      html += `</div>`;
     }
     html += `</div>`;
 
@@ -582,9 +587,7 @@ App.Views = (function () {
       const k = h.dataset.cat; as.open[k] = !as.open[k]; assets(root);
     }));
     const bind = (sel, fn) => { const el = root.querySelector(sel); if (el) el.addEventListener('click', fn); };
-    bind('#add-cash', () => openMoneyForm('cash', null, () => assets(root)));
-    bind('#add-liab', () => openMoneyForm('liab', null, () => assets(root)));
-    bind('#add-group', () => openGroupCreate(() => assets(root)));
+    bind('#as-add-btn', () => openAddChooser(() => assets(root)));
     root.querySelectorAll('.as-row[data-kind]').forEach(r => r.addEventListener('click', () => {
       const kind = r.dataset.kind;
       const list = kind === 'cash' ? S.getCashAccounts() : S.getLiabilities();
@@ -602,6 +605,25 @@ App.Views = (function () {
     }));
     root.querySelectorAll('.as-row.member').forEach(r => r.addEventListener('click', () =>
       openGroupAssign(r.dataset.sym, () => assets(root))));
+  }
+
+  // 統一新增選單：現金 / 投資 / 負債 / 群組
+  function openAddChooser(onDone) {
+    const ov = UI.openSheet('新增', `
+      <div class="ga-list">
+        <div class="ga-item" data-k="cash"><b>現金帳戶</b><span class="ga-sub">台幣 / 美金，計入流動資金</span></div>
+        <div class="ga-item" data-k="invest"><b>投資</b><span class="ga-sub">買入股票 / 加密貨幣（可選擇扣款帳戶）</span></div>
+        <div class="ga-item" data-k="liab"><b>負債</b><span class="ga-sub">信貸、房貸等，自淨資產扣除</span></div>
+        <div class="ga-item" data-k="group"><b>投資群組</b><span class="ga-sub">將持倉分類（例：ETF、核心持股）</span></div>
+      </div>`, '');
+    ov.querySelectorAll('.ga-item').forEach(it => it.addEventListener('click', () => {
+      const k = it.dataset.k;
+      UI.closeSheet();
+      if (k === 'cash') openMoneyForm('cash', null, onDone);
+      else if (k === 'liab') openMoneyForm('liab', null, onDone);
+      else if (k === 'group') openGroupCreate(onDone);
+      else openTxForm(null); // 投資 → 新增交易（完成後 afterDataChange 會重繪）
+    }));
   }
 
   // 現金 / 負債帳戶表單（新增或編輯；含快速增減）

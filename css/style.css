@@ -246,7 +246,11 @@ input, select { font-family: inherit; font-size: 15px; }
 .link-edit { color: var(--tw); font-size: 13px; }
 
 /* ---- 資產（淨資產）頁 ---- */
-.nw-hero { padding: 8px 4px 16px; }
+.nw-hero { padding: 8px 4px 16px; display: flex; align-items: center; justify-content: space-between; }
+.nw-add { flex: none; width: 46px; height: 46px; border-radius: 50%; background: #6D5FD5; color: #fff; font-size: 26px; font-weight: 300; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(109,95,213,0.35); }
+.nw-add:active { transform: scale(0.93); }
+.ga-item b { display: block; font-size: 15px; }
+.ga-item .ga-sub { display: block; font-size: 12px; color: var(--sub); margin-top: 2px; }
 .nw-cap { font-size: 14px; color: var(--sub); }
 .nw-num { font-size: 36px; font-weight: 800; letter-spacing: -0.5px; margin-top: 2px; }
 .as-cat { padding: 0; overflow: hidden; }
