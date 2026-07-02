@@ -4,7 +4,7 @@
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
 
-  let currentTab = 'portfolio';
+  let currentTab = 'assets';
   const TABS = [
     { id: 'portfolio', label: '持倉', icon: '📊' },
     { id: 'history', label: '歷史', icon: '📈' },
