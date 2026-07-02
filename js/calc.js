@@ -243,10 +243,21 @@ App.Calc = (function () {
     };
   }
 
+  // 現金帳戶 / 負債 台幣總額（美金 ×匯率）
+  function cashLiabTwd() {
+    const rate = S.getFxRate() || 31.5;
+    const toTwd = a => (a.currency === 'USD' ? (a.balance || 0) * rate : (a.balance || 0));
+    return {
+      cashTwd: S.getCashAccounts().reduce((s, a) => s + toTwd(a), 0),
+      liabTwd: S.getLiabilities().reduce((s, a) => s + toTwd(a), 0),
+    };
+  }
+
   // 儲存今日快照（覆蓋同日）
   function saveTodaySnapshot() {
     const summary = buildSummary(buildPositions());
     const date = U.isoDate();
+    const { cashTwd, liabTwd } = cashLiabTwd();
     const snap = {
       date,
       marketValue: summary.totalMarketValueTwd,
@@ -276,6 +287,10 @@ App.Calc = (function () {
       twReturnPct: summary.twUnrealizedPnlPct || 0,
       usReturnPct: summary.usUnrealizedPnlPct || 0,
       totalReturnPct: summary.totalReturnPct || 0,
+      // 資產頁分項：流動資金 / 負債 / 淨資產（= 投資市值 + 現金 − 負債）
+      cashAccountsTwd: cashTwd,
+      liabilitiesTwd: liabTwd,
+      netWorth: summary.totalMarketValueTwd + cashTwd - liabTwd,
       createdAt: Date.now(),
     };
     const all = S.getSnapshots();
@@ -312,6 +327,10 @@ App.Calc = (function () {
       twReturnPct: s.twCostBasis > 1e-9 ? s.twUnrealizedPnl / s.twCostBasis * 100 : 0,
       usReturnPct: s.usCostBasisTwd > 1e-9 ? s.usUnrealizedPnlTwd / s.usCostBasisTwd * 100 : 0,
       totalReturnPct: totalCost > 1e-9 ? totalPnl / totalCost * 100 : 0,
+      // 重建時以「目前」現金/負債回填（歷史餘額無從得知）
+      cashAccountsTwd: s._cashTwd || 0,
+      liabilitiesTwd: s._liabTwd || 0,
+      netWorth: totalMV + (s._cashTwd || 0) - (s._liabTwd || 0),
       createdAt: Date.now(),
     };
   }
@@ -323,6 +342,7 @@ App.Calc = (function () {
     const txs = S.getTransactions().slice().sort((a, b) => a.time - b.time);
     if (!txs.length) return 0;
     const rate = fxRate || S.getFxRate() || 31.5;
+    const clNow = cashLiabTwd(); // 現金/負債以目前值回填
     const mmap = S.metaMap();
     const acc = S.getAccount();
     const realized = S.getRealized();
@@ -377,6 +397,7 @@ App.Calc = (function () {
         for (const t of txs) { if (txDate(t) > ds) continue; if (t.type === 'BUY') spent += t.shares * t.price + t.fee; else recv += t.shares * t.price - t.fee; }
         s.cashBalance = acc.initialCash - spent + recv;
       }
+      s._cashTwd = clNow.cashTwd; s._liabTwd = clNow.liabTwd;
       snaps.push(makeSnapshot(ds, s));
     }
     S.setSnapshots(snaps);

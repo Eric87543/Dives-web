@@ -173,8 +173,15 @@ App.Views = (function () {
   }
 
   /* ===================== 歷史 ===================== */
-  const hist = { tab: 'tx', range: 'ytd', txFilter: 'all', search: '' };
+  const hist = { tab: 'tx', range: 'ytd', txFilter: 'all', search: '', chart: 'alloc' };
   const RANGES = [['1m', '1M'], ['3m', '3M'], ['6m', '6M'], ['ytd', 'YTD'], ['1y', '1Y'], ['all', '全部']];
+  // 趨勢圖表種類
+  const HIST_CHARTS = [['alloc', '資產配置'], ['net', '淨資產'], ['cash', '流動資金'], ['liab', '負債']];
+  const HIST_LINE_CONF = {
+    net: { label: '淨資產', color: '#0F766E' },
+    cash: { label: '流動資金', color: '#34A853' },
+    liab: { label: '負債', color: '#D95555' },
+  };
 
   function history(root) {
     root.innerHTML = `<div class="page">
@@ -207,15 +214,37 @@ App.Views = (function () {
 
   function histTrend(fixedEl, scrollEl) {
     fixedEl.innerHTML = `<div class="chips" id="range-chips">` +
-      RANGES.map(([v, l]) => `<button class="chip ${hist.range === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('') + `</div>`;
+      RANGES.map(([v, l]) => `<button class="chip ${hist.range === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('') + `</div>
+      <div class="chips" id="chart-chips">` +
+      HIST_CHARTS.map(([v, l]) => `<button class="chip ${hist.chart === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('') + `</div>`;
     fixedEl.querySelectorAll('#range-chips .chip').forEach(b =>
       b.addEventListener('click', () => { hist.range = b.dataset.v; histTrend(fixedEl, scrollEl); }));
+    fixedEl.querySelectorAll('#chart-chips .chip').forEach(b =>
+      b.addEventListener('click', () => { hist.chart = b.dataset.v; histTrend(fixedEl, scrollEl); }));
 
     scrollEl.innerHTML = `<div class="card"><div class="chart-host" id="trend-chart"></div></div>`;
+    const host = scrollEl.querySelector('#trend-chart');
     const snaps = filterByRange(S.getSnapshots());
-    const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0 } }));
-    App.Charts.trend(scrollEl.querySelector('#trend-chart'), points, {
-      twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
+
+    if (hist.chart === 'alloc') {
+      // 資產配置：台股/美股/加密堆疊
+      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0 } }));
+      App.Charts.trend(host, points, {
+        twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
+        xLabels: monthLabels(points),
+        valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
+      });
+      return;
+    }
+    // 淨資產 / 流動資金 / 負債 單線圖（舊快照無欄位時退回可用值）
+    const valOf = s =>
+      hist.chart === 'net' ? (s.netWorth != null ? s.netWorth : s.netAsset)
+        : hist.chart === 'cash' ? (s.cashAccountsTwd != null ? s.cashAccountsTwd : (s.cashBalance || 0))
+          : (s.liabilitiesTwd || 0);
+    const conf = HIST_LINE_CONF[hist.chart];
+    const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: valOf(s) } }));
+    App.Charts.lineChart(host, points, {
+      series: [{ key: 'v', label: conf.label, color: conf.color, fill: true }],
       xLabels: monthLabels(points),
       valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
     });
@@ -325,7 +354,8 @@ App.Views = (function () {
     const pPnl = s.totalPnl - (prev ? prev.totalPnl : 0);
     return {
       label,
-      netAsset: s.netAsset,
+      // 淨資產 = 投資 + 流動資金 − 負債（舊快照無此欄時退回舊 netAsset）
+      netAsset: s.netWorth != null ? s.netWorth : s.netAsset,
       newInvestment: cost - (prev ? prev.totalCostBasisTwd : 0),
       periodPnl: pPnl,
       totalPnl: s.totalPnl,
@@ -409,9 +439,13 @@ App.Views = (function () {
     } else {
       let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
       if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
-      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0 } }));
+      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: {
+        tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0,
+        nw: s.netWorth != null ? s.netWorth : s.netAsset,
+      } }));
       App.Charts.trend(host, points, {
         twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
+        extraLines: [{ key: 'nw', label: '淨資產', color: '#0F766E', dash: true }], // 含現金−負債
         xLabels: repXLabels(points),
         valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
       });

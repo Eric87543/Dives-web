@@ -14,7 +14,8 @@ App.Csv = (function () {
     'TwCostBasis', 'UsCostBasisTwd', 'TotalCostBasisTwd', 'TwUnrealizedPnl',
     'UsUnrealizedPnlTwd', 'TwRealizedPnl', 'UsRealizedPnlTwd', 'TwTotalPnl',
     'UsTotalPnlTwd', 'TwReturnPct', 'UsReturnPct', 'TotalReturnPct',
-    'CryptoMarketValueTwd', 'CryptoCostBasisTwd', 'CryptoUnrealizedPnlTwd', 'CryptoRealizedPnlTwd'
+    'CryptoMarketValueTwd', 'CryptoCostBasisTwd', 'CryptoUnrealizedPnlTwd', 'CryptoRealizedPnlTwd',
+    'CashAccountsTwd', 'LiabilitiesTwd', 'NetWorth'
   ];
 
   function exportCsv() {
@@ -41,7 +42,9 @@ App.Csv = (function () {
         s.usUnrealizedPnlTwd, s.twRealizedPnl, s.usRealizedPnlTwd, s.twTotalPnl,
         s.usTotalPnlTwd, s.twReturnPct, s.usReturnPct, s.totalReturnPct,
         s.cryptoMarketValueTwd || 0, s.cryptoCostBasisTwd || 0,
-        s.cryptoUnrealizedPnlTwd || 0, s.cryptoRealizedPnlTwd || 0
+        s.cryptoUnrealizedPnlTwd || 0, s.cryptoRealizedPnlTwd || 0,
+        s.cashAccountsTwd || 0, s.liabilitiesTwd || 0,
+        s.netWorth != null ? s.netWorth : (s.netAsset || 0)
       ].join(','));
     }
 
@@ -142,6 +145,9 @@ App.Csv = (function () {
           cryptoMarketValueTwd: n(23), cryptoCostBasisTwd: n(24),
           cryptoUnrealizedPnlTwd: n(25), cryptoRealizedPnlTwd: n(26),
           cryptoTotalPnlTwd: n(25) + n(26),
+          // 現金/負債/淨資產（舊版無此欄 → 淨資產以 netAsset 回填）
+          cashAccountsTwd: n(27), liabilitiesTwd: n(28),
+          netWorth: p.length > 29 && p[29] !== '' ? n(29) : undefined,
           createdAt: Date.now(),
         });
       }

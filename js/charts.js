@@ -55,14 +55,16 @@ App.Charts = (function () {
     const padL = 46, padR = 10, padT = 10, padB = 22;
     const chartW = W - padL - padR, chartH = H - padT - padB;
 
+    const extras = opts.extraLines || []; // [{key,label,color,dash}] 疊加線（不堆疊）
     const rows = points.map(p => {
       const tw = p.values[twKey] || 0, us = p.values[usKey] || 0;
       const cr = crKey ? (p.values[crKey] || 0) : 0;
-      return { date: p.date, tw, us, cr, total: tw + us + cr };
+      const ex = extras.map(e => p.values[e.key] || 0);
+      return { date: p.date, tw, us, cr, ex, total: tw + us + cr };
     });
     const hasCr = rows.some(r => r.cr > 0.5); // 有加密部位才畫第三層
     let hi = 0;
-    for (const r of rows) hi = Math.max(hi, r.total, r.tw);
+    for (const r of rows) { hi = Math.max(hi, r.total, r.tw); for (const v of r.ex) hi = Math.max(hi, v); }
     const ticks = niceTicks(0, hi, 4);
     const yLo = ticks[0], yHi = ticks[ticks.length - 1], ySpan = Math.max(yHi - yLo, 1);
     const n = rows.length;
@@ -93,6 +95,11 @@ App.Charts = (function () {
       svg += `<path d="${fwd(totPts)}" fill="none" stroke="${hasCr ? CR_LINE : US_LINE}" stroke-width="1.8" stroke-linejoin="round"/>`;
       if (hasCr) svg += `<path d="${fwd(usTopPts)}" fill="none" stroke="${US_LINE}" stroke-width="1.5" stroke-linejoin="round"/>`;
       svg += `<path d="${fwd(twPts)}" fill="none" stroke="${TW_LINE}" stroke-width="1.8" stroke-linejoin="round"/>`;
+      // 疊加線（例：淨資產）
+      extras.forEach((e, ei) => {
+        const pts = rows.map((r, i) => [xAt(i), yAt(r.ex[ei])]);
+        svg += `<path d="${fwd(pts)}" fill="none" stroke="${e.color}" stroke-width="1.8" ${e.dash ? 'stroke-dasharray="5 3"' : ''} stroke-linejoin="round"/>`;
+      });
     }
     if (opts.xLabels) for (const e of opts.xLabels)
       svg += `<text x="${xAt(e.idx)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="#78716c">${e.label}</text>`;
@@ -105,6 +112,7 @@ App.Charts = (function () {
       <span class="lg"><i style="background:${US_LINE}"></i>${usLabel}</span>
       ${hasCr ? `<span class="lg"><i style="background:${CR_LINE}"></i>${crLabel}</span>` : ''}
       <span class="lg"><i style="background:${hasCr ? CR_LINE : US_LINE};opacity:.5"></i>總資產</span>
+      ${extras.map(e => `<span class="lg"><i style="background:${e.color}"></i>${e.label}</span>`).join('')}
     </div>`;
     container.innerHTML = legend + svg;
 
@@ -124,7 +132,8 @@ App.Charts = (function () {
         <div><i style="background:${TW_LINE}"></i>${twLabel} <b>${valueFmt(r.tw)}</b></div>
         <div><i style="background:${US_LINE}"></i>${usLabel} <b>${valueFmt(r.us)}</b></div>
         ${hasCr ? `<div><i style="background:${CR_LINE}"></i>${crLabel} <b>${valueFmt(r.cr)}</b></div>` : ''}
-        <div><i style="background:${hasCr ? CR_LINE : US_LINE};opacity:.5"></i>總資產 <b>${valueFmt(r.total)}</b></div>`;
+        <div><i style="background:${hasCr ? CR_LINE : US_LINE};opacity:.5"></i>總資產 <b>${valueFmt(r.total)}</b></div>
+        ${extras.map((e, ei) => `<div><i style="background:${e.color}"></i>${e.label} <b>${valueFmt(r.ex[ei])}</b></div>`).join('')}`;
       tip.style.display = 'block';
       const left = Math.min(Math.max(xAt(idx) / W * rect.width - 60, 4), rect.width - 130);
       tip.style.left = left + 'px'; tip.style.top = '4px';
@@ -265,5 +274,75 @@ App.Charts = (function () {
     container.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
   }
 
-  return { trend, bars, reportColumn, niceTicks };
+  /* ---- 通用多序列折線圖（淨資產 / 流動資金 / 負債等）----
+   * points: [{date, values:{...}}]
+   * opts: {series: [{key,label,color,fill}], xLabels, valueFmt, height}
+   */
+  function lineChart(container, points, opts) {
+    container.innerHTML = '';
+    if (!points || !points.length) { container.innerHTML = '<div class="chart-empty">暫無歷史資料</div>'; return; }
+    opts = opts || {};
+    const series = opts.series || [];
+    const valueFmt = opts.valueFmt || (v => App.Util.fmtKMBB(v));
+    const H = opts.height || 200;
+    const W = container.clientWidth || 340;
+    const padL = 46, padR = 10, padT = 10, padB = 22;
+    const chartW = W - padL - padR, chartH = H - padT - padB;
+
+    const rows = points.map(p => ({ date: p.date, vals: series.map(s => p.values[s.key] || 0) }));
+    let hi = 0;
+    for (const r of rows) for (const v of r.vals) hi = Math.max(hi, v);
+    const ticks = niceTicks(0, hi, 4);
+    const yLo = ticks[0], yHi = ticks[ticks.length - 1], ySpan = Math.max(yHi - yLo, 1);
+    const n = rows.length;
+    const xAt = i => padL + (n > 1 ? (i / (n - 1)) * chartW : chartW / 2);
+    const yAt = v => padT + (1 - (v - yLo) / ySpan) * chartH;
+    const y0 = yAt(0);
+    const fwd = pts => pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" class="trend-svg">`;
+    for (const t of ticks) {
+      const y = yAt(t);
+      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? '#d6d3d1' : '#eee'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
+      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#78716c">${fmtAxis(t)}</text>`;
+    }
+    series.forEach((s, si) => {
+      const pts = rows.map((r, i) => [xAt(i), yAt(r.vals[si])]);
+      if (s.fill && n > 0) {
+        svg += `<path d="${fwd(pts)} L${pts[n - 1][0].toFixed(1)},${y0} L${pts[0][0].toFixed(1)},${y0} Z" fill="${s.color}" opacity="0.14"/>`;
+      }
+      svg += `<path d="${fwd(pts)}" fill="none" stroke="${s.color}" stroke-width="1.8" stroke-linejoin="round"/>`;
+    });
+    if (opts.xLabels) for (const e of opts.xLabels)
+      svg += `<text x="${xAt(e.idx)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="#78716c">${e.label}</text>`;
+    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#a8a29e" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
+    svg += `</svg>`;
+
+    const legend = `<div class="chart-legend">${series.map(s => `<span class="lg"><i style="background:${s.color}"></i>${s.label}</span>`).join('')}</div>`;
+    container.innerHTML = legend + svg;
+
+    const svgEl = container.querySelector('svg');
+    const cursor = container.querySelector('.cursor-line');
+    const tip = document.createElement('div'); tip.className = 'chart-tip'; tip.style.display = 'none';
+    container.appendChild(tip);
+    function handle(clientX) {
+      const rect = svgEl.getBoundingClientRect();
+      const sx = (clientX - rect.left) / rect.width * W;
+      let idx = Math.round((sx - padL) / (chartW || 1) * (n - 1));
+      idx = Math.max(0, Math.min(n - 1, idx));
+      const r = rows[idx];
+      cursor.setAttribute('x1', xAt(idx)); cursor.setAttribute('x2', xAt(idx));
+      cursor.setAttribute('visibility', 'visible');
+      tip.innerHTML = `<div class="tip-date">${App.Util.isoDate(r.date)}</div>` +
+        series.map((s, si) => `<div><i style="background:${s.color}"></i>${s.label} <b>${valueFmt(r.vals[si])}</b></div>`).join('');
+      tip.style.display = 'block';
+      const left = Math.min(Math.max(xAt(idx) / W * rect.width - 60, 4), rect.width - 130);
+      tip.style.left = left + 'px'; tip.style.top = '4px';
+    }
+    svgEl.addEventListener('pointerdown', e => handle(e.clientX));
+    svgEl.addEventListener('pointermove', e => { if (e.buttons) handle(e.clientX); });
+    container.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+  }
+
+  return { trend, bars, reportColumn, lineChart, niceTicks };
 })();
