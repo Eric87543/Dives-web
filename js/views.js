@@ -22,8 +22,8 @@ App.Views = (function () {
     const acc = S.getAccount();
     let html = `<div class="card summary-card">
       <div class="sum-net">
-        <div class="sum-label">總淨資產</div>
-        <div class="sum-value">NT$ ${U.fmtWhole(summary.netAsset)}</div>
+        <div class="sum-label">總倉位</div>
+        <div class="sum-value">NT$ ${U.fmtWhole(summary.totalMarketValueTwd)}</div>
       </div>
       <div class="sum-grid">
         <div><div class="k">今日損益</div><div class="v">${UI.money(summary.dayPnl, { signed: true })}</div></div>
