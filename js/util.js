@@ -6,7 +6,7 @@ window.App = window.App || {};
 
 App.Util = (function () {
   // ---- 市場類型 ----
-  const Market = { tse: 'tse', otc: 'otc', rotc: 'rotc', us: 'us', unknown: 'unknown' };
+  const Market = { tse: 'tse', otc: 'otc', rotc: 'rotc', us: 'us', crypto: 'crypto', unknown: 'unknown' };
 
   function normalizeMarketKey(market) {
     switch ((market || '').trim().toLowerCase()) {
@@ -14,6 +14,7 @@ App.Util = (function () {
       case 'otc': case 'tpex': case '上櫃': case 'otc_market': return Market.otc;
       case 'rotc': case 'emerging': case '興櫃': return Market.rotc;
       case 'us': case 'usa': case '美股': return Market.us;
+      case 'crypto': case 'coin': case '加密': case '虛擬貨幣': return Market.crypto;
       default: return Market.unknown;
     }
   }
@@ -38,6 +39,7 @@ App.Util = (function () {
       case 'otc': return '上櫃';
       case 'rotc': return '興櫃';
       case 'us': return '美股';
+      case 'crypto': return '加密';
       default: return '未知';
     }
   }

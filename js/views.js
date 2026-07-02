@@ -5,7 +5,7 @@ window.App = window.App || {};
 
 App.Views = (function () {
   const U = App.Util, S = App.Store, C = App.Calc, UI = App.UI;
-  const COL = { tw: '#E8823C', us: '#4A82C8', total: '#0F766E' }; // 與走勢圖一致：台股橙、美股藍
+  const COL = { tw: '#E8823C', us: '#4A82C8', crypto: '#9B59D0', total: '#0F766E' }; // 台股橙、美股藍、加密紫
 
   // 共用：刷新後重繪目前分頁
   function rerender() { App.renderCurrent(); }
@@ -32,18 +32,21 @@ App.Views = (function () {
         <div><div class="k">未實現</div><div class="v">${UI.money(summary.totalUnrealizedPnl, { signed: true })}</div></div>
       </div>`;
 
-    // 配置條
-    const twV = summary.twMarketValue, usV = summary.usMarketValueTwd, tot = twV + usV;
+    // 配置條（台股/美股/加密）
+    const twV = summary.twMarketValue, usV = summary.usMarketValueTwd, crV = summary.cryptoMarketValueTwd || 0;
+    const tot = twV + usV + crV;
     if (tot > 0) {
-      const twPct = twV / tot * 100, usPct = usV / tot * 100;
+      const twPct = twV / tot * 100, usPct = usV / tot * 100, crPct = crV / tot * 100;
       html += `<div class="alloc">
         <div class="alloc-bar">
           <span style="width:${twPct}%;background:${COL.tw}"></span>
           <span style="width:${usPct}%;background:${COL.us}"></span>
+          <span style="width:${crPct}%;background:${COL.crypto}"></span>
         </div>
         <div class="alloc-legend">
           <span><i style="background:${COL.tw}"></i>台股 ${twPct.toFixed(0)}%</span>
           <span><i style="background:${COL.us}"></i>美股 ${usPct.toFixed(0)}%</span>
+          ${crV > 0 ? `<span><i style="background:${COL.crypto}"></i>加密 ${crPct.toFixed(0)}%</span>` : ''}
           ${acc.initialCash != null ? `<span class="cash">現金 NT$ ${U.fmtKMBB(summary.cashBalance)}</span>` : ''}
         </div>
       </div>`;
@@ -53,7 +56,7 @@ App.Views = (function () {
     // 篩選 + 排序
     html += `<div class="toolbar">
       <div class="seg" id="pf-filter">
-        ${seg('all', '全部', pf.filter)}${seg('tw', '台股', pf.filter)}${seg('us', '美股', pf.filter)}
+        ${seg('all', '全部', pf.filter)}${seg('tw', '台股', pf.filter)}${seg('us', '美股', pf.filter)}${seg('crypto', '加密', pf.filter)}
       </div>
       <select id="pf-sort" class="select">
         <option value="marketValue">市值</option>
@@ -64,13 +67,15 @@ App.Views = (function () {
     </div>`;
 
     // 持倉列表
+    const isUsdMk = m => m === U.Market.us || m === U.Market.crypto; // USD 計價市場
     let list = positions.filter(p => {
       const m = U.normalizeMarketKey(p.market);
-      if (pf.filter === 'tw') return m !== U.Market.us;
+      if (pf.filter === 'tw') return !isUsdMk(m);
       if (pf.filter === 'us') return m === U.Market.us;
+      if (pf.filter === 'crypto') return m === U.Market.crypto;
       return true;
     });
-    const mv = p => U.normalizeMarketKey(p.market) === U.Market.us ? p.marketValue * rate : p.marketValue;
+    const mv = p => isUsdMk(U.normalizeMarketKey(p.market)) ? p.marketValue * rate : p.marketValue;
     list.sort((a, b) => {
       let av, bv;
       switch (pf.sort) {
@@ -81,18 +86,18 @@ App.Views = (function () {
       return pf.asc ? av - bv : bv - av;
     });
 
-    // 目前分頁小計（單位跟隨列表：全部/台股=NT$、美股=$）
+    // 目前分頁小計（單位跟隨列表：全部/台股=NT$、美股/加密=$）
     {
       let fMv = 0, fCost = 0, fUnreal = 0, fDay = 0;
       for (const p of list) {
-        const c = (U.normalizeMarketKey(p.market) === U.Market.us && pf.filter === 'all') ? rate : 1;
+        const c = (isUsdMk(U.normalizeMarketKey(p.market)) && pf.filter === 'all') ? rate : 1;
         fMv += p.marketValue * c;
         fCost += p.cost * c;
         fUnreal += p.unrealizedPnl * c;
         fDay += (p.dailyChange || 0) * p.shares * c;
       }
       const fPct = fCost > 1e-9 ? fUnreal / fCost * 100 : null;
-      const cur = pf.filter === 'us' ? '$ ' : 'NT$ ';
+      const cur = (pf.filter === 'us' || pf.filter === 'crypto') ? '$ ' : 'NT$ ';
       html += `<div class="card filter-sum">
         <div><div class="k">市值總和</div><div class="v">${cur}${U.fmtKMBB(fMv)}</div></div>
         <div><div class="k">當前損益</div><div class="v" style="color:${UI.pnlColor(fUnreal)}">${U.fmtBannerSigned(fUnreal)}<span class="pct">${fPct != null ? ' (' + U.fmtPct(fPct) + ')' : ''}</span></div></div>
@@ -104,13 +109,13 @@ App.Views = (function () {
     if (!list.length) {
       listHtml = `<div class="empty">尚無持倉，點右下角 ＋ 新增交易</div>`;
     } else {
-      // 「全部」檢視：美股換算成台幣，單位統一為 NT$
+      // 「全部」檢視：美股/加密換算成台幣，單位統一為 NT$
       const toTwd = pf.filter === 'all';
       listHtml = `<div class="card holdings">`;
       for (const p of list) {
-        const isUs = U.normalizeMarketKey(p.market) === U.Market.us;
-        const conv = (isUs && toTwd) ? rate : 1;         // 全部模式美股 ×匯率
-        const showUsd = isUs && !toTwd;                   // 僅在美股分頁顯示 $
+        const isUsd = isUsdMk(U.normalizeMarketKey(p.market));
+        const conv = (isUsd && toTwd) ? rate : 1;         // 全部模式 USD 計價 ×匯率
+        const showUsd = isUsd && !toTwd;                   // 美股/加密分頁顯示 $
         const cur = showUsd ? '$' : '';
         const mvCur = showUsd ? '$' : 'NT$';
         const pnlPct = p.cost > 1e-9 ? p.unrealizedPnl / p.cost * 100 : 0; // 比率，與幣別無關
@@ -208,9 +213,9 @@ App.Views = (function () {
 
     scrollEl.innerHTML = `<div class="card"><div class="chart-host" id="trend-chart"></div></div>`;
     const snaps = filterByRange(S.getSnapshots());
-    const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { tw: s.twMarketValue, us: s.usMarketValueTwd } }));
+    const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0 } }));
     App.Charts.trend(scrollEl.querySelector('#trend-chart'), points, {
-      twKey: 'tw', usKey: 'us', twLabel: '台股', usLabel: '美股',
+      twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
       xLabels: monthLabels(points),
       valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
     });
@@ -238,8 +243,9 @@ App.Views = (function () {
     let txs = S.getTransactions().slice().sort((a, b) => b.time - a.time);
     txs = txs.filter(t => {
       const m = U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol));
-      if (hist.txFilter === 'tw') return m !== U.Market.us;
+      if (hist.txFilter === 'tw') return m !== U.Market.us && m !== U.Market.crypto;
       if (hist.txFilter === 'us') return m === U.Market.us;
+      if (hist.txFilter === 'crypto') return m === U.Market.crypto;
       return true;
     });
     if (hist.search) {
@@ -248,7 +254,7 @@ App.Views = (function () {
     }
 
     fixedEl.innerHTML = `<div class="toolbar">
-      <div class="seg" id="tx-filter">${seg('all', '全部', hist.txFilter)}${seg('tw', '台股', hist.txFilter)}${seg('us', '美股', hist.txFilter)}</div>
+      <div class="seg" id="tx-filter">${seg('all', '全部', hist.txFilter)}${seg('tw', '台股', hist.txFilter)}${seg('us', '美股', hist.txFilter)}${seg('crypto', '加密', hist.txFilter)}</div>
     </div>
     <input class="input search" id="tx-search" placeholder="搜尋代碼或名稱" value="${hist.search}">`;
 
@@ -403,9 +409,9 @@ App.Views = (function () {
     } else {
       let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
       if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
-      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { tw: s.twMarketValue, us: s.usMarketValueTwd } }));
+      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0 } }));
       App.Charts.trend(host, points, {
-        twKey: 'tw', usKey: 'us', twLabel: '台股', usLabel: '美股',
+        twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
         xLabels: repXLabels(points),
         valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
       });
@@ -733,14 +739,18 @@ App.Views = (function () {
           if (us && $('#tx-fee').value === '0.1425') $('#tx-fee').value = '0.08';
           else if (!us && $('#tx-fee').value === '0.08') $('#tx-fee').value = '0.1425';
         }
+        txState.picked = null; // 重新輸入即失效
         timer = setTimeout(async () => {
           const res = await App.Api.searchSymbols(q);
-          sug.innerHTML = res.map(r => `<div class="sug-item" data-code="${r.code}" data-name="${encodeURIComponent(r.name)}" data-mk="${r.market}">
+          sug.innerHTML = res.map(r => `<div class="sug-item" data-code="${r.code}" data-name="${encodeURIComponent(r.name)}" data-mk="${r.market}"${r.cgid ? ` data-cgid="${r.cgid}"` : ''}>
             <span class="sc">${r.code}</span><span class="sn">${r.name}</span><span class="sm">${U.marketLabel(r.market)}</span></div>`).join('');
           sug.querySelectorAll('.sug-item').forEach(it => it.addEventListener('click', () => {
-            symInput.value = it.dataset.code + ' ' + decodeURIComponent(it.dataset.name);
+            const name = decodeURIComponent(it.dataset.name);
+            symInput.value = it.dataset.code + ' ' + name;
             sug.innerHTML = '';
-            if (txState.feeMode === 'rate') $('#tx-fee').value = it.dataset.mk === 'us' ? '0.08' : '0.1425';
+            txState.picked = { code: it.dataset.code, name, market: it.dataset.mk };
+            if (it.dataset.cgid) App.Api.cacheCgId(it.dataset.code, it.dataset.cgid);
+            if (txState.feeMode === 'rate') $('#tx-fee').value = it.dataset.mk === 'crypto' ? '0.1' : (it.dataset.mk === 'us' ? '0.08' : '0.1425');
             $('#tx-shares').focus();
           }));
         }, 220);
@@ -764,7 +774,9 @@ App.Views = (function () {
         UI.closeSheet(); App.afterDataChange([res.symbol]);
       } else {
         const symbolInput = $('#tx-sym').value;
-        const res = C.addTransaction({ symbolInput, type: txState.isBuy ? 'BUY' : 'SELL', shares: sh, price: pr, fee });
+        // 從建議清單選取者，帶入明確市場與名稱（加密貨幣必要）
+        const pk = (txState.picked && U.sanitizeSymbol(symbolInput) === txState.picked.code) ? txState.picked : null;
+        const res = C.addTransaction({ symbolInput, type: txState.isBuy ? 'BUY' : 'SELL', shares: sh, price: pr, fee, market: pk && pk.market, name: pk && pk.name });
         if (!res.ok) return UI.toast(res.msg, 'info');
         UI.closeSheet(); App.afterDataChange([res.symbol]);
       }

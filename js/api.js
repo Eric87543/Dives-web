@@ -163,6 +163,76 @@ App.Api = (function () {
     } catch (e) { return null; }
   }
 
+  // ---- 虛擬貨幣（CoinGecko，免金鑰、支援 CORS，USD 計價）----
+  const CG = 'https://api.coingecko.com/api/v3';
+  const CG_IDS_KEY = 'dives_cg_ids'; // {SYMBOL: coingecko id}
+  function cgIds() { try { return JSON.parse(localStorage.getItem(CG_IDS_KEY) || '{}'); } catch (e) { return {}; } }
+  function cacheCgId(symbol, id) {
+    if (!symbol || !id) return;
+    const m = cgIds(); m[symbol.toUpperCase()] = id;
+    localStorage.setItem(CG_IDS_KEY, JSON.stringify(m));
+  }
+  // 解析代號 → CoinGecko id（快取優先；miss 時用 search，取 symbol 相符且市值排名最前者）
+  async function cgResolve(symbol) {
+    const sym = (symbol || '').toUpperCase();
+    const cached = cgIds()[sym];
+    if (cached) return cached;
+    try {
+      const j = await fetchJson(CG + '/search?query=' + encodeURIComponent(sym));
+      const coins = (j.coins || []).filter(c => (c.symbol || '').toUpperCase() === sym);
+      coins.sort((a, b) => (a.market_cap_rank || 1e9) - (b.market_cap_rank || 1e9));
+      if (coins[0]) { cacheCgId(sym, coins[0].id); return coins[0].id; }
+    } catch (e) {}
+    return null;
+  }
+
+  // 批次報價：codes = ['BTC','ETH'] → {BTC: {price(USD), dailyChange, prevClose}}
+  async function fetchCryptoQuotes(codes) {
+    const out = {};
+    const idMap = {}; // id -> SYMBOL
+    for (const c of codes) {
+      const id = await cgResolve(c);
+      if (id) idMap[id] = c.toUpperCase();
+    }
+    const ids = Object.keys(idMap);
+    if (!ids.length) return out;
+    try {
+      const j = await fetchJson(CG + '/simple/price?ids=' + encodeURIComponent(ids.join(',')) + '&vs_currencies=usd&include_24hr_change=true');
+      for (const id in (j || {})) {
+        const price = j[id] && j[id].usd;
+        if (!(price > 0)) continue;
+        const pct = j[id].usd_24h_change || 0;
+        const prev = price / (1 + pct / 100);
+        out[idMap[id]] = { price, dailyChange: price - prev, prevClose: prev };
+      }
+    } catch (e) { console.warn('CoinGecko quotes failed', e); }
+    return out;
+  }
+
+  // 歷史日線（USD）：{code: [{date, close}]}；免費層最多 365 天
+  async function fetchCryptoHistory(codes, startDate) {
+    const out = {};
+    const days = Math.min(365, Math.ceil((Date.now() - new Date(startDate + 'T00:00:00+08:00').getTime()) / 86400000) + 2);
+    for (const c of codes) {
+      out[c] = [];
+      const id = await cgResolve(c);
+      if (!id) continue;
+      try {
+        const j = await fetchJson(CG + '/coins/' + encodeURIComponent(id) + '/market_chart?vs_currency=usd&days=' + days + '&interval=daily');
+        const seen = new Set();
+        const rows = [];
+        for (const [ms, price] of (j.prices || [])) {
+          const d = U.isoDate(new Date(ms));
+          if (seen.has(d) || !(price > 0)) continue;
+          seen.add(d); rows.push({ date: d, close: price });
+        }
+        rows.sort((a, b) => a.date < b.date ? -1 : 1);
+        out[c] = rows;
+      } catch (e) { console.warn('CoinGecko history failed', c, e); }
+    }
+    return out;
+  }
+
   // ---- 匯率（open.er-api.com，6 小時快取）----
   async function fetchFx() {
     const cached = S.getFxRate(), ts = S.getFxTs();
@@ -189,8 +259,10 @@ App.Api = (function () {
 
     const mmap = S.metaMap();
     const metas = all.map(code => mmap[code] || { code, name: code, market: U.guessMarketBySymbol(code) });
-    const twMetas = metas.filter(m => U.normalizeMarketKey(m.market) !== U.Market.us);
-    const usMetas = metas.filter(m => U.normalizeMarketKey(m.market) === U.Market.us);
+    const mk = m => U.normalizeMarketKey(m.market);
+    const twMetas = metas.filter(m => mk(m) !== U.Market.us && mk(m) !== U.Market.crypto);
+    const usMetas = metas.filter(m => mk(m) === U.Market.us);
+    const cryptoMetas = metas.filter(m => mk(m) === U.Market.crypto);
 
     const prices = S.getPrices();
     const nameUpdates = [];
@@ -239,6 +311,12 @@ App.Api = (function () {
       await Promise.all([worker(), worker(), worker(), worker(), worker()]);
     }
 
+    // 虛擬貨幣：CoinGecko 批次報價（USD）
+    if (cryptoMetas.length) {
+      const cq = await fetchCryptoQuotes(cryptoMetas.map(m => m.code));
+      for (const code in cq) prices[code] = cq[code];
+    }
+
     await fxP;
     if (nameUpdates.length) S.upsertMeta(nameUpdates);
     S.setPrices(prices);
@@ -277,16 +355,26 @@ App.Api = (function () {
       }
     } catch (e) {}
 
-    // 台股優先、權證排後、代碼排序
+    // 虛擬貨幣（CoinGecko search，代號前綴，取市值前幾名）
+    try {
+      const j = await fetchJson(CG + '/search?query=' + encodeURIComponent(q));
+      const coins = (j.coins || []).filter(c => (c.symbol || '').toUpperCase().startsWith(q))
+        .sort((a, b) => (a.market_cap_rank || 1e9) - (b.market_cap_rank || 1e9)).slice(0, 5);
+      for (const c of coins) {
+        results.push({ code: (c.symbol || '').toUpperCase(), name: c.name || c.symbol, market: U.Market.crypto, cgid: c.id });
+      }
+    } catch (e) {}
+
+    // 台股優先、權證排後、美股次之、加密最後、代碼排序
+    const ord = m => m === U.Market.crypto ? 2 : m === U.Market.us ? 1 : 0;
     results.sort((a, b) => {
       const aw = /[購售]/.test(a.name), bw = /[購售]/.test(b.name);
       if (aw !== bw) return aw ? 1 : -1;
-      const au = a.market === U.Market.us, bu = b.market === U.Market.us;
-      if (au !== bu) return au ? 1 : -1;
+      if (ord(a.market) !== ord(b.market)) return ord(a.market) - ord(b.market);
       return a.code < b.code ? -1 : 1;
     });
     return results.slice(0, 30);
   }
 
-  return { fetchText, fetchJson, loadTwUniverse, fetchTwPrice, fetchTwHistory, fetchUsHistory, fetchTwRealtime, fetchUsQuote, fetchFx, refreshPrices, searchSymbols, finnhubKey };
+  return { fetchText, fetchJson, loadTwUniverse, fetchTwPrice, fetchTwHistory, fetchUsHistory, fetchTwRealtime, fetchUsQuote, fetchCryptoQuotes, fetchCryptoHistory, cacheCgId, fetchFx, refreshPrices, searchSymbols, finnhubKey };
 })();

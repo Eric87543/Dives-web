@@ -63,17 +63,22 @@ App.Calc = (function () {
     const rate = S.getFxRate() || 31.5;
     const mmap = S.metaMap();
     const s = {
-      twMarketValue: 0, usMarketValueTwd: 0,
-      twCostBasis: 0, usCostBasisTwd: 0,
-      twUnrealizedPnl: 0, usUnrealizedPnlTwd: 0,
-      twRealizedPnl: 0, usRealizedPnlTwd: 0,
-      twDayPnl: 0, usDayPnlTwd: 0,
+      twMarketValue: 0, usMarketValueTwd: 0, cryptoMarketValueTwd: 0,
+      twCostBasis: 0, usCostBasisTwd: 0, cryptoCostBasisTwd: 0,
+      twUnrealizedPnl: 0, usUnrealizedPnlTwd: 0, cryptoUnrealizedPnlTwd: 0,
+      twRealizedPnl: 0, usRealizedPnlTwd: 0, cryptoRealizedPnlTwd: 0,
+      twDayPnl: 0, usDayPnlTwd: 0, cryptoDayPnlTwd: 0,
       cashBalance: 0,
     };
     for (const p of positions) {
       const mv = p.lastPrice != null ? p.lastPrice * p.shares : p.cost;
       const market = U.normalizeMarketKey(p.market);
-      if (market === U.Market.us) {
+      if (market === U.Market.crypto) {
+        s.cryptoMarketValueTwd += mv * rate;
+        s.cryptoCostBasisTwd += p.cost * rate;
+        s.cryptoUnrealizedPnlTwd += p.unrealizedPnl * rate;
+        s.cryptoDayPnlTwd += (p.dailyChange || 0) * p.shares * rate;
+      } else if (market === U.Market.us) {
         s.usMarketValueTwd += mv * rate;
         s.usCostBasisTwd += p.cost * rate;
         s.usUnrealizedPnlTwd += p.unrealizedPnl * rate;
@@ -87,7 +92,8 @@ App.Calc = (function () {
     }
     for (const rt of S.getRealized()) {
       const market = U.normalizeMarketKey(mmap[rt.symbol]?.market || U.guessMarketBySymbol(rt.symbol));
-      if (market === U.Market.us) s.usRealizedPnlTwd += rt.realizedPnl * rate;
+      if (market === U.Market.crypto) s.cryptoRealizedPnlTwd += rt.realizedPnl * rate;
+      else if (market === U.Market.us) s.usRealizedPnlTwd += rt.realizedPnl * rate;
       else s.twRealizedPnl += rt.realizedPnl;
     }
     const acc = S.getAccount();
@@ -97,15 +103,16 @@ App.Calc = (function () {
       const recv = txs.filter(t => t.type === 'SELL').reduce((a, t) => a + (t.shares * t.price - t.fee), 0);
       s.cashBalance = acc.initialCash - spent + recv;
     }
-    // 衍生
-    s.totalMarketValueTwd = s.twMarketValue + s.usMarketValueTwd;
-    s.totalCostBasisTwd = s.twCostBasis + s.usCostBasisTwd;
+    // 衍生（含加密）
+    s.totalMarketValueTwd = s.twMarketValue + s.usMarketValueTwd + s.cryptoMarketValueTwd;
+    s.totalCostBasisTwd = s.twCostBasis + s.usCostBasisTwd + s.cryptoCostBasisTwd;
     s.twTotalPnl = s.twUnrealizedPnl + s.twRealizedPnl;
     s.usTotalPnlTwd = s.usUnrealizedPnlTwd + s.usRealizedPnlTwd;
-    s.totalUnrealizedPnl = s.twUnrealizedPnl + s.usUnrealizedPnlTwd;
-    s.totalRealizedPnl = s.twRealizedPnl + s.usRealizedPnlTwd;
-    s.totalPnl = s.twTotalPnl + s.usTotalPnlTwd;
-    s.dayPnl = s.twDayPnl + s.usDayPnlTwd;
+    s.cryptoTotalPnlTwd = s.cryptoUnrealizedPnlTwd + s.cryptoRealizedPnlTwd;
+    s.totalUnrealizedPnl = s.twUnrealizedPnl + s.usUnrealizedPnlTwd + s.cryptoUnrealizedPnlTwd;
+    s.totalRealizedPnl = s.twRealizedPnl + s.usRealizedPnlTwd + s.cryptoRealizedPnlTwd;
+    s.totalPnl = s.twTotalPnl + s.usTotalPnlTwd + s.cryptoTotalPnlTwd;
+    s.dayPnl = s.twDayPnl + s.usDayPnlTwd + s.cryptoDayPnlTwd;
     s.netAsset = s.totalMarketValueTwd + s.cashBalance;
     s.twUnrealizedPnlPct = s.twCostBasis > 1e-9 ? (s.twUnrealizedPnl / s.twCostBasis) * 100 : null;
     s.usUnrealizedPnlPct = s.usCostBasisTwd > 1e-9 ? (s.usUnrealizedPnlTwd / s.usCostBasisTwd) * 100 : null;
@@ -115,17 +122,23 @@ App.Calc = (function () {
   }
 
   // 新增交易（SELL 同步寫入已實現損益）；回傳 {ok, msg}
-  function addTransaction({ symbolInput, type, shares, price, fee }) {
+  // market/name 為選填覆寫（例：從建議清單選了加密貨幣時傳入 'crypto'）
+  function addTransaction({ symbolInput, type, shares, price, fee, market, name }) {
     const symbol = U.sanitizeSymbol(symbolInput);
     if (!symbol || shares <= 0 || price <= 0) return { ok: false, msg: '請輸入正確的代碼/股數/價格' };
 
-    // 確保 meta 存在
-    const guessed = U.guessMarketBySymbol(symbol);
+    // 確保 meta 存在（有明確 market 覆寫時優先採用）
     const mmap = S.metaMap();
-    if (!mmap[symbol]) {
-      S.upsertMeta([{ code: symbol, name: symbol, market: guessed }]);
-    } else if (guessed === U.Market.us && mmap[symbol].market !== U.Market.us) {
-      S.upsertMeta([{ code: symbol, name: mmap[symbol].name, market: U.Market.us }]);
+    if (market) {
+      S.upsertMeta([{ code: symbol, name: name || (mmap[symbol] && mmap[symbol].name) || symbol, market: U.normalizeMarketKey(market) }]);
+    } else {
+      const guessed = U.guessMarketBySymbol(symbol);
+      const existing = mmap[symbol];
+      if (!existing) {
+        S.upsertMeta([{ code: symbol, name: symbol, market: guessed }]);
+      } else if (guessed === U.Market.us && existing.market !== U.Market.us && existing.market !== U.Market.crypto) {
+        S.upsertMeta([{ code: symbol, name: existing.name, market: U.Market.us }]);
+      }
     }
 
     const txs = S.getTransactions();
@@ -210,16 +223,21 @@ App.Calc = (function () {
       dayPnl: summary.dayPnl,
       twMarketValue: summary.twMarketValue,
       usMarketValueTwd: summary.usMarketValueTwd,
+      cryptoMarketValueTwd: summary.cryptoMarketValueTwd,
       totalMarketValueTwd: summary.totalMarketValueTwd,
       twCostBasis: summary.twCostBasis,
       usCostBasisTwd: summary.usCostBasisTwd,
+      cryptoCostBasisTwd: summary.cryptoCostBasisTwd,
       totalCostBasisTwd: summary.totalCostBasisTwd,
       twUnrealizedPnl: summary.twUnrealizedPnl,
       usUnrealizedPnlTwd: summary.usUnrealizedPnlTwd,
+      cryptoUnrealizedPnlTwd: summary.cryptoUnrealizedPnlTwd,
       twRealizedPnl: summary.twRealizedPnl,
       usRealizedPnlTwd: summary.usRealizedPnlTwd,
+      cryptoRealizedPnlTwd: summary.cryptoRealizedPnlTwd,
       twTotalPnl: summary.twTotalPnl,
       usTotalPnlTwd: summary.usTotalPnlTwd,
+      cryptoTotalPnlTwd: summary.cryptoTotalPnlTwd,
       twReturnPct: summary.twUnrealizedPnlPct || 0,
       usReturnPct: summary.usUnrealizedPnlPct || 0,
       totalReturnPct: summary.totalReturnPct || 0,
@@ -234,25 +252,28 @@ App.Calc = (function () {
     return isNew; // 是否新增了「新的一天」（供同步判斷）
   }
 
-  // 由原始累計值組出完整快照（補齊衍生欄位）
+  // 由原始累計值組出完整快照（補齊衍生欄位，含加密）
   function makeSnapshot(date, s) {
-    const totalMV = s.twMarketValue + s.usMarketValueTwd;
-    const totalCost = s.twCostBasis + s.usCostBasisTwd;
+    const cMV = s.cryptoMarketValueTwd || 0, cCost = s.cryptoCostBasisTwd || 0;
+    const cUnr = s.cryptoUnrealizedPnlTwd || 0, cRel = s.cryptoRealizedPnlTwd || 0;
+    const totalMV = s.twMarketValue + s.usMarketValueTwd + cMV;
+    const totalCost = s.twCostBasis + s.usCostBasisTwd + cCost;
     const twTotal = s.twUnrealizedPnl + s.twRealizedPnl;
     const usTotal = s.usUnrealizedPnlTwd + s.usRealizedPnlTwd;
-    const totalPnl = twTotal + usTotal;
+    const cTotal = cUnr + cRel;
+    const totalPnl = twTotal + usTotal + cTotal;
     const cash = s.cashBalance || 0;
     return {
       date,
       marketValue: totalMV, cashBalance: cash, netAsset: totalMV + cash,
-      unrealizedPnl: s.twUnrealizedPnl + s.usUnrealizedPnlTwd,
-      realizedPnl: s.twRealizedPnl + s.usRealizedPnlTwd,
+      unrealizedPnl: s.twUnrealizedPnl + s.usUnrealizedPnlTwd + cUnr,
+      realizedPnl: s.twRealizedPnl + s.usRealizedPnlTwd + cRel,
       totalPnl, dayPnl: 0,
-      twMarketValue: s.twMarketValue, usMarketValueTwd: s.usMarketValueTwd, totalMarketValueTwd: totalMV,
-      twCostBasis: s.twCostBasis, usCostBasisTwd: s.usCostBasisTwd, totalCostBasisTwd: totalCost,
-      twUnrealizedPnl: s.twUnrealizedPnl, usUnrealizedPnlTwd: s.usUnrealizedPnlTwd,
-      twRealizedPnl: s.twRealizedPnl, usRealizedPnlTwd: s.usRealizedPnlTwd,
-      twTotalPnl: twTotal, usTotalPnlTwd: usTotal,
+      twMarketValue: s.twMarketValue, usMarketValueTwd: s.usMarketValueTwd, cryptoMarketValueTwd: cMV, totalMarketValueTwd: totalMV,
+      twCostBasis: s.twCostBasis, usCostBasisTwd: s.usCostBasisTwd, cryptoCostBasisTwd: cCost, totalCostBasisTwd: totalCost,
+      twUnrealizedPnl: s.twUnrealizedPnl, usUnrealizedPnlTwd: s.usUnrealizedPnlTwd, cryptoUnrealizedPnlTwd: cUnr,
+      twRealizedPnl: s.twRealizedPnl, usRealizedPnlTwd: s.usRealizedPnlTwd, cryptoRealizedPnlTwd: cRel,
+      twTotalPnl: twTotal, usTotalPnlTwd: usTotal, cryptoTotalPnlTwd: cTotal,
       twReturnPct: s.twCostBasis > 1e-9 ? s.twUnrealizedPnl / s.twCostBasis * 100 : 0,
       usReturnPct: s.usCostBasisTwd > 1e-9 ? s.usUnrealizedPnlTwd / s.usCostBasisTwd * 100 : 0,
       totalReturnPct: totalCost > 1e-9 ? totalPnl / totalCost * 100 : 0,
@@ -293,26 +314,28 @@ App.Calc = (function () {
       const bySym = {};
       for (const t of txs) { if (txDate(t) <= ds) (bySym[t.symbol] = bySym[t.symbol] || []).push(t); }
 
-      const s = { twMarketValue: 0, usMarketValueTwd: 0, twCostBasis: 0, usCostBasisTwd: 0, twUnrealizedPnl: 0, usUnrealizedPnlTwd: 0, twRealizedPnl: 0, usRealizedPnlTwd: 0, cashBalance: 0 };
+      const s = { twMarketValue: 0, usMarketValueTwd: 0, cryptoMarketValueTwd: 0, twCostBasis: 0, usCostBasisTwd: 0, cryptoCostBasisTwd: 0, twUnrealizedPnl: 0, usUnrealizedPnlTwd: 0, cryptoUnrealizedPnlTwd: 0, twRealizedPnl: 0, usRealizedPnlTwd: 0, cryptoRealizedPnlTwd: 0, cashBalance: 0 };
       for (const sym in bySym) {
         const { shares, avgCost } = computeAvgCostPosition(bySym[sym]);
         if (shares <= 1e-9) continue;
         const cost = shares * avgCost;
         const market = U.normalizeMarketKey(mmap[sym] ? mmap[sym].market : U.guessMarketBySymbol(sym));
-        if (market === U.Market.us) {
-          const price = last[sym] != null ? last[sym] : avgCost; // 美股歷史收盤（無則用成本）
-          const mv = price * shares;
+        const price = last[sym] != null ? last[sym] : avgCost; // 歷史收盤（無則用成本）
+        const mv = price * shares;
+        if (market === U.Market.crypto) {
+          s.cryptoMarketValueTwd += mv * rate; s.cryptoCostBasisTwd += cost * rate; s.cryptoUnrealizedPnlTwd += (mv - cost) * rate;
+        } else if (market === U.Market.us) {
           s.usMarketValueTwd += mv * rate; s.usCostBasisTwd += cost * rate; s.usUnrealizedPnlTwd += (mv - cost) * rate;
         } else {
-          const price = last[sym] != null ? last[sym] : avgCost;
-          const mv = price * shares;
           s.twMarketValue += mv; s.twCostBasis += cost; s.twUnrealizedPnl += (mv - cost);
         }
       }
       for (const rt of realized) {
         if (U.isoDate(new Date(rt.time)) > ds) continue;
         const market = U.normalizeMarketKey(mmap[rt.symbol] ? mmap[rt.symbol].market : U.guessMarketBySymbol(rt.symbol));
-        if (market === U.Market.us) s.usRealizedPnlTwd += rt.realizedPnl * rate; else s.twRealizedPnl += rt.realizedPnl;
+        if (market === U.Market.crypto) s.cryptoRealizedPnlTwd += rt.realizedPnl * rate;
+        else if (market === U.Market.us) s.usRealizedPnlTwd += rt.realizedPnl * rate;
+        else s.twRealizedPnl += rt.realizedPnl;
       }
       if (acc.initialCash != null) {
         let spent = 0, recv = 0;

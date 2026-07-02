@@ -7,12 +7,14 @@ App.Csv = (function () {
   const U = App.Util;
   const S = App.Store;
 
+  // 前 23 欄與 iOS app 相容；後 4 欄為加密分項（附加於尾端，舊版匯入時忽略）
   const SNAP_HEADER = [
     'Date', 'MarketValue', 'CashBalance', 'NetAsset', 'UnrealizedPnl', 'RealizedPnl',
     'TotalPnl', 'DayPnl', 'TwMarketValue', 'UsMarketValueTwd', 'TotalMarketValueTwd',
     'TwCostBasis', 'UsCostBasisTwd', 'TotalCostBasisTwd', 'TwUnrealizedPnl',
     'UsUnrealizedPnlTwd', 'TwRealizedPnl', 'UsRealizedPnlTwd', 'TwTotalPnl',
-    'UsTotalPnlTwd', 'TwReturnPct', 'UsReturnPct', 'TotalReturnPct'
+    'UsTotalPnlTwd', 'TwReturnPct', 'UsReturnPct', 'TotalReturnPct',
+    'CryptoMarketValueTwd', 'CryptoCostBasisTwd', 'CryptoUnrealizedPnlTwd', 'CryptoRealizedPnlTwd'
   ];
 
   function exportCsv() {
@@ -37,7 +39,9 @@ App.Csv = (function () {
         s.totalPnl, s.dayPnl, s.twMarketValue, s.usMarketValueTwd, s.totalMarketValueTwd,
         s.twCostBasis, s.usCostBasisTwd, s.totalCostBasisTwd, s.twUnrealizedPnl,
         s.usUnrealizedPnlTwd, s.twRealizedPnl, s.usRealizedPnlTwd, s.twTotalPnl,
-        s.usTotalPnlTwd, s.twReturnPct, s.usReturnPct, s.totalReturnPct
+        s.usTotalPnlTwd, s.twReturnPct, s.usReturnPct, s.totalReturnPct,
+        s.cryptoMarketValueTwd || 0, s.cryptoCostBasisTwd || 0,
+        s.cryptoUnrealizedPnlTwd || 0, s.cryptoRealizedPnlTwd || 0
       ].join(','));
     }
     return lines.join('\n');
@@ -109,6 +113,10 @@ App.Csv = (function () {
           twUnrealizedPnl: n(14), usUnrealizedPnlTwd: n(15), twRealizedPnl: n(16),
           usRealizedPnlTwd: n(17), twTotalPnl: n(18), usTotalPnlTwd: n(19),
           twReturnPct: n(20), usReturnPct: n(21), totalReturnPct: n(22),
+          // 加密分項（舊版 CSV 無此欄 → 0）
+          cryptoMarketValueTwd: n(23), cryptoCostBasisTwd: n(24),
+          cryptoUnrealizedPnlTwd: n(25), cryptoRealizedPnlTwd: n(26),
+          cryptoTotalPnlTwd: n(25) + n(26),
           createdAt: Date.now(),
         });
       }

@@ -81,15 +81,17 @@
     const firstTime = Math.min(...txs.map(t => t.time));
     const firstDate = App.Util.isoDate(new Date(firstTime));
     const all = [...new Set(txs.map(t => t.symbol))];
-    const isUs = c => App.Util.normalizeMarketKey((mmap[c] && mmap[c].market) || App.Util.guessMarketBySymbol(c)) === App.Util.Market.us;
-    const twCodes = all.filter(c => !isUs(c));
-    const usCodes = all.filter(isUs);
+    const mkOf = c => App.Util.normalizeMarketKey((mmap[c] && mmap[c].market) || App.Util.guessMarketBySymbol(c));
+    const twCodes = all.filter(c => mkOf(c) !== App.Util.Market.us && mkOf(c) !== App.Util.Market.crypto);
+    const usCodes = all.filter(c => mkOf(c) === App.Util.Market.us);
+    const cryptoCodes = all.filter(c => mkOf(c) === App.Util.Market.crypto);
     await Api.fetchFx();
-    const [twHist, usHist] = await Promise.all([
+    const [twHist, usHist, cryptoHist] = await Promise.all([
       Api.fetchTwHistory(twCodes, firstDate),
       Api.fetchUsHistory(usCodes, firstDate),
+      Api.fetchCryptoHistory(cryptoCodes, firstDate),
     ]);
-    const n = C.rebuildSnapshots(Object.assign({}, twHist, usHist), S.getFxRate());
+    const n = C.rebuildSnapshots(Object.assign({}, twHist, usHist, cryptoHist), S.getFxRate());
     C.saveTodaySnapshot();          // 今天用即時價覆蓋
     if (App.Sync) App.Sync.markDirty();
     renderCurrent();

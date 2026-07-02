@@ -38,6 +38,7 @@ App.Charts = (function () {
    */
   const TW_LINE = '#E8823C', TW_FILL = 'rgba(232,130,60,0.22)';
   const US_LINE = '#4A82C8', US_FILL = 'rgba(74,130,200,0.18)';
+  const CR_LINE = '#9B59D0', CR_FILL = 'rgba(155,89,208,0.20)';
 
   function trend(container, points, opts) {
     container.innerHTML = '';
@@ -46,8 +47,8 @@ App.Charts = (function () {
       return;
     }
     opts = opts || {};
-    const twKey = opts.twKey || 'tw', usKey = opts.usKey || 'us';
-    const twLabel = opts.twLabel || '台股', usLabel = opts.usLabel || '美股';
+    const twKey = opts.twKey || 'tw', usKey = opts.usKey || 'us', crKey = opts.cryptoKey || null;
+    const twLabel = opts.twLabel || '台股', usLabel = opts.usLabel || '美股', crLabel = opts.cryptoLabel || '加密';
     const valueFmt = opts.valueFmt || (v => App.Util.fmtKMBB(v));
     const H = opts.height || 200;
     const W = container.clientWidth || 340;
@@ -56,8 +57,10 @@ App.Charts = (function () {
 
     const rows = points.map(p => {
       const tw = p.values[twKey] || 0, us = p.values[usKey] || 0;
-      return { date: p.date, tw, us, total: tw + us };
+      const cr = crKey ? (p.values[crKey] || 0) : 0;
+      return { date: p.date, tw, us, cr, total: tw + us + cr };
     });
+    const hasCr = rows.some(r => r.cr > 0.5); // 有加密部位才畫第三層
     let hi = 0;
     for (const r of rows) hi = Math.max(hi, r.total, r.tw);
     const ticks = niceTicks(0, hi, 4);
@@ -74,17 +77,21 @@ App.Charts = (function () {
       svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#78716c">${fmtAxis(t)}</text>`;
     }
     const twPts = rows.map((r, i) => [xAt(i), yAt(r.tw)]);
+    const usTopPts = rows.map((r, i) => [xAt(i), yAt(r.tw + r.us)]); // 台股+美股 頂
     const totPts = rows.map((r, i) => [xAt(i), yAt(r.total)]);
     const fwd = pts => pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
     const bwd = pts => pts.slice().reverse().map(p => 'L' + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
 
     if (n > 0) {
-      // 美股 band（台股→總資產）藍色填充
-      svg += `<path d="${fwd(totPts)} ${bwd(twPts)} Z" fill="${US_FILL}"/>`;
+      // 加密 band（台股+美股 → 總資產）紫色填充
+      if (hasCr) svg += `<path d="${fwd(totPts)} ${bwd(usTopPts)} Z" fill="${CR_FILL}"/>`;
+      // 美股 band（台股 → 台股+美股）藍色填充
+      svg += `<path d="${fwd(usTopPts)} ${bwd(twPts)} Z" fill="${US_FILL}"/>`;
       // 台股 band（0→台股）橙色填充
       svg += `<path d="${fwd(twPts)} L${twPts[n - 1][0].toFixed(1)},${y0} L${twPts[0][0].toFixed(1)},${y0} Z" fill="${TW_FILL}"/>`;
-      // 線（總資產=藍、台股=橙）
-      svg += `<path d="${fwd(totPts)}" fill="none" stroke="${US_LINE}" stroke-width="1.8" stroke-linejoin="round"/>`;
+      // 線：總資產（有加密=紫、否則藍）、美股頂（有加密時另畫藍線）、台股橙
+      svg += `<path d="${fwd(totPts)}" fill="none" stroke="${hasCr ? CR_LINE : US_LINE}" stroke-width="1.8" stroke-linejoin="round"/>`;
+      if (hasCr) svg += `<path d="${fwd(usTopPts)}" fill="none" stroke="${US_LINE}" stroke-width="1.5" stroke-linejoin="round"/>`;
       svg += `<path d="${fwd(twPts)}" fill="none" stroke="${TW_LINE}" stroke-width="1.8" stroke-linejoin="round"/>`;
     }
     if (opts.xLabels) for (const e of opts.xLabels)
@@ -96,7 +103,8 @@ App.Charts = (function () {
     const legend = `<div class="chart-legend">
       <span class="lg"><i style="background:${TW_LINE}"></i>${twLabel}</span>
       <span class="lg"><i style="background:${US_LINE}"></i>${usLabel}</span>
-      <span class="lg"><i style="background:${US_LINE};opacity:.5"></i>總資產</span>
+      ${hasCr ? `<span class="lg"><i style="background:${CR_LINE}"></i>${crLabel}</span>` : ''}
+      <span class="lg"><i style="background:${hasCr ? CR_LINE : US_LINE};opacity:.5"></i>總資產</span>
     </div>`;
     container.innerHTML = legend + svg;
 
@@ -115,7 +123,8 @@ App.Charts = (function () {
       tip.innerHTML = `<div class="tip-date">${App.Util.isoDate(r.date)}</div>
         <div><i style="background:${TW_LINE}"></i>${twLabel} <b>${valueFmt(r.tw)}</b></div>
         <div><i style="background:${US_LINE}"></i>${usLabel} <b>${valueFmt(r.us)}</b></div>
-        <div><i style="background:${US_LINE};opacity:.5"></i>總資產 <b>${valueFmt(r.total)}</b></div>`;
+        ${hasCr ? `<div><i style="background:${CR_LINE}"></i>${crLabel} <b>${valueFmt(r.cr)}</b></div>` : ''}
+        <div><i style="background:${hasCr ? CR_LINE : US_LINE};opacity:.5"></i>總資產 <b>${valueFmt(r.total)}</b></div>`;
       tip.style.display = 'block';
       const left = Math.min(Math.max(xAt(idx) / W * rect.width - 60, 4), rect.width - 130);
       tip.style.left = left + 'px'; tip.style.top = '4px';
