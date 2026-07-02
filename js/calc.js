@@ -407,6 +407,6 @@ App.Calc = (function () {
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
-    deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta,
+    deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
   };
 })();

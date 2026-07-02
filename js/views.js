@@ -236,11 +236,12 @@ App.Views = (function () {
       });
       return;
     }
-    // 淨資產 / 流動資金 / 負債 單線圖（舊快照無欄位時退回可用值）
+    // 淨資產 / 流動資金 / 負債 單線圖（舊快照無欄位時以目前現金/負債回填，避免斷崖）
+    const cl = C.cashLiabTwd();
     const valOf = s =>
-      hist.chart === 'net' ? (s.netWorth != null ? s.netWorth : s.netAsset)
-        : hist.chart === 'cash' ? (s.cashAccountsTwd != null ? s.cashAccountsTwd : (s.cashBalance || 0))
-          : (s.liabilitiesTwd || 0);
+      hist.chart === 'net' ? nwOf(s, cl)
+        : hist.chart === 'cash' ? (s.cashAccountsTwd != null ? s.cashAccountsTwd : cl.cashTwd)
+          : (s.liabilitiesTwd != null ? s.liabilitiesTwd : cl.liabTwd);
     const conf = HIST_LINE_CONF[hist.chart];
     const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: valOf(s) } }));
     App.Charts.lineChart(host, points, {
@@ -327,15 +328,24 @@ App.Views = (function () {
     realizedUnrealized: { title: '未實現 / 已實現', underline: '#3DAA6A' },
   };
 
+  // 淨資產：快照有 netWorth 直接用；舊快照以「市值 + 目前現金 − 目前負債」回填
+  //（避免新舊定義混用造成斷崖）
+  function nwOf(s, cl) {
+    if (s.netWorth != null) return s.netWorth;
+    const mv = s.totalMarketValueTwd != null ? s.totalMarketValueTwd : (s.netAsset || 0);
+    return mv + cl.cashTwd - cl.liabTwd;
+  }
+
   function periodReports() {
     const snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
+    const cl = C.cashLiabTwd();
     if (rep.mode === 'yearly') {
       const byYear = {};
       for (const s of snaps) byYear[s.date.slice(0, 4)] = s;
       const years = Object.keys(byYear).sort();
       return years.map((y, i) => {
         const s = byYear[y], prev = i > 0 ? byYear[years[i - 1]] : null;
-        return mkReport(y, s, prev);
+        return mkReport(y, s, prev, cl);
       });
     } else {
       const ys = String(rep.year);
@@ -345,17 +355,17 @@ App.Views = (function () {
       const months = Object.keys(byMonth).sort();
       return months.map((m, i) => {
         const s = byMonth[m], prev = i === 0 ? prevYearLast : byMonth[months[i - 1]];
-        return mkReport(m + '月', s, prev);
+        return mkReport(m + '月', s, prev, cl);
       });
     }
   }
-  function mkReport(label, s, prev) {
+  function mkReport(label, s, prev, cl) {
     const cost = s.totalCostBasisTwd;
     const pPnl = s.totalPnl - (prev ? prev.totalPnl : 0);
     return {
       label,
-      // 淨資產 = 投資 + 流動資金 − 負債（舊快照無此欄時退回舊 netAsset）
-      netAsset: s.netWorth != null ? s.netWorth : s.netAsset,
+      // 淨資產 = 投資 + 流動資金 − 負債（舊快照回填，見 nwOf）
+      netAsset: nwOf(s, cl || { cashTwd: 0, liabTwd: 0 }),
       newInvestment: cost - (prev ? prev.totalCostBasisTwd : 0),
       periodPnl: pPnl,
       totalPnl: s.totalPnl,
@@ -439,9 +449,10 @@ App.Views = (function () {
     } else {
       let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
       if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
+      const cl = C.cashLiabTwd();
       const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: {
         tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0,
-        nw: s.netWorth != null ? s.netWorth : s.netAsset,
+        nw: nwOf(s, cl),
       } }));
       App.Charts.trend(host, points, {
         twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
