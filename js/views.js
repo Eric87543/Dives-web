@@ -486,8 +486,8 @@ App.Views = (function () {
   }
 
   /* ===================== 資產（淨資產）===================== */
-  // 展開狀態（記憶於 session）
-  const as = { open: { cash: true, invest: true, liab: true }, openGroups: {} };
+  // 展開狀態（記憶於 session）；detailGroup = 群組詳情頁
+  const as = { open: { cash: true, invest: true, liab: true }, openGroups: {}, detailGroup: null, detailAsc: false };
   const AS_PURPLE = '#6D5FD5';
 
   function mvTwdOf(p, rate) {
@@ -496,6 +496,7 @@ App.Views = (function () {
   }
 
   function assets(root) {
+    if (as.detailGroup) return groupDetail(root, as.detailGroup);
     const rate = S.getFxRate() || 31.5;
     const sum = C.assetsSummary();
     const positions = C.buildPositions();
@@ -558,32 +559,18 @@ App.Views = (function () {
             ${seg('group', '組內', basis)}${seg('invest', '投資', basis)}${seg('net', '淨資產', basis)}
           </div>
         </div>`;
-      // 群組列
+      // 群組列（點擊進入詳情頁）
       for (const g of groups) {
         const gTotal = groupTotal(g.id);
         const gPct = (basis === 'net' ? sum.netWorth : sum.investTwd) > 1e-9
           ? gTotal / (basis === 'net' ? sum.netWorth : sum.investTwd) * 100 : 0;
-        const opened = as.openGroups[g.id];
         html += `<div class="as-grow" data-gid="${g.id}">
           <span class="pct-badge">${fmtPctBadge(gPct)}</span>
           <div class="as-main"><div class="as-title">${g.name}</div>
-            <div class="as-sub">${(byGroup[g.id] || []).length} 檔 ${opened ? '▾' : '▸'}</div></div>
+            <div class="as-sub">${(byGroup[g.id] || []).length} 檔 ›</div></div>
           <div class="as-val">${U.fmtWhole(gTotal)}</div>
           <button class="g-menu" data-gid="${g.id}">⋯</button>
         </div>`;
-        if (opened) {
-          for (const p of (byGroup[g.id] || [])) {
-            const mv = mvTwdOf(p, rate);
-            const pct = denom(gTotal) > 1e-9 ? mv / denom(gTotal) * 100 : 0;
-            const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
-            html += `<div class="as-row member" data-sym="${p.symbol}">
-              <span class="pct-badge sm">${fmtPctBadge(pct)}</span>
-              <div class="as-main"><div class="as-title">${p.symbol} <span class="h-name">${p.name}</span></div>
-                <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div></div>
-              <div class="as-val">${U.fmtWhole(mv)}</div>
-            </div>`;
-          }
-        }
       }
       // 未分組持倉（與群組同層）
       for (const p of ungrouped) {
@@ -643,12 +630,69 @@ App.Views = (function () {
     }));
     root.querySelectorAll('.as-grow').forEach(g => g.addEventListener('click', e => {
       if (e.target.closest('.g-menu')) return;
-      const gid = g.dataset.gid; as.openGroups[gid] = !as.openGroups[gid]; assets(root);
+      as.detailGroup = g.dataset.gid; assets(root);
     }));
     root.querySelectorAll('.g-menu').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation(); openGroupMenu(b.dataset.gid, () => assets(root));
     }));
     root.querySelectorAll('.as-row.member').forEach(r => r.addEventListener('click', () =>
+      openGroupAssign(r.dataset.sym, () => assets(root))));
+  }
+
+  // 群組詳情頁（返回 / 標題 / ⋯ / ＋ / 合計排序 / 成員卡片）
+  function groupDetail(root, gid) {
+    const g = S.getGroups().find(x => x.id === gid);
+    if (!g) { as.detailGroup = null; return assets(root); }
+    const rate = S.getFxRate() || 31.5;
+    const sum = C.assetsSummary();
+    const gmap = S.getGroupMap();
+    const members = C.buildPositions().filter(p => gmap[p.symbol] === gid);
+    const gTotal = members.reduce((s, p) => s + mvTwdOf(p, rate), 0);
+    const basis = S.getPctBasis();
+    const denomV = basis === 'group' ? (gTotal || 1) : basis === 'invest' ? sum.investTwd : sum.netWorth;
+    members.sort((a, b) => as.detailAsc ? mvTwdOf(a, rate) - mvTwdOf(b, rate) : mvTwdOf(b, rate) - mvTwdOf(a, rate));
+    const fmtPctBadge = v => (v >= 9.95 ? Math.round(v) : v.toFixed(v >= 1 ? 0 : 1)) + '%';
+    const updTs = S.getPricesTs();
+    const updDate = updTs ? U.isoDate(new Date(updTs)) : '';
+
+    let html = `<div class="gd-head">
+      <button class="gd-back" aria-label="返回">‹</button>
+      <div class="gd-title">${g.name}</div>
+      <div class="gd-actions">
+        <button class="gd-menu" aria-label="選單">⋯</button>
+        <button class="gd-plus" aria-label="新增">＋</button>
+      </div>
+    </div>
+    <div class="gd-total">合計 NT$ ${U.fmtWhole(gTotal)} <button class="gd-sort" aria-label="排序">${as.detailAsc ? '▲' : '▼'}</button></div>`;
+
+    if (!members.length) {
+      html += `<div class="empty" style="padding:40px 16px">此群組尚無持倉<br>點右上 ＋ 買入並加入，或從投資清單指定群組</div>`;
+    }
+    for (const p of members) {
+      const mv = mvTwdOf(p, rate);
+      const pct = denomV > 1e-9 ? mv / denomV * 100 : 0;
+      const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
+      html += `<div class="card gd-row" data-sym="${p.symbol}">
+        <span class="pct-badge">${fmtPctBadge(pct)}</span>
+        <div class="as-main">
+          <div class="gd-sym">${p.symbol} <span class="h-name">${p.name !== p.symbol ? p.name : ''}</span></div>
+          <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div>
+        </div>
+        <div class="gd-val">
+          <div class="gd-amt">${U.fmtWhole(mv)}</div>
+          ${updDate ? `<div class="gd-date">${updDate}</div>` : ''}
+        </div>
+      </div>`;
+    }
+
+    root.innerHTML = `<div class="page-full">${html}</div>`;
+
+    root.querySelector('.gd-back').addEventListener('click', () => { as.detailGroup = null; assets(root); });
+    root.querySelector('.gd-sort').addEventListener('click', () => { as.detailAsc = !as.detailAsc; assets(root); });
+    root.querySelector('.gd-menu').addEventListener('click', () => openGroupMenu(gid, () => assets(root)));
+    root.querySelector('.gd-plus').addEventListener('click', () =>
+      openTxForm(null, null, { onAdded: sym => { const m = S.getGroupMap(); m[sym] = gid; S.setGroupMap(m); if (App.Sync) App.Sync.markDirty(); } }));
+    root.querySelectorAll('.gd-row').forEach(r => r.addEventListener('click', () =>
       openGroupAssign(r.dataset.sym, () => assets(root))));
   }
 
@@ -1024,7 +1068,7 @@ App.Views = (function () {
 
   /* ===================== 新增/編輯交易 ===================== */
   let txState = null;
-  function openTxForm(editing, presetSym) {
+  function openTxForm(editing, presetSym, txOpts) {
     txState = {
       editing: editing || null,
       isBuy: editing ? editing.type === 'BUY' : true,
@@ -1159,6 +1203,7 @@ App.Views = (function () {
         const accountId = $('#tx-acct') ? ($('#tx-acct').value || undefined) : undefined;
         const res = C.addTransaction({ symbolInput, type: txState.isBuy ? 'BUY' : 'SELL', shares: sh, price: pr, fee, market: pk && pk.market, name: pk && pk.name, accountId });
         if (!res.ok) return UI.toast(res.msg, 'info');
+        if (txOpts && txOpts.onAdded) txOpts.onAdded(res.symbol); // 例：群組頁＋ → 自動歸入該群組
         UI.closeSheet(); App.afterDataChange([res.symbol]);
       }
     });

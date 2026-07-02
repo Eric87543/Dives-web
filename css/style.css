@@ -284,6 +284,23 @@ input, select { font-family: inherit; font-size: 15px; }
 .ga-item:active { background: var(--soft); }
 .ga-item.on { color: var(--lineTw, #2563EB); font-weight: 700; }
 
+/* ---- 群組詳情頁 ---- */
+.gd-head { display: flex; align-items: center; gap: 8px; padding: 2px 0 10px; }
+.gd-back { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--soft); font-size: 24px; line-height: 1; color: var(--text); }
+.gd-back:active { background: var(--divider); }
+.gd-title { flex: 1; text-align: center; font-size: 17px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gd-actions { flex: none; display: flex; gap: 6px; background: var(--soft); border-radius: 22px; padding: 3px; }
+.gd-actions button { width: 38px; height: 38px; border-radius: 50%; font-size: 18px; color: var(--text); }
+.gd-actions button:active { background: var(--divider); }
+.gd-total { display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: 14px; font-weight: 800; padding: 0 6px 12px; }
+.gd-sort { color: var(--sub); font-size: 12px; padding: 4px 6px; }
+.gd-row { display: flex; align-items: center; gap: 12px; padding: 13px 14px; margin-bottom: 10px; }
+.gd-row:active { background: var(--soft); }
+.gd-sym { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gd-val { text-align: right; white-space: nowrap; }
+.gd-amt { font-size: 16px; font-weight: 800; color: #6D5FD5; }
+.gd-date { font-size: 11px; color: var(--sub); margin-top: 2px; }
+
 /* ---- Lock screen ---- */
 .lock-overlay { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; transition: opacity .25s; }
 .lock-overlay.hide { opacity: 0; }
