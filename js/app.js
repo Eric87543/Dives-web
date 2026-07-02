@@ -134,9 +134,16 @@
       foregroundSync();
     });
 
-    // 註冊 Service Worker
+    // 註冊 Service Worker；新版接管時自動重載一次，更新立即生效
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
+      const hadController = !!navigator.serviceWorker.controller;
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController || reloaded) return; // 首次安裝不重載，避免迴圈
+        reloaded = true;
+        window.location.reload();
+      });
     }
   }
 
