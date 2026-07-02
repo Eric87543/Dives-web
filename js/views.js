@@ -440,6 +440,300 @@ App.Views = (function () {
       b.addEventListener('click', () => { rep.year = +b.dataset.v; report(root); }));
   }
 
+  /* ===================== 資產（淨資產）===================== */
+  // 展開狀態（記憶於 session）
+  const as = { open: { cash: true, invest: true, liab: true }, openGroups: {} };
+  const AS_PURPLE = '#6D5FD5';
+
+  function mvTwdOf(p, rate) {
+    const m = U.normalizeMarketKey(p.market);
+    return (m === U.Market.us || m === U.Market.crypto) ? p.marketValue * rate : p.marketValue;
+  }
+
+  function assets(root) {
+    const rate = S.getFxRate() || 31.5;
+    const sum = C.assetsSummary();
+    const positions = C.buildPositions();
+    const groups = S.getGroups();
+    const gmap = S.getGroupMap();
+    const basis = S.getPctBasis(); // group | invest | net
+
+    // 依群組整理持倉
+    const byGroup = {}; const ungrouped = [];
+    for (const p of positions) {
+      const gid = gmap[p.symbol];
+      if (gid && groups.some(g => g.id === gid)) (byGroup[gid] = byGroup[gid] || []).push(p);
+      else ungrouped.push(p);
+    }
+    const groupTotal = gid => (byGroup[gid] || []).reduce((s, p) => s + mvTwdOf(p, rate), 0);
+    const fmtPctBadge = v => (v >= 9.95 ? Math.round(v) : v.toFixed(v >= 1 ? 0 : 1)) + '%';
+    // 佔比分母：組內=該群組、投資=投資總市值、淨資產=淨資產
+    const denom = gTotal => basis === 'group' ? (gTotal || sum.investTwd) : basis === 'invest' ? sum.investTwd : sum.netWorth;
+
+    let html = `<div class="nw-hero">
+      <div class="nw-cap">我的淨資產 (TWD)</div>
+      <div class="nw-num">${U.fmtWhole(sum.netWorth)}</div>
+    </div>`;
+
+    // ── 流動資金 ─────────────────────────────────────────
+    const cashAccts = S.getCashAccounts();
+    html += `<div class="card as-cat">
+      <div class="as-head" data-cat="cash" style="--cc:#34A853">
+        <span class="as-name">流動資金</span>
+        <span class="as-total" style="color:#2E7D32">${U.fmtWhole(sum.cashTwd)}</span>
+      </div>`;
+    if (as.open.cash) {
+      html += `<div class="as-body">`;
+      for (const a of cashAccts) {
+        const twd = a.currency === 'USD' ? (a.balance || 0) * rate : (a.balance || 0);
+        html += `<div class="as-row" data-kind="cash" data-id="${a.id}">
+          <div class="as-main"><div class="as-title">${a.name}</div>
+            <div class="as-sub">${a.currency === 'USD' ? 'USD ' + U.formatPrice(a.balance || 0) + ' · r' + rate.toFixed(3) : '台幣帳戶'}</div></div>
+          <div class="as-val" style="color:#2E7D32">${U.fmtWhole(twd)}</div>
+        </div>`;
+      }
+      html += `<button class="as-add" id="add-cash">＋ 新增現金帳戶</button></div>`;
+    }
+    html += `</div>`;
+
+    // ── 投資 ────────────────────────────────────────────
+    html += `<div class="card as-cat">
+      <div class="as-head" data-cat="invest" style="--cc:${AS_PURPLE}">
+        <span class="as-name">投資</span>
+        <span class="as-total" style="color:${AS_PURPLE}">${U.fmtWhole(sum.investTwd)}</span>
+      </div>`;
+    if (as.open.invest) {
+      html += `<div class="as-body">
+        <div class="basis-row"><span class="basis-cap">佔比基準</span>
+          <div class="seg" id="pct-basis">
+            ${seg('group', '組內', basis)}${seg('invest', '投資', basis)}${seg('net', '淨資產', basis)}
+          </div>
+        </div>`;
+      // 群組列
+      for (const g of groups) {
+        const gTotal = groupTotal(g.id);
+        const gPct = (basis === 'net' ? sum.netWorth : sum.investTwd) > 1e-9
+          ? gTotal / (basis === 'net' ? sum.netWorth : sum.investTwd) * 100 : 0;
+        const opened = as.openGroups[g.id];
+        html += `<div class="as-grow" data-gid="${g.id}">
+          <span class="pct-badge">${fmtPctBadge(gPct)}</span>
+          <div class="as-main"><div class="as-title">${g.name}</div>
+            <div class="as-sub">${(byGroup[g.id] || []).length} 檔 ${opened ? '▾' : '▸'}</div></div>
+          <div class="as-val">${U.fmtWhole(gTotal)}</div>
+          <button class="g-menu" data-gid="${g.id}">⋯</button>
+        </div>`;
+        if (opened) {
+          for (const p of (byGroup[g.id] || [])) {
+            const mv = mvTwdOf(p, rate);
+            const pct = denom(gTotal) > 1e-9 ? mv / denom(gTotal) * 100 : 0;
+            const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
+            html += `<div class="as-row member" data-sym="${p.symbol}">
+              <span class="pct-badge sm">${fmtPctBadge(pct)}</span>
+              <div class="as-main"><div class="as-title">${p.symbol} <span class="h-name">${p.name}</span></div>
+                <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div></div>
+              <div class="as-val">${U.fmtWhole(mv)}</div>
+            </div>`;
+          }
+        }
+      }
+      // 未分組持倉（與群組同層）
+      for (const p of ungrouped) {
+        const mv = mvTwdOf(p, rate);
+        const d = basis === 'group' ? sum.investTwd : denom(0); // 未分組無「組內」→ 用投資
+        const pct = d > 1e-9 ? mv / d * 100 : 0;
+        const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
+        html += `<div class="as-row member top" data-sym="${p.symbol}">
+          <span class="pct-badge sm">${fmtPctBadge(pct)}</span>
+          <div class="as-main"><div class="as-title">${p.symbol} <span class="h-name">${p.name}</span></div>
+            <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div></div>
+          <div class="as-val">${U.fmtWhole(mv)}</div>
+        </div>`;
+      }
+      if (!positions.length) html += `<div class="empty" style="padding:16px">尚無持倉</div>`;
+      html += `<button class="as-add" id="add-group">＋ 新增群組</button></div>`;
+    }
+    html += `</div>`;
+
+    // ── 負債 ────────────────────────────────────────────
+    const liabs = S.getLiabilities();
+    html += `<div class="card as-cat">
+      <div class="as-head" data-cat="liab" style="--cc:#8E9BEF">
+        <span class="as-name">負債</span>
+        <span class="as-total" style="color:${UI.GAIN}">−${U.fmtWhole(sum.liabTwd)}</span>
+      </div>`;
+    if (as.open.liab) {
+      html += `<div class="as-body">`;
+      for (const a of liabs) {
+        const twd = a.currency === 'USD' ? (a.balance || 0) * rate : (a.balance || 0);
+        html += `<div class="as-row" data-kind="liab" data-id="${a.id}">
+          <div class="as-main"><div class="as-title">${a.name}</div>
+            <div class="as-sub">${a.currency === 'USD' ? 'USD ' + U.formatPrice(a.balance || 0) : '台幣'}</div></div>
+          <div class="as-val" style="color:${UI.GAIN}">−${U.fmtWhole(twd)}</div>
+        </div>`;
+      }
+      html += `<button class="as-add" id="add-liab">＋ 新增負債</button></div>`;
+    }
+    html += `</div>`;
+
+    root.innerHTML = `<div class="page-full">${html}</div>`;
+
+    // ── 事件 ─────────────────────────────────────────────
+    root.querySelectorAll('.as-head').forEach(h => h.addEventListener('click', () => {
+      const k = h.dataset.cat; as.open[k] = !as.open[k]; assets(root);
+    }));
+    const bind = (sel, fn) => { const el = root.querySelector(sel); if (el) el.addEventListener('click', fn); };
+    bind('#add-cash', () => openMoneyForm('cash', null, () => assets(root)));
+    bind('#add-liab', () => openMoneyForm('liab', null, () => assets(root)));
+    bind('#add-group', () => openGroupCreate(() => assets(root)));
+    root.querySelectorAll('.as-row[data-kind]').forEach(r => r.addEventListener('click', () => {
+      const kind = r.dataset.kind;
+      const list = kind === 'cash' ? S.getCashAccounts() : S.getLiabilities();
+      openMoneyForm(kind, list.find(x => x.id === r.dataset.id), () => assets(root));
+    }));
+    root.querySelectorAll('#pct-basis .seg-btn').forEach(b => b.addEventListener('click', () => {
+      S.setPctBasis(b.dataset.v); assets(root);
+    }));
+    root.querySelectorAll('.as-grow').forEach(g => g.addEventListener('click', e => {
+      if (e.target.closest('.g-menu')) return;
+      const gid = g.dataset.gid; as.openGroups[gid] = !as.openGroups[gid]; assets(root);
+    }));
+    root.querySelectorAll('.g-menu').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation(); openGroupMenu(b.dataset.gid, () => assets(root));
+    }));
+    root.querySelectorAll('.as-row.member').forEach(r => r.addEventListener('click', () =>
+      openGroupAssign(r.dataset.sym, () => assets(root))));
+  }
+
+  // 現金 / 負債帳戶表單（新增或編輯；含快速增減）
+  function openMoneyForm(kind, editing, onDone) {
+    const isCash = kind === 'cash';
+    const a = editing || {};
+    const cur0 = a.currency || 'TWD';
+    const body = `
+      <label class="fld">名稱<input class="input" id="mf-name" value="${a.name || ''}" placeholder="${isCash ? '例：Firstrade、台幣' : '例：信貸、房貸'}"></label>
+      <label class="fld">幣別
+        <div class="fee-mode">
+          <button class="fm-btn ${cur0 === 'TWD' ? 'active' : ''}" data-c="TWD">台幣</button>
+          <button class="fm-btn ${cur0 === 'USD' ? 'active' : ''}" data-c="USD">美金</button>
+        </div>
+      </label>
+      <label class="fld">${isCash ? '餘額' : '負債金額'}<input class="input" id="mf-bal" type="number" inputmode="decimal" value="${a.balance != null ? a.balance : ''}" placeholder="0"></label>
+      <label class="fld">快速增減
+        <div class="adj-row">
+          <input class="input" id="mf-adj" type="number" inputmode="decimal" placeholder="金額">
+          <button class="btn btn-ghost btn-sm" id="mf-plus">＋存入</button>
+          <button class="btn btn-ghost btn-sm" id="mf-minus">−提出</button>
+        </div>
+      </label>`;
+    const footer = `${editing ? '<button class="btn btn-danger" id="mf-del">刪除</button>' : ''}
+      <button class="btn btn-ghost" id="mf-cancel">取消</button><button class="btn btn-primary" id="mf-ok">${editing ? '儲存' : '新增'}</button>`;
+    const ov = UI.openSheet(editing ? '編輯' + (isCash ? '現金帳戶' : '負債') : '新增' + (isCash ? '現金帳戶' : '負債'), body, footer);
+    const $ = s => ov.querySelector(s);
+    let cur = cur0;
+    ov.querySelectorAll('.fm-btn').forEach(b => b.addEventListener('click', () => {
+      cur = b.dataset.c; ov.querySelectorAll('.fm-btn').forEach(x => x.classList.remove('active')); b.classList.add('active');
+    }));
+    const applyAdj = sign => {
+      const d = parseFloat($('#mf-adj').value);
+      if (isNaN(d) || d === 0) return;
+      $('#mf-bal').value = String(((parseFloat($('#mf-bal').value) || 0) + sign * d));
+      $('#mf-adj').value = '';
+    };
+    $('#mf-plus').addEventListener('click', () => applyAdj(1));
+    $('#mf-minus').addEventListener('click', () => applyAdj(-1));
+    $('#mf-cancel').addEventListener('click', UI.closeSheet);
+    if ($('#mf-del')) $('#mf-del').addEventListener('click', () => UI.confirmDialog('刪除「' + (a.name || '') + '」?', () => {
+      if (isCash) S.setCashAccounts(S.getCashAccounts().filter(x => x.id !== a.id));
+      else S.setLiabilities(S.getLiabilities().filter(x => x.id !== a.id));
+      UI.closeSheet(); if (App.Sync) App.Sync.markDirty(); onDone && onDone();
+    }, '刪除'));
+    $('#mf-ok').addEventListener('click', () => {
+      const name = ($('#mf-name').value || '').trim();
+      const bal = parseFloat($('#mf-bal').value);
+      if (!name) return UI.toast('請輸入名稱', 'info');
+      if (isNaN(bal)) return UI.toast('請輸入金額', 'info');
+      if (isCash) {
+        const list = S.getCashAccounts();
+        if (editing) { const x = list.find(i => i.id === a.id); if (x) { x.name = name; x.currency = cur; x.balance = bal; } }
+        else list.push({ id: S.uuid(), name, currency: cur, balance: bal });
+        S.setCashAccounts(list);
+      } else {
+        const list = S.getLiabilities();
+        if (editing) { const x = list.find(i => i.id === a.id); if (x) { x.name = name; x.currency = cur; x.balance = bal; } }
+        else list.push({ id: S.uuid(), name, currency: cur, balance: bal });
+        S.setLiabilities(list);
+      }
+      UI.closeSheet(); if (App.Sync) App.Sync.markDirty(); onDone && onDone();
+    });
+  }
+
+  // 新增群組
+  function openGroupCreate(onDone) {
+    const ov = UI.openSheet('新增群組', `<label class="fld">群組名稱<input class="input" id="gc-name" placeholder="例：ETF、核心持股"></label>`,
+      `<button class="btn btn-ghost" id="gc-cancel">取消</button><button class="btn btn-primary" id="gc-ok">建立</button>`);
+    ov.querySelector('#gc-cancel').addEventListener('click', UI.closeSheet);
+    ov.querySelector('#gc-name').focus();
+    ov.querySelector('#gc-ok').addEventListener('click', () => {
+      const name = (ov.querySelector('#gc-name').value || '').trim();
+      if (!name) return UI.toast('請輸入名稱', 'info');
+      const gs = S.getGroups(); gs.push({ id: S.uuid(), name }); S.setGroups(gs);
+      UI.closeSheet(); if (App.Sync) App.Sync.markDirty(); onDone && onDone();
+    });
+  }
+
+  // 群組選單：重新命名 / 解散
+  function openGroupMenu(gid, onDone) {
+    const g = S.getGroups().find(x => x.id === gid); if (!g) return;
+    const ov = UI.openSheet(g.name,
+      `<label class="fld">重新命名<input class="input" id="gm-name" value="${g.name}"></label>`,
+      `<button class="btn btn-danger" id="gm-del">解散群組</button><button class="btn btn-ghost" id="gm-cancel">取消</button><button class="btn btn-primary" id="gm-ok">儲存</button>`);
+    ov.querySelector('#gm-cancel').addEventListener('click', UI.closeSheet);
+    ov.querySelector('#gm-ok').addEventListener('click', () => {
+      const name = (ov.querySelector('#gm-name').value || '').trim();
+      if (!name) return UI.toast('請輸入名稱', 'info');
+      const gs = S.getGroups(); const x = gs.find(i => i.id === gid); if (x) x.name = name; S.setGroups(gs);
+      UI.closeSheet(); if (App.Sync) App.Sync.markDirty(); onDone && onDone();
+    });
+    ov.querySelector('#gm-del').addEventListener('click', () => UI.confirmDialog('解散「' + g.name + '」？成員將變為未分組。', () => {
+      S.setGroups(S.getGroups().filter(x => x.id !== gid));
+      const gm = S.getGroupMap();
+      for (const sym in gm) if (gm[sym] === gid) delete gm[sym];
+      S.setGroupMap(gm);
+      UI.closeSheet(); if (App.Sync) App.Sync.markDirty(); onDone && onDone();
+    }, '解散'));
+  }
+
+  // 指定持倉的群組
+  function openGroupAssign(sym, onDone) {
+    const groups = S.getGroups();
+    const gm = S.getGroupMap();
+    const cur = gm[sym];
+    let body = `<div class="ga-list">
+      <div class="ga-item ${!cur ? 'on' : ''}" data-gid="">未分組${!cur ? ' ✓' : ''}</div>
+      ${groups.map(g => `<div class="ga-item ${cur === g.id ? 'on' : ''}" data-gid="${g.id}">${g.name}${cur === g.id ? ' ✓' : ''}</div>`).join('')}
+    </div>
+    <div class="adj-row" style="margin-top:10px">
+      <input class="input" id="ga-new" placeholder="或建立新群組">
+      <button class="btn btn-ghost btn-sm" id="ga-create">建立並加入</button>
+    </div>`;
+    const ov = UI.openSheet(sym + ' 的群組', body, `<button class="btn btn-ghost" id="ga-cancel">關閉</button>`);
+    ov.querySelector('#ga-cancel').addEventListener('click', UI.closeSheet);
+    ov.querySelectorAll('.ga-item').forEach(it => it.addEventListener('click', () => {
+      const gid = it.dataset.gid;
+      const m = S.getGroupMap();
+      if (gid) m[sym] = gid; else delete m[sym];
+      S.setGroupMap(m);
+      UI.closeSheet(); if (App.Sync) App.Sync.markDirty(); onDone && onDone();
+    }));
+    ov.querySelector('#ga-create').addEventListener('click', () => {
+      const name = (ov.querySelector('#ga-new').value || '').trim();
+      if (!name) return UI.toast('請輸入名稱', 'info');
+      const gs = S.getGroups(); const g = { id: S.uuid(), name }; gs.push(g); S.setGroups(gs);
+      const m = S.getGroupMap(); m[sym] = g.id; S.setGroupMap(m);
+      UI.closeSheet(); if (App.Sync) App.Sync.markDirty(); onDone && onDone();
+    });
+  }
+
   /* ===================== 設定 ===================== */
   function settings(root) {
     const acc = S.getAccount();
@@ -695,6 +989,9 @@ App.Views = (function () {
         </div>
         <input class="input" id="tx-fee" type="number" inputmode="decimal" value="${ed ? ed.fee : '0.1425'}">
       </label>
+      ${!ed ? `<label class="fld">現金帳戶（買入扣款 / 賣出存入）
+        <select class="input" id="tx-acct"><option value="">不使用現金帳戶</option></select>
+      </label>` : ''}
       <div class="tx-preview" id="tx-preview"></div>`;
     const footer = `<button class="btn btn-ghost" id="tx-cancel">取消</button><button class="btn btn-primary" id="tx-submit">確認</button>`;
     const ov = UI.openSheet(ed ? '編輯交易' : (txState.isBuy ? '新增買入' : '新增賣出'), body, footer);
@@ -725,6 +1022,20 @@ App.Views = (function () {
     }));
     ['#tx-shares', '#tx-price', '#tx-fee'].forEach(s => $(s).addEventListener('input', updatePreview));
 
+    // 現金帳戶選項（依標的幣別過濾：台股=台幣、美股/加密=美金）
+    function refreshAcctOptions() {
+      const sel = $('#tx-acct'); if (!sel) return;
+      const mk = txState.picked ? U.normalizeMarketKey(txState.picked.market)
+        : U.guessMarketBySymbol(U.sanitizeSymbol($('#tx-sym') ? $('#tx-sym').value : txState.symbol));
+      const wantCur = (mk === U.Market.us || mk === U.Market.crypto) ? 'USD' : 'TWD';
+      const keep = sel.value;
+      const opts = S.getCashAccounts().filter(a => a.currency === wantCur);
+      sel.innerHTML = '<option value="">不使用現金帳戶</option>' +
+        opts.map(a => `<option value="${a.id}">${a.name}（${a.currency} ${U.formatPrice(a.balance || 0)}）</option>`).join('');
+      if (opts.some(a => a.id === keep)) sel.value = keep;
+    }
+    refreshAcctOptions();
+
     // 自動完成
     if (!ed) {
       const symInput = $('#tx-sym'), sug = $('#tx-suggest');
@@ -739,6 +1050,7 @@ App.Views = (function () {
           if (us && $('#tx-fee').value === '0.1425') $('#tx-fee').value = '0.08';
           else if (!us && $('#tx-fee').value === '0.08') $('#tx-fee').value = '0.1425';
         }
+        refreshAcctOptions();
         txState.picked = null; // 重新輸入即失效
         timer = setTimeout(async () => {
           const res = await App.Api.searchSymbols(q);
@@ -751,6 +1063,7 @@ App.Views = (function () {
             txState.picked = { code: it.dataset.code, name, market: it.dataset.mk };
             if (it.dataset.cgid) App.Api.cacheCgId(it.dataset.code, it.dataset.cgid);
             if (txState.feeMode === 'rate') $('#tx-fee').value = it.dataset.mk === 'crypto' ? '0.1' : (it.dataset.mk === 'us' ? '0.08' : '0.1425');
+            refreshAcctOptions();
             $('#tx-shares').focus();
           }));
         }, 220);
@@ -776,7 +1089,8 @@ App.Views = (function () {
         const symbolInput = $('#tx-sym').value;
         // 從建議清單選取者，帶入明確市場與名稱（加密貨幣必要）
         const pk = (txState.picked && U.sanitizeSymbol(symbolInput) === txState.picked.code) ? txState.picked : null;
-        const res = C.addTransaction({ symbolInput, type: txState.isBuy ? 'BUY' : 'SELL', shares: sh, price: pr, fee, market: pk && pk.market, name: pk && pk.name });
+        const accountId = $('#tx-acct') ? ($('#tx-acct').value || undefined) : undefined;
+        const res = C.addTransaction({ symbolInput, type: txState.isBuy ? 'BUY' : 'SELL', shares: sh, price: pr, fee, market: pk && pk.market, name: pk && pk.name, accountId });
         if (!res.ok) return UI.toast(res.msg, 'info');
         UI.closeSheet(); App.afterDataChange([res.symbol]);
       }
@@ -795,5 +1109,5 @@ App.Views = (function () {
   }
   function isUsSym(s) { return U.guessMarketBySymbol(U.sanitizeSymbol(s)) === U.Market.us; }
 
-  return { portfolio, history, report, settings, openTxForm };
+  return { portfolio, history, report, assets, settings, openTxForm };
 })();

@@ -245,6 +245,41 @@ input, select { font-family: inherit; font-size: 15px; }
 .tx-mini .tx-date { color: var(--sub); margin-left: auto; }
 .link-edit { color: var(--tw); font-size: 13px; }
 
+/* ---- 資產（淨資產）頁 ---- */
+.nw-hero { padding: 8px 4px 16px; }
+.nw-cap { font-size: 14px; color: var(--sub); }
+.nw-num { font-size: 36px; font-weight: 800; letter-spacing: -0.5px; margin-top: 2px; }
+.as-cat { padding: 0; overflow: hidden; }
+.as-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-left: 4px solid var(--cc, var(--primary)); cursor: pointer; }
+.as-head:active { background: var(--soft); }
+.as-name { font-size: 16px; font-weight: 700; }
+.as-total { font-size: 18px; font-weight: 800; }
+.as-body { border-top: 1px solid var(--divider); padding: 4px 0 8px; }
+.as-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; min-height: 52px; }
+.as-row:active { background: var(--soft); }
+.as-row.member { padding-left: 26px; }
+.as-row.member.top { padding-left: 16px; }
+.as-main { flex: 1; min-width: 0; }
+.as-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.as-sub { font-size: 11px; color: var(--sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.as-val { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.as-add { display: block; width: calc(100% - 32px); margin: 8px 16px 6px; padding: 9px; border-radius: 9px; background: var(--soft); color: var(--sub); font-size: 13px; text-align: center; }
+.as-add:active { background: var(--divider); }
+.as-grow { display: flex; align-items: center; gap: 10px; padding: 11px 8px 11px 16px; min-height: 56px; border-top: 1px solid var(--divider); cursor: pointer; }
+.as-grow:active { background: var(--soft); }
+.pct-badge { flex: none; width: 40px; height: 40px; border-radius: 50%; background: #6D5FD5; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.pct-badge.sm { width: 34px; height: 34px; font-size: 11px; background: #8B7FE0; }
+.g-menu { flex: none; width: 34px; height: 34px; border-radius: 50%; color: var(--sub); font-size: 17px; }
+.g-menu:active { background: var(--soft); }
+.basis-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px 6px; }
+.basis-cap { font-size: 12px; color: var(--sub); }
+.adj-row { display: flex; gap: 8px; margin-top: 5px; }
+.adj-row .input { flex: 1; }
+.ga-list { display: flex; flex-direction: column; }
+.ga-item { padding: 13px 6px; border-bottom: 1px solid var(--divider); font-size: 15px; }
+.ga-item:active { background: var(--soft); }
+.ga-item.on { color: var(--lineTw, #2563EB); font-weight: 700; }
+
 /* ---- Lock screen ---- */
 .lock-overlay { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; transition: opacity .25s; }
 .lock-overlay.hide { opacity: 0; }

@@ -123,7 +123,8 @@ App.Calc = (function () {
 
   // 新增交易（SELL 同步寫入已實現損益）；回傳 {ok, msg}
   // market/name 為選填覆寫（例：從建議清單選了加密貨幣時傳入 'crypto'）
-  function addTransaction({ symbolInput, type, shares, price, fee, market, name }) {
+  // accountId 為選填現金帳戶：買入自動扣款、賣出自動存入
+  function addTransaction({ symbolInput, type, shares, price, fee, market, name, accountId }) {
     const symbol = U.sanitizeSymbol(symbolInput);
     if (!symbol || shares <= 0 || price <= 0) return { ok: false, msg: '請輸入正確的代碼/股數/價格' };
 
@@ -153,18 +154,30 @@ App.Calc = (function () {
       S.setRealized(rz);
     }
 
-    txs.push({ id: S.uuid(), symbol, type, shares, price, fee, time: Date.now() });
+    const newTx = { id: S.uuid(), symbol, type, shares, price, fee, time: Date.now() };
+    if (accountId) newTx.accountId = accountId;
+    txs.push(newTx);
     S.setTransactions(txs);
+    // 現金帳戶連動：買入扣款、賣出存入（帳戶原幣別金額）
+    if (accountId) S.adjustCashBalance(accountId, txCashDelta(newTx));
     return { ok: true, symbol };
   }
 
-  // 更新交易並重算該代碼的已實現損益
+  // 交易對現金帳戶的影響（原幣別）：BUY = −(金額+費)、SELL = +(金額−費)
+  function txCashDelta(tx) {
+    const amt = tx.shares * tx.price;
+    return tx.type === 'BUY' ? -(amt + tx.fee) : (amt - tx.fee);
+  }
+
+  // 更新交易並重算該代碼的已實現損益（現金效果：先沖銷舊值再套用新值）
   function updateTransaction(id, { type, shares, price, fee, time }) {
     if (shares <= 0 || price <= 0) return { ok: false, msg: '請輸入正確的股數/價格' };
     const txs = S.getTransactions();
     const tx = txs.find(t => t.id === id);
     if (!tx) return { ok: false, msg: '找不到交易' };
+    if (tx.accountId) S.adjustCashBalance(tx.accountId, -txCashDelta(tx)); // 沖銷舊
     tx.type = type; tx.shares = shares; tx.price = price; tx.fee = fee; tx.time = time;
+    if (tx.accountId) S.adjustCashBalance(tx.accountId, txCashDelta(tx));  // 套用新
     S.setTransactions(txs);
     recomputeRealized(tx.symbol);
     return { ok: true, symbol: tx.symbol };
@@ -174,6 +187,7 @@ App.Calc = (function () {
     let txs = S.getTransactions();
     const tx = txs.find(t => t.id === id);
     if (!tx) return;
+    if (tx.accountId) S.adjustCashBalance(tx.accountId, -txCashDelta(tx)); // 沖銷現金效果
     txs = txs.filter(t => t.id !== id);
     S.setTransactions(txs);
     recomputeRealized(tx.symbol);
@@ -200,12 +214,33 @@ App.Calc = (function () {
     S.setRealized(rz);
   }
 
-  // 刪除某代碼所有資料
+  // 刪除某代碼所有資料（含沖銷各交易的現金帳戶效果）
   function deleteSymbol(symbolInput) {
     const sym = U.sanitizeSymbol(symbolInput);
+    for (const t of S.getTransactions()) {
+      if (t.symbol === sym && t.accountId) S.adjustCashBalance(t.accountId, -txCashDelta(t));
+    }
     S.setTransactions(S.getTransactions().filter(t => t.symbol !== sym));
     S.setRealized(S.getRealized().filter(r => r.symbol !== sym));
     const p = S.getPrices(); delete p[sym]; S.setPrices(p);
+    // 群組對應一併移除
+    const gm = S.getGroupMap();
+    if (gm[sym]) { delete gm[sym]; S.setGroupMap(gm); }
+  }
+
+  // 資產頁彙總：淨資產 = 流動資金 + 投資市值 − 負債（USD 帳戶以匯率換算）
+  function assetsSummary() {
+    const rate = S.getFxRate() || 31.5;
+    const toTwd = a => (a.currency === 'USD' ? (a.balance || 0) * rate : (a.balance || 0));
+    const cashTwd = S.getCashAccounts().reduce((s, a) => s + toTwd(a), 0);
+    const liabTwd = S.getLiabilities().reduce((s, a) => s + toTwd(a), 0);
+    const inv = buildSummary(buildPositions());
+    return {
+      cashTwd, liabTwd,
+      investTwd: inv.totalMarketValueTwd,
+      netWorth: cashTwd + inv.totalMarketValueTwd - liabTwd,
+      invSummary: inv,
+    };
   }
 
   // 儲存今日快照（覆蓋同日）
@@ -351,6 +386,6 @@ App.Calc = (function () {
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
-    deleteSymbol, saveTodaySnapshot, rebuildSnapshots,
+    deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta,
   };
 })();

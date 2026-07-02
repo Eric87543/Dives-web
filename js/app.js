@@ -18,6 +18,7 @@
     root.scrollTop = 0;
     switch (currentTab) {
       case 'portfolio': V.portfolio(root); break;
+      case 'assets': V.assets(root); break;
       case 'history': V.history(root); break;
       case 'report': V.report(root); break;
       case 'settings': V.settings(root); break;

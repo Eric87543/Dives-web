@@ -18,6 +18,11 @@ App.Store = (function () {
     twUniverse: 'dives_tw_universe',
     twUniverseTs: 'dives_tw_universe_ts',
     proxy: 'dives_cors_proxy',
+    cash: 'dives_cash_accounts',
+    liab: 'dives_liabilities',
+    groups: 'dives_groups',
+    groupMap: 'dives_group_map',
+    pctBasis: 'dives_pct_basis',
   };
 
   function read(key, fallback) {
@@ -92,13 +97,43 @@ App.Store = (function () {
   }
   function setProxy(p) { localStorage.setItem(K.proxy, p || ''); }
 
-  // ---- 清空所有資料（同步清除快照）----
+  // ---- 現金帳戶 ----  {id, name, currency('TWD'|'USD'), balance}
+  function getCashAccounts() { return read(K.cash, []); }
+  function setCashAccounts(a) { write(K.cash, a); }
+  function adjustCashBalance(id, delta) {
+    const list = getCashAccounts();
+    const a = list.find(x => x.id === id);
+    if (!a) return false;
+    a.balance = (a.balance || 0) + delta;
+    setCashAccounts(list);
+    return true;
+  }
+
+  // ---- 負債 ----  {id, name, currency, balance}
+  function getLiabilities() { return read(K.liab, []); }
+  function setLiabilities(a) { write(K.liab, a); }
+
+  // ---- 投資群組（一層）----  groups: [{id, name}]；groupMap: {symbol: groupId}
+  function getGroups() { return read(K.groups, []); }
+  function setGroups(g) { write(K.groups, g); }
+  function getGroupMap() { return read(K.groupMap, {}); }
+  function setGroupMap(m) { write(K.groupMap, m); }
+
+  // ---- 佔比基準：'group' | 'invest' | 'net' ----
+  function getPctBasis() { return localStorage.getItem(K.pctBasis) || 'invest'; }
+  function setPctBasis(b) { localStorage.setItem(K.pctBasis, b); }
+
+  // ---- 清空所有資料（同步清除快照與資產頁資料）----
   function clearAll() {
     setTransactions([]);
     setRealized([]);
     setSnapshots([]);
     setAccount({ initialCash: null });
     setPrices({});
+    setCashAccounts([]);
+    setLiabilities([]);
+    setGroups([]);
+    setGroupMap({});
   }
 
   return {
@@ -112,6 +147,10 @@ App.Store = (function () {
     getFxRate, setFxRate, getFxTs,
     getTwUniverse, setTwUniverse, twUniverseFresh,
     getProxy, setProxy,
+    getCashAccounts, setCashAccounts, adjustCashBalance,
+    getLiabilities, setLiabilities,
+    getGroups, setGroups, getGroupMap, setGroupMap,
+    getPctBasis, setPctBasis,
     clearAll,
   };
 })();

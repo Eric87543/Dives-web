@@ -44,19 +44,44 @@ App.Csv = (function () {
         s.cryptoUnrealizedPnlTwd || 0, s.cryptoRealizedPnlTwd || 0
       ].join(','));
     }
+
+    // ── 現金帳戶 / 負債（名稱中的逗號改為全形，維持簡單分割）──
+    const nm = v => String(v == null ? '' : v).replace(/,/g, '，');
+    lines.push('');
+    lines.push('# ACCOUNTS');
+    lines.push('Kind,Name,Currency,Balance');
+    for (const a of S.getCashAccounts()) lines.push(['cash', nm(a.name), a.currency || 'TWD', a.balance || 0].join(','));
+    for (const a of S.getLiabilities()) lines.push(['liability', nm(a.name), a.currency || 'TWD', a.balance || 0].join(','));
+
+    // ── 投資群組（每行：群組名, 成員代碼；空成員行代表空群組）──
+    lines.push('');
+    lines.push('# GROUPS');
+    lines.push('GroupName,Symbol');
+    const gmapX = S.getGroupMap();
+    for (const g of S.getGroups()) {
+      const members = Object.keys(gmapX).filter(sym => gmapX[sym] === g.id);
+      if (!members.length) lines.push([nm(g.name), ''].join(','));
+      for (const sym of members) lines.push([nm(g.name), sym].join(','));
+    }
+
     return lines.join('\n');
   }
 
   // 回傳 {ok, txCount, snapCount, msg}
   function importCsv(content) {
-    const txLines = [], snapLines = [];
+    const txLines = [], snapLines = [], acctLines = [], groupLines = [];
     let section = 'transactions';
     for (const raw of content.split('\n')) {
       const line = raw.trim();
       if (line === '# TRANSACTIONS') { section = 'transactions'; continue; }
       if (line === '# SNAPSHOTS') { section = 'snapshots'; continue; }
+      if (line === '# ACCOUNTS') { section = 'accounts'; continue; }
+      if (line === '# GROUPS') { section = 'groups'; continue; }
       if (!line) continue;
-      if (section === 'transactions') txLines.push(line); else snapLines.push(line);
+      if (section === 'transactions') txLines.push(line);
+      else if (section === 'snapshots') snapLines.push(line);
+      else if (section === 'accounts') acctLines.push(line);
+      else groupLines.push(line);
     }
     if (!txLines.length) return { ok: false, msg: 'CSV 沒有可匯入資料' };
 
@@ -155,6 +180,33 @@ App.Csv = (function () {
     S.setTransactions(txOut);
     S.setRealized(rzOut);
     if (snaps.length) { snaps.sort((a, b) => a.date < b.date ? -1 : 1); S.setSnapshots(snaps); }
+
+    // ── 現金帳戶 / 負債（區段存在才覆蓋）──
+    if (acctLines.length) {
+      const start = acctLines[0].toLowerCase().includes('kind') ? 1 : 0;
+      const cash = [], liab = [];
+      for (let i = start; i < acctLines.length; i++) {
+        const p = acctLines[i].split(',');
+        if (p.length < 4) continue;
+        const rec = { id: S.uuid(), name: (p[1] || '').trim(), currency: (p[2] || 'TWD').trim().toUpperCase() === 'USD' ? 'USD' : 'TWD', balance: parseFloat(p[3]) || 0 };
+        if (!rec.name) continue;
+        if ((p[0] || '').trim().toLowerCase() === 'liability') liab.push(rec); else cash.push(rec);
+      }
+      S.setCashAccounts(cash); S.setLiabilities(liab);
+    }
+
+    // ── 投資群組 ──
+    if (groupLines.length) {
+      const start = groupLines[0].toLowerCase().includes('groupname') ? 1 : 0;
+      const gs = []; const byName = {}; const gm = {};
+      for (let i = start; i < groupLines.length; i++) {
+        const p = groupLines[i].split(',');
+        const name = (p[0] || '').trim(); if (!name) continue;
+        if (!byName[name]) { byName[name] = { id: S.uuid(), name }; gs.push(byName[name]); }
+        const sym = (p[1] || '').trim(); if (sym) gm[sym] = byName[name].id;
+      }
+      S.setGroups(gs); S.setGroupMap(gm);
+    }
 
     return { ok: true, txCount: txOut.length, snapCount: snaps.length };
   }
