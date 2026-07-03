@@ -176,7 +176,7 @@ App.Views = (function () {
   const hist = { tab: 'tx', range: 'ytd', txFilter: 'all', search: '', chart: 'alloc' };
   const RANGES = [['1m', '1M'], ['3m', '3M'], ['6m', '6M'], ['ytd', 'YTD'], ['1y', '1Y'], ['all', '全部']];
   // 趨勢圖表種類
-  const HIST_CHARTS = [['alloc', '資產配置'], ['net', '淨資產'], ['cash', '流動資金'], ['liab', '負債']];
+  const HIST_CHARTS = [['alloc', '倉位'], ['net', '淨資產'], ['cash', '流動資金'], ['liab', '負債']];
   const HIST_LINE_CONF = {
     net: { label: '淨資產', color: '#0F766E' },
     cash: { label: '流動資金', color: '#34A853' },
@@ -322,7 +322,7 @@ App.Views = (function () {
   const rep = { mode: 'yearly', year: new Date().getFullYear(), col: null, asc: true };
   // 欄位 → 圖表標題 / 表頭底線色（藍：淨資產/投入；綠：損益/已未實現）
   const REP_COLS = {
-    netAsset: { title: '淨資產', underline: '#4A82C8' },
+    netAsset: { title: '總倉位', underline: '#4A82C8' },
     newInvestment: { title: '本期投入', underline: '#4A82C8' },
     periodPnl: { title: '本期損益', underline: '#3DAA6A' },
     realizedUnrealized: { title: '未實現 / 已實現', underline: '#3DAA6A' },
@@ -364,8 +364,8 @@ App.Views = (function () {
     const pPnl = s.totalPnl - (prev ? prev.totalPnl : 0);
     return {
       label,
-      // 淨資產 = 投資 + 流動資金 − 負債（舊快照回填，見 nwOf）
-      netAsset: nwOf(s, cl || { cashTwd: 0, liabTwd: 0 }),
+      // 總倉位 = 台股 + 美股 + 加密 總市值（欄位名沿用 netAsset 以相容既有圖表）
+      netAsset: s.totalMarketValueTwd != null ? s.totalMarketValueTwd : (s.netAsset || 0),
       newInvestment: cost - (prev ? prev.totalCostBasisTwd : 0),
       periodPnl: pPnl,
       totalPnl: s.totalPnl,
@@ -405,8 +405,8 @@ App.Views = (function () {
       ${bcol('未實現', U.fmtBannerSigned(latest.unrealizedPnl), UI.pnlColor(latest.unrealizedPnl))}
     </div>`;
 
-    // 圖表（標題隨選取欄位變化；無選取＝資產走勢圖）
-    const chartTitle = rep.col ? REP_COLS[rep.col].title : '資產走勢圖';
+    // 圖表（標題隨選取欄位變化；無選取＝倉位走勢圖）
+    const chartTitle = rep.col ? REP_COLS[rep.col].title : '倉位走勢圖';
     html += `<div class="card"><div class="chart-title">${chartTitle}</div><div class="chart-host" id="rep-chart"></div></div>`;
 
     // 表格（表頭可點擊切換圖表）
@@ -415,7 +415,7 @@ App.Views = (function () {
     html += `<div class="card rep-table">
       <div class="rt-head">
         <span class="c0 rt-sort" data-sort="1">期間 ${rep.asc ? '▲' : '▼'}</span>
-        <span class="rt-h ${acOf('netAsset')}" data-col="netAsset" style="${ulOf('netAsset')}">淨資產</span>
+        <span class="rt-h ${acOf('netAsset')}" data-col="netAsset" style="${ulOf('netAsset')}">總倉位</span>
         <span class="rt-h ${acOf('newInvestment')}" data-col="newInvestment" style="${ulOf('newInvestment')}">本期投入</span>
         <span class="rt-h ${acOf('periodPnl')}" data-col="periodPnl" style="${ulOf('periodPnl')}">本期損益<br><i>${rep.mode === 'yearly' ? '年報酬率' : '月報酬率'}</i></span>
         <span class="rt-h ${acOf('realizedUnrealized')}" data-col="realizedUnrealized" style="${ulOf('realizedUnrealized')}">未實現<br><i>已實現</i></span>
@@ -449,14 +449,11 @@ App.Views = (function () {
     } else {
       let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
       if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
-      const cl = C.cashLiabTwd();
       const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: {
         tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0,
-        nw: nwOf(s, cl),
       } }));
       App.Charts.trend(host, points, {
         twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
-        extraLines: [{ key: 'nw', label: '淨資產', color: '#0F766E', dash: true }], // 含現金−負債
         xLabels: repXLabels(points),
         valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
       });

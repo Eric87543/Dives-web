@@ -260,7 +260,7 @@ App.Charts = (function () {
          <div><i style="background:${it.periodRealizedPnl >= 0 ? C_RED : C_GREEN}"></i>已實現 <b>${U.fmtBannerSigned(it.periodRealizedPnl)}</b></div>`;
       else {
         const v = col === 'netAsset' ? it.netAsset : col === 'newInvestment' ? it.newInvestment : it.periodPnl;
-        const lbl = col === 'netAsset' ? '淨資產' : col === 'newInvestment' ? '本期投入' : '本期損益';
+        const lbl = col === 'netAsset' ? '總倉位' : col === 'newInvestment' ? '本期投入' : '本期損益';
         const txt = col === 'netAsset' ? U.fmtBanner(v) : U.fmtBannerSigned(v);
         body = `<div><b>${txt}</b> ${lbl}</div>`;
       }
