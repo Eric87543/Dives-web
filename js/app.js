@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v37';
+  App.VERSION = 'v38';
 
   let currentTab = 'assets';
   const TABS = [
@@ -79,6 +79,12 @@
   async function rebuildHistory() {
     const txs = S.getTransactions();
     if (!txs.length) { UI.toast('尚無交易可重建', 'info'); return 0; }
+    // 手續費防呆（SPEC I7）：異常手續費會讓成本爆掉、報表失真 → 明確指出是哪幾檔
+    const badFees = C.findAbsurdFees(txs);
+    if (badFees.length) {
+      const syms = [...new Set(badFees.map(b => b.symbol))].join('、');
+      UI.toast(`⚠️ ${syms} 手續費異常偏高，報表恐失真，請檢查交易紀錄`, 'error');
+    }
     const mmap = S.metaMap();
     const firstTime = Math.min(...txs.map(t => t.time));
     const firstDate = App.Util.isoDate(new Date(firstTime));

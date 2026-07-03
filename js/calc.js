@@ -404,6 +404,17 @@ App.Calc = (function () {
     return snaps.length;
   }
 
+  // 手續費防呆（SPEC I7）：fee > 成交金額 25% 視為異常
+  // 背景：fee 計入成本(computeAvgCostPosition)，被誤填成天文數字會毒掉整份報表/重建歷史
+  function findAbsurdFees(txs) {
+    const out = [];
+    for (const t of txs || []) {
+      const amt = (t.shares || 0) * (t.price || 0);
+      if (amt > 1e-9 && (t.fee || 0) > amt * 0.25) out.push({ symbol: t.symbol, fee: t.fee, amount: amt, time: t.time });
+    }
+    return out;
+  }
+
   // 淨資產長條圖分桶（純函式；SPEC §6）。gran ∈ day|week|month|year
   //  - nwOf 回填舊快照；同桶(週/月/年)取最後一筆
   //  - change：有前一桶→跨期差；無前一桶(最早/唯一)→期間內漲幅(期末−期初)，避免顯示 0
@@ -448,6 +459,6 @@ App.Calc = (function () {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
-    netWorthBuckets,
+    netWorthBuckets, findAbsurdFees,
   };
 })();

@@ -214,7 +214,10 @@ App.Csv = (function () {
       S.setGroups(gs); S.setGroupMap(gm);
     }
 
-    return { ok: true, txCount: txOut.length, snapCount: snaps.length };
+    // 手續費防呆（SPEC I7）：異常手續費會毒掉成本與報表，回報給呼叫端警告
+    const feeWarnSymbols = [...new Set(App.Calc.findAbsurdFees(txOut).map(b => b.symbol))];
+
+    return { ok: true, txCount: txOut.length, snapCount: snaps.length, feeWarnSymbols };
   }
 
   return { exportCsv, importCsv };

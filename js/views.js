@@ -1052,6 +1052,9 @@ App.Views = (function () {
         const res = App.Csv.importCsv(String(reader.result));
         if (res.ok) {
           UI.toast(`匯入成功：${res.txCount} 筆交易${res.snapCount ? '、' + res.snapCount + ' 筆快照' : ''}`, 'success');
+          // 手續費防呆（SPEC I7）：異常手續費會毒掉成本與報表，匯入當下就警告
+          if (res.feeWarnSymbols && res.feeWarnSymbols.length)
+            UI.toast(`⚠️ ${res.feeWarnSymbols.join('、')} 手續費異常偏高，請檢查交易紀錄`, 'error');
           App.afterDataChange();
           // 無快照時自動重建歷史走勢
           if (!res.snapCount) { UI.toast('重建歷史走勢中…', 'info'); await App.rebuildHistory(); UI.toast('已重建歷史走勢', 'success'); }

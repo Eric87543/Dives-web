@@ -165,6 +165,7 @@ netWorthBuckets(snapshots, gran, cashLiab) -> Bucket[]
 - **I4**：`nwOf` 對無 `netWorth` 的舊快照正確回填（§5.1）。
 - **I5**：`guessMarketBySymbol('00679B')=tse`、`guessMarketBySymbol('AAPL')=us`、`guessMarketBySymbol('2330')=tse`（§2.2）。
 - **I6**：CSV 匯出→匯入為 round-trip：交易筆數與關鍵欄位一致（§9）。
+- **I7**：手續費防呆 —— `findAbsurdFees(txs)` 找出 `fee > 成交金額×25%` 的交易（fee 計入成本，誤填天文數字會毒掉報表與重建歷史）；`importCsv` 回傳 `feeWarnSymbols`，匯入與重建歷史時以 toast 警告。
 
 ---
 
