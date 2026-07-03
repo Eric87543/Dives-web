@@ -853,24 +853,38 @@ App.Views = (function () {
     const st = as.gt;
     const isBar = st.metric === 'change';
     const GRAN = [['day', '天'], ['week', '週'], ['month', '月'], ['year', '年']];
-    const snaps = series.map(s => ({ date: s.date, netWorth: s.mv }));
-    const buckets = C.netWorthBuckets(snaps, st.gran, { cashTwd: 0, liabTwd: 0 });
-    const GC = '#6D5FD5';
+    const CL = { cashTwd: 0, liabTwd: 0 };
+    // 市值 / 成本 分別分桶（同日期 → 逐一對齊）
+    const mvB = C.netWorthBuckets(series.map(s => ({ date: s.date, netWorth: s.mv })), st.gran, CL);
+    const coB = C.netWorthBuckets(series.map(s => ({ date: s.date, netWorth: s.cost })), st.gran, CL);
+    const GC_MV = '#6D5FD5', GC_COST = '#A8A29E';        // 市值紫實線、成本灰虛線
+    const BAR_IN = '#4B3F9E', BAR_PL = '#8B7FE0';         // 投入深紫、損益淺紫
 
-    const nfMoney = v => 'NT$ ' + U.fmtKMBB(v);
     const sfMoney = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
-    const statRow = cols => `<div class="nw-stats">${cols.map(([k, v, c]) =>
-      `<div class="ns"><span class="ns-k">${k}</span><span class="ns-v"${c ? ` style="color:${c}"` : ''}>${v}</span></div>`).join('')}</div>`;
-    let stats = '';
-    if (buckets.length) {
+    const money = v => 'NT$ ' + U.fmtKMBB(v);
+    // 期間文字（2026年1月至7月）
+    let periodTxt = '';
+    if (mvB.length) {
+      const p = iso => ({ y: +iso.slice(0, 4), m: +iso.slice(5, 7) });
+      const a = p(mvB[0].date), b = p(mvB[mvB.length - 1].date);
+      periodTxt = a.y === b.y ? `${a.y}年${a.m}月至${b.m}月` : `${a.y}年${a.m}月至${b.y}年${b.m}月`;
+    }
+    // 摘要文字（對齊參考圖）
+    let summary = '';
+    if (mvB.length) {
       if (isBar) {
-        const vals = buckets.map(b => b.change);
-        const up = Math.max(0, ...vals), down = Math.min(0, ...vals), sum = vals.reduce((a, b) => a + b, 0);
-        stats = statRow([['最大漲', sfMoney(up), UI.pnlColor(up)], ['最大跌', sfMoney(down), UI.pnlColor(down)], ['合計', sfMoney(sum), UI.pnlColor(sum)]]);
+        const invTot = coB.reduce((s, b) => s + b.change, 0);                       // 投入合計
+        const plTot = mvB.reduce((s, b, i) => s + (b.change - coB[i].change), 0);     // 損益合計
+        summary = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div>
+          <div>投入合計 <b>${sfMoney(invTot)}</b></div>
+          <div>持倉盈虧 <b style="color:${UI.pnlColor(plTot)}">${sfMoney(plTot)}</b></div></div>`;
       } else {
-        const vals = buckets.map(b => b.nw);
-        const hi = Math.max(...vals), lo = Math.min(...vals), chg = vals[vals.length - 1] - vals[0];
-        stats = statRow([['最高', nfMoney(hi), ''], ['最低', nfMoney(lo), ''], ['區間變化', sfMoney(chg), UI.pnlColor(chg)]]);
+        const mvChg = mvB[mvB.length - 1].nw - mvB[0].nw, mvBase = mvB[0].nw;
+        const coChg = coB[coB.length - 1].nw - coB[0].nw, coBase = coB[0].nw;
+        const pctTxt = (chg, base) => Math.abs(base) > 1e-9 ? '，較期初 ' + (chg >= 0 ? '+' : '−') + Math.abs(chg / base * 100).toFixed(0) + '%' : '';
+        summary = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div>
+          <div>市值 ${mvChg >= 0 ? '增加了' : '減少了'} <b>${money(Math.abs(mvChg))}</b>${pctTxt(mvChg, mvBase)}</div>
+          <div>成本 ${coChg >= 0 ? '增加了' : '減少了'} <b>${money(Math.abs(coChg))}</b>${pctTxt(coChg, coBase)}</div></div>`;
       }
     }
 
@@ -879,8 +893,8 @@ App.Views = (function () {
       <div class="seg seg-wide" id="gt-gran" style="margin-top:8px">
         ${GRAN.map(([v, l]) => `<button class="seg-btn ${st.gran === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}
       </div>
-      <div class="chart-host" id="gt-chart" style="margin-top:12px"></div>
-      ${stats}
+      ${summary}
+      <div class="chart-host" id="gt-chart" style="margin-top:10px"></div>
     </div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
 
@@ -889,20 +903,20 @@ App.Views = (function () {
     root.querySelectorAll('#gt-gran .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.gran = b.dataset.v; groupTrendPage(root, gid); }));
 
     const host = root.querySelector('#gt-chart');
-    if (!buckets.length) { host.innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }
+    if (!mvB.length) { host.innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }
     if (isBar) {
-      const items = buckets.map(b => ({ label: b.label, fullLabel: b.full, value: b.change }));
-      App.Charts.barChart(host, items, {
-        height: 260,
+      // 投入(帳戶改變)＝成本變化；持倉盈虧＝市值變化 − 成本變化
+      const items = mvB.map((b, i) => ({ label: b.label, fullLabel: b.full, a: coB[i].change, b: b.change - coB[i].change }));
+      App.Charts.dualBars(host, items, {
+        height: 260, colorA: BAR_IN, colorB: BAR_PL, labelA: '投入', labelB: '持倉盈虧',
         valueFmt: v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v)),
-        colorOf: v => UI.pnlColor(v),
       });
     } else {
-      const pts = buckets.map(b => ({ date: new Date(b.date + 'T00:00:00+08:00'), values: { v: b.nw } }));
+      const pts = mvB.map((b, i) => ({ date: new Date(b.date + 'T00:00:00+08:00'), values: { mv: b.nw, cost: coB[i].nw } }));
       App.Charts.lineChart(host, pts, {
         height: 260,
-        series: [{ key: 'v', label: '市值', color: GC, fill: true }],
-        xLabels: bucketXLabels(buckets),
+        series: [{ key: 'mv', label: '市值', color: GC_MV, fill: true }, { key: 'cost', label: '成本', color: GC_COST, dash: true }],
+        xLabels: bucketXLabels(mvB),
         valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
       });
     }

@@ -315,7 +315,7 @@ App.Charts = (function () {
       if (s.fill && n > 0) {
         svg += `<path d="${fwd(pts)} L${pts[n - 1][0].toFixed(1)},${y0} L${pts[0][0].toFixed(1)},${y0} Z" fill="${s.color}" opacity="0.14"/>`;
       }
-      svg += `<path d="${fwd(pts)}" fill="none" stroke="${s.color}" stroke-width="1.8" stroke-linejoin="round"/>`;
+      svg += `<path d="${fwd(pts)}" fill="none" stroke="${s.color}" stroke-width="1.8" ${s.dash ? 'stroke-dasharray="4 3"' : ''} stroke-linejoin="round"/>`;
     });
     if (opts.xLabels) for (const e of opts.xLabels)
       svg += `<text x="${xAt(e.idx)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="#78716c">${e.label}</text>`;
@@ -412,5 +412,74 @@ App.Charts = (function () {
     container.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
   }
 
-  return { trend, bars, reportColumn, lineChart, barChart, niceTicks };
+  /* ---- 雙序列疊長條（投入 寬/後 + 損益 窄/前，對齊參考「帳戶改變＋持倉盈虧」）----
+   * items: [{label, fullLabel?, a, b}]；opts: {colorA,colorB,labelA,labelB,valueFmt,height}
+   */
+  function dualBars(container, items, opts) {
+    container.innerHTML = '';
+    if (!items || !items.length) { container.innerHTML = '<div class="chart-empty">暫無資料</div>'; return; }
+    opts = opts || {};
+    const valueFmt = opts.valueFmt || (v => App.Util.fmtKMBB(v));
+    const cA = opts.colorA || '#4B3F9E', cB = opts.colorB || '#8B7FE0';
+    const labelA = opts.labelA || 'A', labelB = opts.labelB || 'B';
+    const H = opts.height || 220, W = container.clientWidth || 340;
+    const padL = 46, padR = 10, padT = 12, padB = 26;
+    const chartW = W - padL - padR, chartH = H - padT - padB;
+    let lo = 0, hi = 0;
+    for (const it of items) { lo = Math.min(lo, it.a, it.b); hi = Math.max(hi, it.a, it.b); }
+    const ticks = niceTicks(lo, hi, 4);
+    const yLo = ticks[0], yHi = ticks[ticks.length - 1], ySpan = Math.max(yHi - yLo, 1);
+    const yAt = v => padT + (1 - (v - yLo) / ySpan) * chartH;
+    const step = chartW / items.length;
+    const wideW = Math.min(30, step * 0.62), narrowW = Math.min(15, step * 0.30);
+    const y0 = yAt(0);
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" class="trend-svg">`;
+    for (const t of ticks) {
+      const y = yAt(t);
+      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? '#d6d3d1' : '#eee'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
+      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#78716c">${fmtAxis(t)}</text>`;
+    }
+    const rect = (cx, v, w, color, op) => {
+      const y = yAt(v), top = Math.min(y, y0), h = Math.max(Math.abs(y - y0), 0.5);
+      return `<rect x="${(cx - w / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${color}" opacity="${op}"/>`;
+    };
+    items.forEach((it, i) => {
+      const cx = padL + step * (i + 0.5);
+      svg += rect(cx, it.a, wideW, cA, 0.9);    // 投入：寬、後
+      svg += rect(cx, it.b, narrowW, cB, 0.95); // 損益：窄、前
+      svg += `<text x="${cx.toFixed(1)}" y="${H - 9}" text-anchor="middle" font-size="9" fill="#78716c">${it.label}</text>`;
+    });
+    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#a8a29e" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
+    svg += `</svg>`;
+    const legend = `<div class="chart-legend"><span class="lg"><i style="background:${cA}"></i>${labelA}</span><span class="lg"><i style="background:${cB}"></i>${labelB}</span></div>`;
+    container.innerHTML = legend + svg;
+
+    const svgEl = container.querySelector('svg');
+    const cursor = container.querySelector('.cursor-line');
+    const tip = document.createElement('div'); tip.className = 'chart-tip'; tip.style.display = 'none';
+    container.appendChild(tip);
+    function handle(clientX) {
+      const rect2 = svgEl.getBoundingClientRect();
+      const sx = (clientX - rect2.left) / rect2.width * W;
+      let idx = Math.floor((sx - padL) / step);
+      idx = Math.max(0, Math.min(items.length - 1, idx));
+      const it = items[idx];
+      const cx = padL + step * (idx + 0.5);
+      cursor.setAttribute('x1', cx); cursor.setAttribute('x2', cx); cursor.setAttribute('visibility', 'visible');
+      tip.innerHTML = `<div class="tip-date">${it.fullLabel || it.label}</div>
+        <div><i style="background:${cA}"></i>${labelA} <b>${valueFmt(it.a)}</b></div>
+        <div><i style="background:${cB}"></i>${labelB} <b>${valueFmt(it.b)}</b></div>`;
+      tip.style.display = 'block';
+      const tipW = tip.offsetWidth || 132;
+      const cxPx = cx / W * rect2.width;
+      const left = Math.min(Math.max(cxPx - tipW / 2, 4), Math.max(4, rect2.width - tipW - 4));
+      tip.style.left = left + 'px'; tip.style.top = '4px';
+    }
+    svgEl.addEventListener('pointerdown', e => handle(e.clientX));
+    svgEl.addEventListener('pointermove', e => { if (e.buttons) handle(e.clientX); });
+    container.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+  }
+
+  return { trend, bars, reportColumn, lineChart, barChart, dualBars, niceTicks };
 })();

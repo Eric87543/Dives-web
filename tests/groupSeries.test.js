@@ -29,7 +29,9 @@ test('每日群組市值 = Σ 持股 × 歷史收盤（美股 × 匯率）', () 
   const at = ds => series.find(s => s.date === ds);
 
   assert.equal(at('2026-01-05').mv, 50000);              // 僅 2330：100 × 500
+  assert.equal(at('2026-01-05').cost, 50000);            // 成本 = 100 × 500
   assert.equal(Math.round(at('2026-01-06').mv), 145000); // 2330 100×520 + TSLA 10×310×30
+  assert.equal(Math.round(at('2026-01-06').cost), 140000); // 2330 100×500 + TSLA 10×300×30
   // 日期升冪、連續，且延伸到今天
   assert.equal(series[0].date, '2026-01-05');
   assert.ok(series.length > 1);

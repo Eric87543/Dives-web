@@ -476,14 +476,16 @@ App.Calc = (function () {
       for (const c of codes) { const arr = hist[c] || []; while (ptr[c] < arr.length && arr[ptr[c]].date <= ds) { last[c] = arr[ptr[c]].close; ptr[c]++; } }
       const bySym = {};
       for (const t of txs) { if (txDate(t) <= ds) (bySym[t.symbol] = bySym[t.symbol] || []).push(t); }
-      let mv = 0;
+      let mv = 0, cost = 0;
       for (const sym in bySym) {
         const { shares, avgCost } = computeAvgCostPosition(bySym[sym]);
         if (shares <= 1e-9) continue;
         const price = last[sym] != null ? last[sym] : avgCost; // 無歷史價 → 成本估算
-        mv += price * shares * (isUsd(sym) ? rate : 1);
+        const conv = isUsd(sym) ? rate : 1;
+        mv += price * shares * conv;
+        cost += avgCost * shares * conv;
       }
-      out.push({ date: ds, mv });
+      out.push({ date: ds, mv, cost });
     }
     return out;
   }
