@@ -319,7 +319,7 @@ App.Views = (function () {
   }
 
   /* ===================== 報表 ===================== */
-  const rep = { mode: 'yearly', year: new Date().getFullYear(), col: null, asc: true };
+  const rep = { mode: 'yearly', year: new Date().getFullYear(), col: null, asc: true, trendMode: 'pos' }; // trendMode: pos=倉位 | net=淨資產
   // 欄位 → 圖表標題 / 表頭底線色（藍：淨資產/投入；綠：損益/已未實現）
   const REP_COLS = {
     netAsset: { title: '總倉位', underline: '#4A82C8' },
@@ -405,9 +405,14 @@ App.Views = (function () {
       ${bcol('未實現', U.fmtBannerSigned(latest.unrealizedPnl), UI.pnlColor(latest.unrealizedPnl))}
     </div>`;
 
-    // 圖表（標題隨選取欄位變化；無選取＝倉位走勢圖）
-    const chartTitle = rep.col ? REP_COLS[rep.col].title : '倉位走勢圖';
-    html += `<div class="card"><div class="chart-title">${chartTitle}</div><div class="chart-host" id="rep-chart"></div></div>`;
+    // 圖表（標題隨選取欄位變化；無選取＝倉位/淨資產走勢圖，可切換）
+    const chartTitle = rep.col ? REP_COLS[rep.col].title : (rep.trendMode === 'net' ? '淨資產走勢圖' : '倉位走勢圖');
+    html += `<div class="card"><div class="chart-title-row">
+      <div class="chart-title">${chartTitle}</div>
+      ${!rep.col ? `<div class="seg" id="rep-trend-mode">
+        ${seg('pos', '倉位', rep.trendMode)}${seg('net', '淨資產', rep.trendMode)}
+      </div>` : ''}
+    </div><div class="chart-host" id="rep-chart"></div></div>`;
 
     // 表格（表頭可點擊切換圖表）
     const ulOf = c => rep.col === c ? `border-bottom:2px solid ${REP_COLS[c].underline}` : '';
@@ -442,6 +447,10 @@ App.Views = (function () {
     const sortBtn = root.querySelector('.rt-sort');
     if (sortBtn) sortBtn.addEventListener('click', () => { rep.asc = !rep.asc; report(root); });
 
+    // 走勢圖模式切換（倉位/淨資產）
+    root.querySelectorAll('#rep-trend-mode .seg-btn').forEach(b =>
+      b.addEventListener('click', () => { rep.trendMode = b.dataset.v; report(root); }));
+
     // 繪製圖表
     const host = root.querySelector('#rep-chart');
     if (rep.col) {
@@ -449,14 +458,25 @@ App.Views = (function () {
     } else {
       let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
       if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
-      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: {
-        tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0,
-      } }));
-      App.Charts.trend(host, points, {
-        twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
-        xLabels: repXLabels(points),
-        valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
-      });
+      if (rep.trendMode === 'net') {
+        // 淨資產走勢（= 倉位 + 流動資金 − 負債；舊快照回填見 nwOf）
+        const cl = C.cashLiabTwd();
+        const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: nwOf(s, cl) } }));
+        App.Charts.lineChart(host, points, {
+          series: [{ key: 'v', label: '淨資產', color: '#0F766E', fill: true }],
+          xLabels: repXLabels(points),
+          valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
+        });
+      } else {
+        const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: {
+          tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0,
+        } }));
+        App.Charts.trend(host, points, {
+          twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
+          xLabels: repXLabels(points),
+          valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
+        });
+      }
     }
   }
   function seg3(v, label, cur) { return `<button class="seg-btn ${cur === v ? 'active' : ''}" data-v="${v}">${label}</button>`; }

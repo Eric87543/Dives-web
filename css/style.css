@@ -145,6 +145,9 @@ input, select { font-family: inherit; font-size: 15px; }
 .rt-h.active { color: var(--text); font-weight: 700; }
 .rt-sort { cursor: pointer; }
 .chart-title { font-size: 13px; font-weight: 700; color: var(--text); padding: 2px 2px 8px; }
+.chart-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.chart-title-row .chart-title { padding-bottom: 6px; }
+.chart-title-row .seg-btn { padding: 5px 12px; font-size: 12px; }
 
 /* ---- TX list ---- */
 .search { width: 100%; margin-bottom: 10px; }
