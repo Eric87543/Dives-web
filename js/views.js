@@ -1105,6 +1105,13 @@ App.Views = (function () {
         <label class="fld">股數<input class="input" id="tx-shares" type="number" inputmode="decimal" value="${ed ? ed.shares : ''}" placeholder="0"></label>
         <label class="fld">價格<input class="input" id="tx-price" type="number" inputmode="decimal" value="${ed ? ed.price : ''}" placeholder="0.00"></label>
       </div>
+      <label class="fld" id="price-cur-fld" style="display:none">計價幣別（虛擬貨幣）
+        <div class="fee-mode">
+          <button class="fm-btn pc-btn active" data-pc="USD">USD</button>
+          <button class="fm-btn pc-btn" data-pc="TWD">台幣</button>
+        </div>
+        <div class="set-hint" id="price-cur-hint">在台灣交易所以台幣買入時選「台幣」，儲存時會依匯率換算為 USD</div>
+      </label>
       <label class="fld">手續費
         <div class="fee-mode">
           <button class="fm-btn active" data-m="rate">費率 %</button>
@@ -1121,14 +1128,40 @@ App.Views = (function () {
 
     const $ = s => ov.querySelector(s);
     function setTitle() { ov.querySelector('.sheet-title').textContent = ed ? '編輯交易' : (txState.isBuy ? '新增買入' : '新增賣出'); }
+
+    // 加密計價幣別（USD/台幣）：選台幣時儲存前依匯率換算為 USD
+    txState.priceCur = 'USD';
+    const isCryptoSel = () => ed
+      ? U.normalizeMarketKey((S.metaMap()[ed.symbol] || {}).market) === U.Market.crypto
+      : !!(txState.picked && txState.picked.market === 'crypto');
+    function syncPriceCur() {
+      const f = $('#price-cur-fld'); if (!f) return;
+      const show = isCryptoSel();
+      f.style.display = show ? 'block' : 'none';
+      if (!show) {
+        txState.priceCur = 'USD';
+        ov.querySelectorAll('.pc-btn').forEach(x => x.classList.toggle('active', x.dataset.pc === 'USD'));
+      }
+    }
+    ov.querySelectorAll('.pc-btn').forEach(b => b.addEventListener('click', () => {
+      txState.priceCur = b.dataset.pc;
+      ov.querySelectorAll('.pc-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      updatePreview();
+    }));
+
     function updatePreview() {
       const sh = parseFloat($('#tx-shares').value) || 0;
       const pr = parseFloat($('#tx-price').value) || 0;
+      const twdMode = isCryptoSel() && txState.priceCur === 'TWD';
+      const fx = S.getFxRate() || 31.5;
       let fee = 0;
       if (txState.feeMode === 'rate') fee = sh * pr * ((parseFloat($('#tx-fee').value) || 0) / 100);
       else fee = parseFloat($('#tx-fee').value) || 0;
       if (sh > 0 && pr > 0) $('#tx-preview').innerHTML =
-        `<div>${txState.isBuy ? '買入' : '賣出'}金額 <b>${U.fmtKMBB(sh * pr)}</b></div><div>預估手續費 <b>${U.formatPrice(fee)}</b></div>`;
+        `<div>${txState.isBuy ? '買入' : '賣出'}金額 <b>${twdMode ? 'NT$ ' : ''}${U.fmtKMBB(sh * pr)}</b></div>
+         <div>預估手續費 <b>${U.formatPrice(fee)}</b></div>
+         ${twdMode ? `<div>換算 <b>≈ $${U.formatPrice(pr / fx)} / 顆（匯率 ${fx.toFixed(3)}）</b></div>` : ''}`;
       else $('#tx-preview').innerHTML = '';
     }
     ov.querySelectorAll('.tt-btn').forEach(b => b.addEventListener('click', () => {
@@ -1157,7 +1190,7 @@ App.Views = (function () {
         opts.map(a => `<option value="${a.id}">${a.name}（${a.currency} ${U.formatPrice(a.balance || 0)}）</option>`).join('');
       if (opts.some(a => a.id === keep)) sel.value = keep;
     }
-    refreshAcctOptions();
+    refreshAcctOptions(); syncPriceCur();
 
     // 自動完成
     if (!ed) {
@@ -1173,7 +1206,7 @@ App.Views = (function () {
           if (us && $('#tx-fee').value === '0.1425') $('#tx-fee').value = '0.08';
           else if (!us && $('#tx-fee').value === '0.08') $('#tx-fee').value = '0.1425';
         }
-        refreshAcctOptions();
+        refreshAcctOptions(); syncPriceCur();
         txState.picked = null; // 重新輸入即失效
         timer = setTimeout(async () => {
           const res = await App.Api.searchSymbols(q);
@@ -1186,7 +1219,7 @@ App.Views = (function () {
             txState.picked = { code: it.dataset.code, name, market: it.dataset.mk };
             if (it.dataset.cgid) App.Api.cacheCgId(it.dataset.code, it.dataset.cgid);
             if (txState.feeMode === 'rate') $('#tx-fee').value = it.dataset.mk === 'crypto' ? '0.1' : (it.dataset.mk === 'us' ? '0.08' : '0.1425');
-            refreshAcctOptions();
+            refreshAcctOptions(); syncPriceCur();
             $('#tx-shares').focus();
           }));
         }, 220);
@@ -1197,12 +1230,16 @@ App.Views = (function () {
     $('#tx-cancel').addEventListener('click', UI.closeSheet);
     $('#tx-submit').addEventListener('click', () => {
       const sh = parseFloat($('#tx-shares').value);
-      const pr = parseFloat($('#tx-price').value);
+      let pr = parseFloat($('#tx-price').value);
       const dateVal = $('#tx-date').value;
       const time = dateVal ? new Date(dateVal + 'T12:00:00+08:00').getTime() : Date.now();
+      // 加密以台幣計價 → 依匯率換算 USD 儲存（固定金額手續費同步換算）
+      const twdMode = isCryptoSel() && txState.priceCur === 'TWD';
+      const fx = S.getFxRate() || 31.5;
+      if (twdMode && pr > 0) pr = pr / fx;
       let fee = 0;
       if (txState.feeMode === 'rate') fee = (sh || 0) * (pr || 0) * ((parseFloat($('#tx-fee').value) || 0) / 100);
-      else fee = parseFloat($('#tx-fee').value) || 0;
+      else { fee = parseFloat($('#tx-fee').value) || 0; if (twdMode) fee = fee / fx; }
 
       if (ed) {
         const res = C.updateTransaction(ed.id, { type: txState.isBuy ? 'BUY' : 'SELL', shares: sh, price: pr, fee, time });
