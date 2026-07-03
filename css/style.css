@@ -254,10 +254,28 @@ input, select { font-family: inherit; font-size: 15px; }
 .nw-cap { font-size: 14px; color: var(--sub); }
 .nw-num { font-size: 36px; font-weight: 800; letter-spacing: -0.5px; margin-top: 2px; }
 .as-cat { padding: 0; overflow: hidden; }
-.as-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-left: 4px solid var(--cc, var(--primary)); cursor: pointer; }
+.as-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-left: 4px solid var(--cc, var(--primary)); cursor: pointer; transition: background .18s; }
 .as-head:active { background: var(--soft); }
-.as-name { font-size: 16px; font-weight: 700; }
-.as-total { font-size: 18px; font-weight: 800; }
+.as-hleft { min-width: 0; flex: 1; }
+.as-hright { text-align: right; white-space: nowrap; }
+.as-name { font-size: 16px; font-weight: 700; display: block; }
+.as-hsummary { display: block; font-size: 12px; color: var(--sub); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.as-hdate { display: block; font-size: 11px; color: var(--sub); margin-top: 3px; }
+.as-total { font-size: 19px; font-weight: 800; }
+.as-head[data-cat="cash"] .as-total { color: #2E7D32; }
+.as-head[data-cat="invest"] .as-total { color: #6D5FD5; }
+.as-head[data-cat="liab"] .as-total { color: var(--gain, #E53935); }
+/* 展開：整條填色、去左邊框 */
+.as-head.open { border-left-color: transparent; }
+.as-head.open.oc-green { background: #34C759; }
+.as-head.open.oc-purple { background: #6D5FD5; }
+.as-head.open.oc-blue { background: #8E9BEF; }
+.as-head.open.oc-green .as-name, .as-head.open.oc-green .as-total { color: #08370F; }
+.as-head.open.oc-purple .as-name, .as-head.open.oc-purple .as-total { color: #fff; }
+.as-head.open.oc-blue .as-name, .as-head.open.oc-blue .as-total { color: #16183a; }
+.as-head.open.oc-green:active { background: #2fb350; }
+.as-head.open.oc-purple:active { background: #6154c4; }
+.as-head.open.oc-blue:active { background: #8290e6; }
 .as-body { border-top: 1px solid var(--divider); padding: 4px 0 8px; }
 .as-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; min-height: 52px; }
 .as-row:active { background: var(--soft); }

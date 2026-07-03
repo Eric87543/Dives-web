@@ -486,8 +486,8 @@ App.Views = (function () {
   }
 
   /* ===================== 資產（淨資產）===================== */
-  // 展開狀態（記憶於 session）；detailGroup = 群組詳情頁
-  const as = { open: { cash: true, invest: true, liab: true }, openGroups: {}, detailGroup: null, detailAsc: false };
+  // 手風琴：一次只展開一類（cash|invest|liab）；detailGroup = 群組詳情頁
+  const as = { openCat: 'invest', detailGroup: null, detailAsc: false };
   const AS_PURPLE = '#6D5FD5';
 
   function mvTwdOf(p, rate) {
@@ -524,14 +524,34 @@ App.Views = (function () {
       <button class="nw-add" id="as-add-btn" aria-label="新增">＋</button>
     </div>`;
 
-    // ── 流動資金 ─────────────────────────────────────────
+    // 收合摘要文字 + 更新日期
     const cashAccts = S.getCashAccounts();
-    html += `<div class="card as-cat">
-      <div class="as-head" data-cat="cash" style="--cc:#34A853">
-        <span class="as-name">流動資金</span>
-        <span class="as-total" style="color:#2E7D32">${U.fmtWhole(sum.cashTwd)}</span>
+    const liabs = S.getLiabilities();
+    const dateFrom = ts => ts ? (t => `${t.month}月${t.day}日 更新`)(U.taipeiParts(new Date(ts))) : '';
+    const maxUpd = list => list.reduce((m, a) => Math.max(m, a.updatedAt || 0), 0);
+    const cashSummary = cashAccts.map(a => a.name).join('、') || '尚無帳戶';
+    const investSummary = [...groups.map(g => g.name), ungrouped.length ? '獨立持股' : null].filter(Boolean).join('、') || '尚無持倉';
+    const liabSummary = liabs.map(a => a.name).join('、') || '尚無負債';
+
+    // 分類卡標頭（展開填色、收合顯示摘要+日期）
+    function catHead(cat, name, totalHtml, cc, openCls, summary, dateTs) {
+      const open = as.openCat === cat;
+      return `<div class="as-head ${open ? 'open ' + openCls : ''}" data-cat="${cat}" style="--cc:${cc}">
+        <div class="as-hleft">
+          <span class="as-name">${name}</span>
+          ${!open ? `<span class="as-hsummary">${summary}</span>` : ''}
+        </div>
+        <div class="as-hright">
+          <span class="as-total">${totalHtml}</span>
+          ${!open && dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : ''}
+        </div>
       </div>`;
-    if (as.open.cash) {
+    }
+
+    // ── 流動資金 ─────────────────────────────────────────
+    html += `<div class="card as-cat">` +
+      catHead('cash', '流動資金', U.fmtWhole(sum.cashTwd), '#34C759', 'oc-green', cashSummary, maxUpd(cashAccts));
+    if (as.openCat === 'cash') {
       html += `<div class="as-body">`;
       for (const a of cashAccts) {
         const twd = a.currency === 'USD' ? (a.balance || 0) * rate : (a.balance || 0);
@@ -547,12 +567,9 @@ App.Views = (function () {
     html += `</div>`;
 
     // ── 投資 ────────────────────────────────────────────
-    html += `<div class="card as-cat">
-      <div class="as-head" data-cat="invest" style="--cc:${AS_PURPLE}">
-        <span class="as-name">投資</span>
-        <span class="as-total" style="color:${AS_PURPLE}">${U.fmtWhole(sum.investTwd)}</span>
-      </div>`;
-    if (as.open.invest) {
+    html += `<div class="card as-cat">` +
+      catHead('invest', '投資', U.fmtWhole(sum.investTwd), AS_PURPLE, 'oc-purple', investSummary, S.getPricesTs());
+    if (as.openCat === 'invest') {
       html += `<div class="as-body">
         <div class="basis-row"><span class="basis-cap">佔比基準</span>
           <div class="seg" id="pct-basis">
@@ -591,13 +608,9 @@ App.Views = (function () {
     html += `</div>`;
 
     // ── 負債 ────────────────────────────────────────────
-    const liabs = S.getLiabilities();
-    html += `<div class="card as-cat">
-      <div class="as-head" data-cat="liab" style="--cc:#8E9BEF">
-        <span class="as-name">負債</span>
-        <span class="as-total" style="color:${UI.GAIN}">−${U.fmtWhole(sum.liabTwd)}</span>
-      </div>`;
-    if (as.open.liab) {
+    html += `<div class="card as-cat">` +
+      catHead('liab', '負債', (sum.liabTwd > 0 ? '−' : '') + U.fmtWhole(sum.liabTwd), '#8E9BEF', 'oc-blue', liabSummary, maxUpd(liabs));
+    if (as.openCat === 'liab') {
       html += `<div class="as-body">`;
       for (const a of liabs) {
         const twd = a.currency === 'USD' ? (a.balance || 0) * rate : (a.balance || 0);
@@ -616,7 +629,9 @@ App.Views = (function () {
 
     // ── 事件 ─────────────────────────────────────────────
     root.querySelectorAll('.as-head').forEach(h => h.addEventListener('click', () => {
-      const k = h.dataset.cat; as.open[k] = !as.open[k]; assets(root);
+      const k = h.dataset.cat;
+      as.openCat = (as.openCat === k) ? null : k; // 再點一次收合；否則只展開被點的
+      assets(root);
     }));
     const bind = (sel, fn) => { const el = root.querySelector(sel); if (el) el.addEventListener('click', fn); };
     bind('#as-add-btn', () => openAddChooser(() => assets(root)));
