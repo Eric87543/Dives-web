@@ -894,7 +894,10 @@ App.Views = (function () {
         ${GRAN.map(([v, l]) => `<button class="seg-btn ${st.gran === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}
       </div>
       ${summary}
-      <div class="chart-host" id="gt-chart" style="margin-top:10px"></div>
+      ${isBar
+        ? `<div class="gt-subtitle">投入</div><div class="chart-host" id="gt-chart-a"></div>
+           <div class="gt-subtitle" style="margin-top:16px">持倉盈虧</div><div class="chart-host" id="gt-chart-b"></div>`
+        : `<div class="chart-host" id="gt-chart" style="margin-top:10px"></div>`}
     </div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
 
@@ -902,16 +905,16 @@ App.Views = (function () {
     root.querySelectorAll('#gt-metric .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.metric = b.dataset.v; groupTrendPage(root, gid); }));
     root.querySelectorAll('#gt-gran .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.gran = b.dataset.v; groupTrendPage(root, gid); }));
 
-    const host = root.querySelector('#gt-chart');
-    if (!mvB.length) { host.innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }
+    if (!mvB.length) { (root.querySelector('#gt-chart') || root.querySelector('#gt-chart-a')).innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }
+    const sfBar = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
     if (isBar) {
-      // 投入(帳戶改變)＝成本變化；持倉盈虧＝市值變化 − 成本變化
-      const items = mvB.map((b, i) => ({ label: b.label, fullLabel: b.full, a: coB[i].change, b: b.change - coB[i].change }));
-      App.Charts.dualBars(host, items, {
-        height: 260, colorA: BAR_IN, colorB: BAR_PL, labelA: '投入', labelB: '持倉盈虧',
-        valueFmt: v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v)),
-      });
+      // 投入(帳戶改變)＝成本變化；持倉盈虧＝市值變化 − 成本變化 → 拆成兩張圖
+      const invItems = mvB.map((b, i) => ({ label: b.label, fullLabel: b.full, value: coB[i].change }));
+      const plItems = mvB.map((b, i) => ({ label: b.label, fullLabel: b.full, value: b.change - coB[i].change }));
+      App.Charts.barChart(root.querySelector('#gt-chart-a'), invItems, { height: 190, colorOf: () => BAR_IN, valueFmt: sfBar });
+      App.Charts.barChart(root.querySelector('#gt-chart-b'), plItems, { height: 190, colorOf: v => UI.pnlColor(v), valueFmt: sfBar });
     } else {
+      const host = root.querySelector('#gt-chart');
       const pts = mvB.map((b, i) => ({ date: new Date(b.date + 'T00:00:00+08:00'), values: { mv: b.nw, cost: coB[i].nw } }));
       App.Charts.lineChart(host, pts, {
         height: 260,
