@@ -76,17 +76,22 @@ App.Views = (function () {
       list.sort((a, b) => mvTwd(b) - mvTwd(a));
       const tot = list.reduce((s, p) => s + mvTwd(p), 0);
       const pct = totalAll > 1e-9 ? tot / totalAll * 100 : 0;
+      // 該市場當日漲跌（TWD）＋比例（相對前一日市值）
+      const dayChg = list.reduce((s, p) => s + (p.dailyChange || 0) * p.shares * convOf(p), 0);
+      const prevMv = tot - dayChg;
+      const dayChgPct = Math.abs(prevMv) > 1e-9 ? dayChg / Math.abs(prevMv) * 100 : 0;
+      const dArrow = dayChg > 0 ? '▲' : dayChg < 0 ? '▼' : '–';
       const open = openCat === M.key;
       const names = [...list].sort((a, b) => mvTwd(b) - mvTwd(a)).slice(0, 4).map(p => p.name !== p.symbol ? p.name : p.symbol).join('、');
       html += `<div class="card as-cat">
         <div class="as-head ${open ? 'open ' + M.oc : ''}" data-mk="${M.key}" style="--cc:${M.color}">
           <div class="as-hleft">
-            <span class="as-name">${M.name}</span>
+            <div class="mk-nameline"><span class="as-name">${M.name}</span><span class="mk-count">${list.length} 檔 · ${pct.toFixed(0)}%</span></div>
             ${!open ? `<span class="as-hsummary">${names}</span>` : ''}
           </div>
           <div class="as-hright">
             <span class="as-total" style="color:${M.color}">${U.fmtWhole(tot)}</span>
-            <span class="as-hdate">${list.length} 檔 · ${pct.toFixed(0)}%</span>
+            <span class="as-hchg" style="color:${UI.pnlColor(dayChg)}">${dArrow} ${U.fmtWhole(Math.abs(dayChg))} (${Math.abs(dayChgPct).toFixed(2)}%)</span>
           </div>
         </div>`;
       if (open) {
