@@ -123,7 +123,7 @@ App.Views = (function () {
         listHtml += `<div class="hold-row" data-sym="${p.symbol}">
           <div class="h-left">
             <div class="h-sym">${p.symbol} <span class="h-name">${p.name}</span></div>
-            <div class="h-sub">${U.formatShares(p.shares)} 股 @ ${U.formatPrice(p.avgCost * conv)}</div>
+            <div class="h-sub">${U.formatShares(p.shares)}${shareUnit(p.market)} @ ${U.formatPrice(p.avgCost * conv)}</div>
           </div>
           <div class="h-mid">
             <div class="h-price">${p.lastPrice != null ? cur + U.formatPrice(p.lastPrice * conv) : '--'}</div>
@@ -151,6 +151,11 @@ App.Views = (function () {
 
   function seg(v, label, cur) {
     return `<button class="seg-btn ${cur === v ? 'active' : ''}" data-v="${v}">${label}</button>`;
+  }
+
+  // 股數單位：加密貨幣不以「股」計 → 留空（只顯示數量）
+  function shareUnit(market) {
+    return U.normalizeMarketKey(market) === U.Market.crypto ? '' : ' 股';
   }
 
   function openSymbolActions(sym) {
@@ -231,7 +236,7 @@ App.Views = (function () {
       const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0 } }));
       App.Charts.trend(host, points, {
         twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
-        xLabels: monthLabels(points),
+        xLabels: monthLabels(points), height: 250,
         valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
       });
       return;
@@ -246,7 +251,7 @@ App.Views = (function () {
     const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: valOf(s) } }));
     App.Charts.lineChart(host, points, {
       series: [{ key: 'v', label: conf.label, color: conf.color, fill: true }],
-      xLabels: monthLabels(points),
+      xLabels: monthLabels(points), height: 250,
       valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
     });
   }
@@ -296,7 +301,7 @@ App.Views = (function () {
         <span class="tx-type ${t.type === 'BUY' ? 'buy' : 'sell'}">${t.type === 'BUY' ? '買入' : '賣出'}</span>
         <div class="tx-main">
           <div class="tx-sym">${t.symbol} <span class="h-name">${name}</span></div>
-          <div class="tx-sub">${U.formatShares(t.shares)} 股 @ ${U.formatPrice(t.price)}　手續費 ${U.formatPrice(t.fee)}</div>
+          <div class="tx-sub">${U.formatShares(t.shares)}${shareUnit(mmap[t.symbol]?.market)} @ ${U.formatPrice(t.price)}　手續費 ${U.formatPrice(t.fee)}</div>
         </div>
         <div class="tx-meta">
           <div class="tx-amt">${U.fmtKMBB(t.shares * t.price)}</div>
@@ -582,7 +587,7 @@ App.Views = (function () {
         html += `<div class="as-row" data-kind="cash" data-id="${a.id}">
           <div class="as-main"><div class="as-title">${a.name}</div>
             <div class="as-sub">${a.currency === 'USD' ? 'USD ' + U.formatPrice(a.balance || 0) + ' · r' + rate.toFixed(3) : '台幣帳戶'}</div></div>
-          <div class="as-val" style="color:#2E7D32">${U.fmtWhole(twd)}</div>
+          <div class="as-val">${U.fmtWhole(twd)}</div>
         </div>`;
       }
       if (!cashAccts.length) html += `<div class="empty" style="padding:14px">尚無現金帳戶，點右上角 ＋ 新增</div>`;
@@ -677,6 +682,24 @@ App.Views = (function () {
     const signed = st.metric === 'change';
     const items = nwBuckets(st.gran).map(b => ({ label: b.label, fullLabel: b.full, value: signed ? b.change : b.nw }));
     const GRAN = [['day', '天'], ['week', '週'], ['month', '月'], ['year', '年']];
+
+    // 圖下小統計，填補留白
+    const nfMoney = v => 'NT$ ' + U.fmtKMBB(v);
+    const sfMoney = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
+    const statRow = cols => `<div class="nw-stats">${cols.map(([k, v, c]) =>
+      `<div class="ns"><span class="ns-k">${k}</span><span class="ns-v"${c ? ` style="color:${c}"` : ''}>${v}</span></div>`).join('')}</div>`;
+    let stats = '';
+    if (items.length) {
+      const vals = items.map(i => i.value);
+      if (signed) {
+        const up = Math.max(0, ...vals), down = Math.min(0, ...vals), sum = vals.reduce((a, b) => a + b, 0);
+        stats = statRow([['最大漲', sfMoney(up), UI.pnlColor(up)], ['最大跌', sfMoney(down), UI.pnlColor(down)], ['合計', sfMoney(sum), UI.pnlColor(sum)]]);
+      } else {
+        const hi = Math.max(...vals), lo = Math.min(...vals), chg = vals[vals.length - 1] - vals[0];
+        stats = statRow([['最高', nfMoney(hi), ''], ['最低', nfMoney(lo), ''], ['區間變化', sfMoney(chg), UI.pnlColor(chg)]]);
+      }
+    }
+
     let html = `<div class="gd-head">
       <button class="gd-back" aria-label="返回">‹</button>
       <div class="gd-title">${signed ? '漲幅長條圖' : '淨資產長條圖'}</div>
@@ -688,6 +711,7 @@ App.Views = (function () {
         ${GRAN.map(([v, l]) => `<button class="seg-btn ${st.gran === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}
       </div>
       <div class="chart-host" id="nw-chart" style="margin-top:12px"></div>
+      ${stats}
     </div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
 
@@ -696,6 +720,7 @@ App.Views = (function () {
     root.querySelectorAll('#nw-gran .seg-btn').forEach(b => b.addEventListener('click', () => { as.nw.gran = b.dataset.v; netWorthDetail(root); }));
 
     App.Charts.barChart(root.querySelector('#nw-chart'), items, {
+      height: 260,
       valueFmt: v => signed ? ((v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v))) : ('NT$ ' + U.fmtKMBB(v)),
       colorOf: signed ? (v => UI.pnlColor(v)) : (() => '#2F80ED'),
     });
