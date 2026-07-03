@@ -495,7 +495,8 @@ App.Views = (function () {
 
   /* ===================== 資產（淨資產）===================== */
   // 手風琴：一次只展開一類（cash|invest|liab）；detailGroup = 群組詳情頁
-  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day' } };
+  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day' },
+    groupTrend: null, gt: { metric: 'line', gran: 'day' }, gtCache: null };
   const AS_PURPLE = '#6D5FD5';
 
   function mvTwdOf(p, rate) {
@@ -505,6 +506,7 @@ App.Views = (function () {
 
   function assets(root) {
     if (as.nwDetail) return netWorthDetail(root);
+    if (as.groupTrend) return groupTrendPage(root, as.groupTrend);
     if (as.detailGroup) return groupDetail(root, as.detailGroup);
     const rate = S.getFxRate() || 31.5;
     const sum = C.assetsSummary();
@@ -757,6 +759,7 @@ App.Views = (function () {
       <button class="gd-back" aria-label="返回">‹</button>
       <div class="gd-title">${g.name}</div>
       <div class="gd-actions">
+        <button class="gd-trend" aria-label="走勢圖"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></button>
         <button class="gd-menu" aria-label="選單">⋯</button>
         <button class="gd-plus" aria-label="新增">＋</button>
       </div>
@@ -787,11 +790,122 @@ App.Views = (function () {
 
     root.querySelector('.gd-back').addEventListener('click', () => { as.detailGroup = null; assets(root); });
     root.querySelector('.gd-sort').addEventListener('click', () => { as.detailAsc = !as.detailAsc; assets(root); });
+    root.querySelector('.gd-trend').addEventListener('click', () => { as.groupTrend = gid; as.gtCache = null; assets(root); });
     root.querySelector('.gd-menu').addEventListener('click', () => openGroupMenu(gid, () => assets(root)));
     root.querySelector('.gd-plus').addEventListener('click', () =>
       openTxForm(null, null, { onAdded: sym => { const m = S.getGroupMap(); m[sym] = gid; S.setGroupMap(m); if (App.Sync) App.Sync.markDirty(); } }));
     root.querySelectorAll('.gd-row').forEach(r => r.addEventListener('click', () =>
       openGroupAssign(r.dataset.sym, () => assets(root))));
+  }
+
+  // 群組走勢頁：折線（市值走勢）/ 長條（漲幅），X 軸 天/週/月/年
+  function gtHead(title) {
+    return `<div class="gd-head">
+      <button class="gd-back" aria-label="返回">‹</button>
+      <div class="gd-title">${title}</div>
+      <div class="gd-actions" style="visibility:hidden"><button>＋</button></div>
+    </div>`;
+  }
+  function bucketXLabels(buckets) {
+    if (!buckets.length) return [];
+    const step = Math.max(1, Math.ceil(buckets.length / 6));
+    const out = [];
+    for (let i = 0; i < buckets.length; i += step) out.push({ idx: i, label: buckets[i].label });
+    return out;
+  }
+  async function fetchGroupSeries(symbols) {
+    if (!symbols.length) return [];
+    const txs = S.getTransactions().filter(t => symbols.includes(t.symbol));
+    if (!txs.length) return [];
+    const mmap = S.metaMap();
+    const firstDate = U.isoDate(new Date(Math.min(...txs.map(t => t.time))));
+    const mkOf = c => U.normalizeMarketKey((mmap[c] && mmap[c].market) || U.guessMarketBySymbol(c));
+    const tw = symbols.filter(c => mkOf(c) !== U.Market.us && mkOf(c) !== U.Market.crypto);
+    const us = symbols.filter(c => mkOf(c) === U.Market.us);
+    const cr = symbols.filter(c => mkOf(c) === U.Market.crypto);
+    await App.Api.fetchFx();
+    const [twH, usH, crH] = await Promise.all([
+      App.Api.fetchTwHistory(tw, firstDate),
+      App.Api.fetchUsHistory(us, firstDate),
+      App.Api.fetchCryptoHistory(cr, firstDate),
+    ]);
+    return C.buildGroupSeries(symbols, Object.assign({}, twH, usH, crH), S.getFxRate());
+  }
+  async function groupTrendPage(root, gid) {
+    const g = S.getGroups().find(x => x.id === gid);
+    if (!g) { as.groupTrend = null; return assets(root); }
+    const gmap = S.getGroupMap();
+    const symbols = Object.keys(gmap).filter(s => gmap[s] === gid);
+
+    // 尚無資料 → 顯示載入、抓歷史、快取後重繪
+    if (!as.gtCache || as.gtCache.gid !== gid) {
+      root.innerHTML = `<div class="page-full">${gtHead(g.name)}<div class="empty" style="padding:70px 16px">載入走勢中…</div></div>`;
+      root.querySelector('.gd-back').addEventListener('click', () => { as.groupTrend = null; assets(root); });
+      let series = [];
+      try { series = await fetchGroupSeries(symbols); }
+      catch (e) { console.error(e); UI.toast('載入走勢失敗', 'error'); }
+      if (as.groupTrend !== gid) return; // 使用者已離開
+      as.gtCache = { gid, series };
+      return groupTrendPage(root, gid);
+    }
+
+    const series = as.gtCache.series;
+    const st = as.gt;
+    const isBar = st.metric === 'change';
+    const GRAN = [['day', '天'], ['week', '週'], ['month', '月'], ['year', '年']];
+    const snaps = series.map(s => ({ date: s.date, netWorth: s.mv }));
+    const buckets = C.netWorthBuckets(snaps, st.gran, { cashTwd: 0, liabTwd: 0 });
+    const GC = '#6D5FD5';
+
+    const nfMoney = v => 'NT$ ' + U.fmtKMBB(v);
+    const sfMoney = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
+    const statRow = cols => `<div class="nw-stats">${cols.map(([k, v, c]) =>
+      `<div class="ns"><span class="ns-k">${k}</span><span class="ns-v"${c ? ` style="color:${c}"` : ''}>${v}</span></div>`).join('')}</div>`;
+    let stats = '';
+    if (buckets.length) {
+      if (isBar) {
+        const vals = buckets.map(b => b.change);
+        const up = Math.max(0, ...vals), down = Math.min(0, ...vals), sum = vals.reduce((a, b) => a + b, 0);
+        stats = statRow([['最大漲', sfMoney(up), UI.pnlColor(up)], ['最大跌', sfMoney(down), UI.pnlColor(down)], ['合計', sfMoney(sum), UI.pnlColor(sum)]]);
+      } else {
+        const vals = buckets.map(b => b.nw);
+        const hi = Math.max(...vals), lo = Math.min(...vals), chg = vals[vals.length - 1] - vals[0];
+        stats = statRow([['最高', nfMoney(hi), ''], ['最低', nfMoney(lo), ''], ['區間變化', sfMoney(chg), UI.pnlColor(chg)]]);
+      }
+    }
+
+    let html = gtHead(g.name) + `<div class="card">
+      <div class="seg seg-wide" id="gt-metric">${seg('line', '走勢', st.metric)}${seg('change', '漲幅', st.metric)}</div>
+      <div class="seg seg-wide" id="gt-gran" style="margin-top:8px">
+        ${GRAN.map(([v, l]) => `<button class="seg-btn ${st.gran === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}
+      </div>
+      <div class="chart-host" id="gt-chart" style="margin-top:12px"></div>
+      ${stats}
+    </div>`;
+    root.innerHTML = `<div class="page-full">${html}</div>`;
+
+    root.querySelector('.gd-back').addEventListener('click', () => { as.groupTrend = null; assets(root); });
+    root.querySelectorAll('#gt-metric .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.metric = b.dataset.v; groupTrendPage(root, gid); }));
+    root.querySelectorAll('#gt-gran .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.gran = b.dataset.v; groupTrendPage(root, gid); }));
+
+    const host = root.querySelector('#gt-chart');
+    if (!buckets.length) { host.innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }
+    if (isBar) {
+      const items = buckets.map(b => ({ label: b.label, fullLabel: b.full, value: b.change }));
+      App.Charts.barChart(host, items, {
+        height: 260,
+        valueFmt: v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v)),
+        colorOf: v => UI.pnlColor(v),
+      });
+    } else {
+      const pts = buckets.map(b => ({ date: new Date(b.date + 'T00:00:00+08:00'), values: { v: b.nw } }));
+      App.Charts.lineChart(host, pts, {
+        height: 260,
+        series: [{ key: 'v', label: '市值', color: GC, fill: true }],
+        xLabels: bucketXLabels(buckets),
+        valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
+      });
+    }
   }
 
   // 統一新增選單：現金 / 投資 / 負債 / 群組

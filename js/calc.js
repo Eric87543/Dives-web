@@ -455,10 +455,43 @@ App.Calc = (function () {
     return withChange.slice(-N);
   }
 
+  // 群組每日市值序列（依交易 + 成員歷史收盤回推；美股/加密 ×匯率）
+  // symbols: 群組成員代碼；hist: { code:[{date,close}] }；回傳 [{date, mv}]（升冪、延伸到今天）
+  function buildGroupSeries(symbols, hist, fxRate) {
+    const set = new Set(symbols || []);
+    const txs = S.getTransactions().filter(t => set.has(t.symbol)).sort((a, b) => a.time - b.time);
+    if (!txs.length) return [];
+    const rate = fxRate || S.getFxRate() || 31.5;
+    const mmap = S.metaMap();
+    const codes = [...set];
+    const txDate = t => U.isoDate(new Date(t.time));
+    const isUsd = sym => { const m = U.normalizeMarketKey(mmap[sym] ? mmap[sym].market : U.guessMarketBySymbol(sym)); return m === U.Market.us || m === U.Market.crypto; };
+    const ptr = {}, last = {};
+    codes.forEach(c => { ptr[c] = 0; last[c] = null; });
+    const start = new Date(txDate(txs[0]) + 'T00:00:00+08:00');
+    const end = new Date(U.isoDate() + 'T00:00:00+08:00');
+    const out = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const ds = U.isoDate(d);
+      for (const c of codes) { const arr = hist[c] || []; while (ptr[c] < arr.length && arr[ptr[c]].date <= ds) { last[c] = arr[ptr[c]].close; ptr[c]++; } }
+      const bySym = {};
+      for (const t of txs) { if (txDate(t) <= ds) (bySym[t.symbol] = bySym[t.symbol] || []).push(t); }
+      let mv = 0;
+      for (const sym in bySym) {
+        const { shares, avgCost } = computeAvgCostPosition(bySym[sym]);
+        if (shares <= 1e-9) continue;
+        const price = last[sym] != null ? last[sym] : avgCost; // 無歷史價 → 成本估算
+        mv += price * shares * (isUsd(sym) ? rate : 1);
+      }
+      out.push({ date: ds, mv });
+    }
+    return out;
+  }
+
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
-    netWorthBuckets, findAbsurdFees,
+    netWorthBuckets, findAbsurdFees, buildGroupSeries,
   };
 })();
