@@ -178,7 +178,7 @@ App.Views = (function () {
   // 趨勢圖表種類
   const HIST_CHARTS = [['alloc', '倉位'], ['net', '淨資產'], ['cash', '流動資金'], ['liab', '負債']];
   const HIST_LINE_CONF = {
-    net: { label: '淨資產', color: '#0F766E' },
+    net: { label: '淨資產', color: '#2F80ED' },
     cash: { label: '流動資金', color: '#34A853' },
     liab: { label: '負債', color: '#D95555' },
   };
@@ -463,7 +463,7 @@ App.Views = (function () {
         const cl = C.cashLiabTwd();
         const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: nwOf(s, cl) } }));
         App.Charts.lineChart(host, points, {
-          series: [{ key: 'v', label: '淨資產', color: '#0F766E', fill: true }],
+          series: [{ key: 'v', label: '淨資產', color: '#2F80ED', fill: true }],
           xLabels: repXLabels(points),
           valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
         });
@@ -729,7 +729,7 @@ App.Views = (function () {
 
     App.Charts.barChart(root.querySelector('#nw-chart'), items, {
       valueFmt: v => signed ? ((v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v))) : ('NT$ ' + U.fmtKMBB(v)),
-      colorOf: signed ? (v => UI.pnlColor(v)) : (() => '#0F766E'),
+      colorOf: signed ? (v => UI.pnlColor(v)) : (() => '#2F80ED'),
     });
   }
 
