@@ -555,14 +555,30 @@ App.Views = (function () {
     const grossAssets = sum.cashTwd + sum.investTwd;
     const pctOfAssets = v => grossAssets > 1e-9 ? v / grossAssets * 100 : 0;
 
-    // 分類卡標頭（名稱前加佔總資產比例；展開填色、收合顯示摘要+日期）
+    // 佔比環形圈（依類別上色、圈內顯示百分比）
+    function pctRing(pct, cc, ink) {
+      const p = Math.max(0, Math.min(100, pct || 0));
+      const r = 15.5, C = 2 * Math.PI * r, off = C * (1 - p / 100);
+      return `<svg class="cat-ring" viewBox="0 0 36 36" width="36" height="36" aria-hidden="true">
+        <circle cx="18" cy="18" r="${r}" fill="none" stroke="rgba(0,0,0,0.07)" stroke-width="3.2"/>
+        <circle cx="18" cy="18" r="${r}" fill="none" stroke="${cc}" stroke-width="3.2" stroke-linecap="round"
+          stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 18 18)"/>
+        <text x="18" y="18" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="700" fill="${ink}">${Math.round(pct)}%</text>
+      </svg>`;
+    }
+
+    // 分類卡標頭（名稱前加佔總資產比例環圈；展開填色、收合顯示摘要+日期）
     function catHead(cat, name, totalHtml, cc, openCls, summary, dateTs, pct) {
       const open = as.openCat === cat;
-      const pctB = pct != null ? `<span class="cat-pct">${Math.round(pct)}%</span>` : '';
+      const ink = openCls === 'oc-green' ? '#1E8E4E' : openCls === 'oc-purple' ? '#5A4FC0' : '#4A56B5';
+      const ring = pct != null ? pctRing(pct, cc, ink) : '';
       return `<div class="as-head ${open ? 'open ' + openCls : ''}" data-cat="${cat}" style="--cc:${cc}">
-        <div class="as-hleft">
-          <div class="mk-nameline">${pctB}<span class="as-name">${name}</span></div>
-          ${!open ? `<span class="as-hsummary">${summary}</span>` : ''}
+        <div class="as-hleft cat-hleft">
+          ${ring}
+          <div class="cat-txt">
+            <span class="as-name">${name}</span>
+            ${!open ? `<span class="as-hsummary">${summary}</span>` : ''}
+          </div>
         </div>
         <div class="as-hright">
           <span class="as-total">${totalHtml}</span>
