@@ -199,11 +199,10 @@ input, select { font-family: inherit; font-size: 15px; }
   background: rgba(255,255,255,0.94); backdrop-filter: saturate(180%) blur(12px);
   border-top: 1px solid var(--divider); display: flex; z-index: 50;
 }
-.tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 11px; color: var(--sub); transition: color .18s; }
-.tab-btn .ti { display: flex; align-items: center; justify-content: center; height: 26px; padding: 2px 16px; border-radius: 999px; transition: background .18s, transform .18s; }
+.tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; color: var(--sub); transition: color .18s; }
+.tab-btn .ti { display: flex; align-items: center; justify-content: center; height: 24px; transition: transform .12s; }
 .tab-btn .ti svg { width: 23px; height: 23px; }
 .tab-btn.active { color: #6D5FD5; font-weight: 700; }
-.tab-btn.active .ti { background: rgba(109,95,213,0.15); transform: translateY(-1px); }
 .tab-btn:active .ti { transform: scale(0.9); }
 
 /* ---- Sheet ---- */
