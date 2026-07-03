@@ -930,6 +930,12 @@ App.Views = (function () {
       <div class="set-hint">交易筆數：${S.getTransactions().length}　快照：${S.getSnapshots().length}</div>
     </div>
 
+    <div class="card setting-card">
+      <div class="set-title">測試</div>
+      <button class="btn btn-block btn-ghost" id="btn-seed">載入示範資料</button>
+      <div class="set-hint">一鍵填入現金／負債／台美股＋加密／群組／120 天歷史（會覆蓋現有資料）</div>
+    </div>
+
     <div class="card setting-card danger-zone">
       <div class="set-title" style="color:${UI.LOSS}">危險區域</div>
       <button class="btn btn-block btn-danger" id="btn-clear">清空所有資料</button>
@@ -1005,6 +1011,10 @@ App.Views = (function () {
       UI.confirmDialog('確定清空所有交易、損益與快照？此動作無法復原。', () => {
         S.clearAll(); UI.toast('已清空所有資料', 'info'); App.afterDataChange([]);
       }, '清空'));
+    root.querySelector('#btn-seed').addEventListener('click', () =>
+      UI.confirmDialog('載入示範資料？會覆蓋你目前所有資料（可先匯出備份）。', () => {
+        App.seedDemo(); UI.toast('已載入示範資料', 'success');
+      }, '載入'));
 
     // ── App 鎖定 ──
     renderLockBody(root.querySelector('#lock-body'), root);
