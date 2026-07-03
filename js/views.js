@@ -504,7 +504,7 @@ App.Views = (function () {
 
   /* ===================== 資產（淨資產）===================== */
   // 手風琴：一次只展開一類（cash|invest|liab）；detailGroup = 群組詳情頁
-  const as = { openCat: 'invest', detailGroup: null, detailAsc: false };
+  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day' } };
   const AS_PURPLE = '#6D5FD5';
 
   function mvTwdOf(p, rate) {
@@ -513,6 +513,7 @@ App.Views = (function () {
   }
 
   function assets(root) {
+    if (as.nwDetail) return netWorthDetail(root);
     if (as.detailGroup) return groupDetail(root, as.detailGroup);
     const rate = S.getFxRate() || 31.5;
     const sum = C.assetsSummary();
@@ -533,10 +534,16 @@ App.Views = (function () {
     // 佔比分母：組內=該群組、投資=投資總市值、淨資產=淨資產
     const denom = gTotal => basis === 'group' ? (gTotal || sum.investTwd) : basis === 'invest' ? sum.investTwd : sum.netWorth;
 
+    // 今日淨資產漲跌（現金/負債日內不變，故等於投資日損益；紅漲綠跌）
+    const dayChange = (sum.invSummary && sum.invSummary.dayPnl) || 0;
+    const prevNet = sum.netWorth - dayChange;
+    const dayPct = Math.abs(prevNet) > 1e-9 ? dayChange / Math.abs(prevNet) * 100 : 0;
+    const dayArrow = dayChange > 0 ? '▲' : dayChange < 0 ? '▼' : '–';
     let html = `<div class="nw-hero">
-      <div>
-        <div class="nw-cap">我的淨資產 (TWD)</div>
+      <div class="nw-open" id="nw-open">
+        <div class="nw-cap">我的淨資產 (TWD) ›</div>
         <div class="nw-num">${U.fmtWhole(sum.netWorth)}</div>
+        <div class="nw-day" style="color:${UI.pnlColor(dayChange)}">${dayArrow} ${U.fmtWhole(Math.abs(dayChange))} (${Math.abs(dayPct).toFixed(2)}%)</div>
       </div>
       <button class="nw-add" id="as-add-btn" aria-label="新增">＋</button>
     </div>`;
@@ -587,23 +594,17 @@ App.Views = (function () {
     html += `<div class="card as-cat">` +
       catHead('invest', '投資', U.fmtWhole(sum.investTwd), AS_PURPLE, 'oc-purple', investSummary, S.getPricesTs());
     if (as.openCat === 'invest') {
-      html += `<div class="as-body">
-        <div class="basis-row"><span class="basis-cap">佔比基準</span>
-          <div class="seg" id="pct-basis">
-            ${seg('group', '組內', basis)}${seg('invest', '投資', basis)}${seg('net', '淨資產', basis)}
-          </div>
-        </div>`;
+      html += `<div class="as-body">`;
       // 群組列（點擊進入詳情頁）
       for (const g of groups) {
         const gTotal = groupTotal(g.id);
         const gPct = (basis === 'net' ? sum.netWorth : sum.investTwd) > 1e-9
           ? gTotal / (basis === 'net' ? sum.netWorth : sum.investTwd) * 100 : 0;
         html += `<div class="as-grow" data-gid="${g.id}">
-          <span class="pct-badge">${fmtPctBadge(gPct)}</span>
+          <span class="pct-badge sm">${fmtPctBadge(gPct)}</span>
           <div class="as-main"><div class="as-title">${g.name}</div>
             <div class="as-sub">${(byGroup[g.id] || []).length} 檔 ›</div></div>
           <div class="as-val">${U.fmtWhole(gTotal)}</div>
-          <button class="g-menu" data-gid="${g.id}">⋯</button>
         </div>`;
       }
       // 未分組持倉（與群組同層）
@@ -652,23 +653,79 @@ App.Views = (function () {
     }));
     const bind = (sel, fn) => { const el = root.querySelector(sel); if (el) el.addEventListener('click', fn); };
     bind('#as-add-btn', () => openAddChooser(() => assets(root)));
+    bind('#nw-open', () => { as.nwDetail = true; netWorthDetail(root); });
     root.querySelectorAll('.as-row[data-kind]').forEach(r => r.addEventListener('click', () => {
       const kind = r.dataset.kind;
       const list = kind === 'cash' ? S.getCashAccounts() : S.getLiabilities();
       openMoneyForm(kind, list.find(x => x.id === r.dataset.id), () => assets(root));
     }));
-    root.querySelectorAll('#pct-basis .seg-btn').forEach(b => b.addEventListener('click', () => {
-      S.setPctBasis(b.dataset.v); assets(root);
-    }));
-    root.querySelectorAll('.as-grow').forEach(g => g.addEventListener('click', e => {
-      if (e.target.closest('.g-menu')) return;
+    root.querySelectorAll('.as-grow').forEach(g => g.addEventListener('click', () => {
       as.detailGroup = g.dataset.gid; assets(root);
-    }));
-    root.querySelectorAll('.g-menu').forEach(b => b.addEventListener('click', e => {
-      e.stopPropagation(); openGroupMenu(b.dataset.gid, () => assets(root));
     }));
     root.querySelectorAll('.as-row.member').forEach(r => r.addEventListener('click', () =>
       openGroupAssign(r.dataset.sym, () => assets(root))));
+  }
+
+  // 淨資產長條圖頁：淨資產 / 漲幅；X 軸 天(7)／週(5)／月(12)／年(10)
+  function nwBuckets(gran) {
+    const cl = C.cashLiabTwd();
+    const snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
+    if (!snaps.length) return [];
+    const series = snaps.map(s => ({ date: s.date, nw: nwOf(s, cl) }));
+    const mdOf = iso => { const p = U.taipeiParts(new Date(iso + 'T00:00:00+08:00')); return p.month + '/' + p.day; };
+    let buckets;
+    if (gran === 'day') {
+      buckets = series.map(d => ({ date: d.date, nw: d.nw, label: mdOf(d.date), full: d.date }));
+    } else {
+      const keyOf = iso => {
+        if (gran === 'week') {
+          const dt = new Date(iso + 'T00:00:00+08:00');
+          const off = (dt.getDay() + 6) % 7; dt.setDate(dt.getDate() - off);
+          return U.isoDate(dt);
+        }
+        if (gran === 'month') return iso.slice(0, 7);
+        return iso.slice(0, 4);
+      };
+      const map = new Map();
+      for (const d of series) map.set(keyOf(d.date), d); // 同桶取最後一筆
+      buckets = [...map.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([, d]) => ({
+        date: d.date, nw: d.nw,
+        label: gran === 'week' ? mdOf(d.date) : gran === 'month' ? (+d.date.slice(5, 7)) + '月' : d.date.slice(0, 4),
+        full: gran === 'week' ? ('週 ' + mdOf(d.date)) : gran === 'month' ? d.date.slice(0, 7) : d.date.slice(0, 4),
+      }));
+    }
+    const withChange = buckets.map((b, i) => Object.assign({}, b, { change: i > 0 ? b.nw - buckets[i - 1].nw : 0 }));
+    const N = gran === 'day' ? 7 : gran === 'week' ? 5 : gran === 'month' ? 12 : 10;
+    return withChange.slice(-N);
+  }
+
+  function netWorthDetail(root) {
+    const st = as.nw;
+    const signed = st.metric === 'change';
+    const items = nwBuckets(st.gran).map(b => ({ label: b.label, fullLabel: b.full, value: signed ? b.change : b.nw }));
+    const GRAN = [['day', '天'], ['week', '週'], ['month', '月'], ['year', '年']];
+    let html = `<div class="gd-head">
+      <button class="gd-back" aria-label="返回">‹</button>
+      <div class="gd-title">${signed ? '漲幅長條圖' : '淨資產長條圖'}</div>
+      <div class="gd-actions"></div>
+    </div>
+    <div class="card">
+      <div class="seg seg-wide" id="nw-metric">${seg('net', '淨資產', st.metric)}${seg('change', '漲幅', st.metric)}</div>
+      <div class="seg seg-wide" id="nw-gran" style="margin-top:8px">
+        ${GRAN.map(([v, l]) => `<button class="seg-btn ${st.gran === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}
+      </div>
+      <div class="chart-host" id="nw-chart" style="margin-top:12px"></div>
+    </div>`;
+    root.innerHTML = `<div class="page-full">${html}</div>`;
+
+    root.querySelector('.gd-back').addEventListener('click', () => { as.nwDetail = false; assets(root); });
+    root.querySelectorAll('#nw-metric .seg-btn').forEach(b => b.addEventListener('click', () => { as.nw.metric = b.dataset.v; netWorthDetail(root); }));
+    root.querySelectorAll('#nw-gran .seg-btn').forEach(b => b.addEventListener('click', () => { as.nw.gran = b.dataset.v; netWorthDetail(root); }));
+
+    App.Charts.barChart(root.querySelector('#nw-chart'), items, {
+      valueFmt: v => signed ? ((v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v))) : ('NT$ ' + U.fmtKMBB(v)),
+      colorOf: signed ? (v => UI.pnlColor(v)) : (() => '#0F766E'),
+    });
   }
 
   // 群組詳情頁（返回 / 標題 / ⋯ / ＋ / 合計排序 / 成員卡片）
@@ -902,6 +959,15 @@ App.Views = (function () {
     </div>
 
     <div class="card setting-card">
+      <div class="set-title">顯示設定</div>
+      <div class="set-sub">投資佔比基準</div>
+      <div class="seg seg-wide" id="set-pct-basis">
+        ${seg('group', '組內', S.getPctBasis())}${seg('invest', '投資', S.getPctBasis())}${seg('net', '淨資產', S.getPctBasis())}
+      </div>
+      <div class="set-hint">資產頁投資列的佔比要以「群組內／投資總額／淨資產」為分母</div>
+    </div>
+
+    <div class="card setting-card">
       <div class="set-title">資料備份</div>
       <button class="btn btn-block btn-primary" id="btn-export">匯出備份（交易 + 快照）</button>
       <label class="btn btn-block btn-ghost" for="file-import">匯入備份</label>
@@ -975,6 +1041,11 @@ App.Views = (function () {
       UI.confirmDialog('停用同步？(本機資料會保留，雲端 Gist 不刪除)', () => {
         App.Sync.disable(); UI.toast('已停用同步', 'info'); settings(root);
       }, '停用'));
+    root.querySelectorAll('#set-pct-basis .seg-btn').forEach(b => b.addEventListener('click', () => {
+      S.setPctBasis(b.dataset.v);
+      root.querySelectorAll('#set-pct-basis .seg-btn').forEach(x => x.classList.toggle('active', x.dataset.v === b.dataset.v));
+      if (App.Sync) App.Sync.markDirty();
+    }));
     root.querySelector('#btn-export').addEventListener('click', doExport);
     root.querySelector('#file-import').addEventListener('change', e => {
       const f = e.target.files[0]; if (!f) return;
