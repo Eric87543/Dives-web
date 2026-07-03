@@ -135,7 +135,9 @@ App.Charts = (function () {
         <div><i style="background:${hasCr ? CR_LINE : US_LINE};opacity:.5"></i>總資產 <b>${valueFmt(r.total)}</b></div>
         ${extras.map((e, ei) => `<div><i style="background:${e.color}"></i>${e.label} <b>${valueFmt(r.ex[ei])}</b></div>`).join('')}`;
       tip.style.display = 'block';
-      const left = Math.min(Math.max(xAt(idx) / W * rect.width - 60, 4), rect.width - 130);
+      const tipW = tip.offsetWidth || 132;
+      const cxPx = xAt(idx) / W * rect.width;
+      const left = Math.min(Math.max(cxPx - tipW / 2, 4), Math.max(4, rect.width - tipW - 4));
       tip.style.left = left + 'px'; tip.style.top = '4px';
     }
     svgEl.addEventListener('pointerdown', e => handle(e.clientX));
@@ -266,7 +268,9 @@ App.Charts = (function () {
       }
       tip.innerHTML = `<div class="tip-date">${it.label}</div>${body}`;
       tip.style.display = 'block';
-      const left = Math.min(Math.max(cx / W * rect2.width - 60, 4), rect2.width - 130);
+      const tipW = tip.offsetWidth || 132;
+      const cxPx = cx / W * rect2.width;
+      const left = Math.min(Math.max(cxPx - tipW / 2, 4), Math.max(4, rect2.width - tipW - 4));
       tip.style.left = left + 'px'; tip.style.top = '4px';
     }
     svgEl.addEventListener('pointerdown', e => handle(e.clientX));
@@ -336,7 +340,9 @@ App.Charts = (function () {
       tip.innerHTML = `<div class="tip-date">${App.Util.isoDate(r.date)}</div>` +
         series.map((s, si) => `<div><i style="background:${s.color}"></i>${s.label} <b>${valueFmt(r.vals[si])}</b></div>`).join('');
       tip.style.display = 'block';
-      const left = Math.min(Math.max(xAt(idx) / W * rect.width - 60, 4), rect.width - 130);
+      const tipW = tip.offsetWidth || 132;
+      const cxPx = xAt(idx) / W * rect.width;
+      const left = Math.min(Math.max(cxPx - tipW / 2, 4), Math.max(4, rect.width - tipW - 4));
       tip.style.left = left + 'px'; tip.style.top = '4px';
     }
     svgEl.addEventListener('pointerdown', e => handle(e.clientX));

@@ -879,19 +879,9 @@ App.Views = (function () {
 
   /* ===================== 設定 ===================== */
   function settings(root) {
-    const acc = S.getAccount();
     const lastTs = S.getPricesTs();
     const rate = S.getFxRate();
     let html = `
-    <div class="card setting-card">
-      <div class="set-title">起始現金</div>
-      <div class="set-row">
-        <input class="input" id="set-cash" type="number" inputmode="decimal" placeholder="未設定" value="${acc.initialCash != null ? acc.initialCash : ''}">
-        <button class="btn btn-primary" id="set-cash-save">儲存</button>
-      </div>
-      <div class="set-hint">設定後持倉頁會顯示現金餘額與淨資產</div>
-    </div>
-
     <div class="card setting-card">
       <div class="set-title">雲端同步（GitHub Gist）</div>
       <div class="set-row">
@@ -944,12 +934,6 @@ App.Views = (function () {
       <button class="btn btn-block btn-danger" id="btn-clear">清空所有資料</button>
     </div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
-
-    root.querySelector('#set-cash-save').addEventListener('click', () => {
-      const v = root.querySelector('#set-cash').value.trim();
-      S.setAccount({ initialCash: v === '' ? null : parseFloat(v) });
-      UI.toast('已儲存起始現金', 'success'); App.afterDataChange([]);
-    });
 
     // ── 雲端同步 ──
     const syncStatusEl = root.querySelector('#sync-status');
