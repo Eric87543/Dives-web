@@ -11,9 +11,8 @@ App.Views = (function () {
   function rerender() { App.renderCurrent(); }
 
   /* ===================== 投資（市場分類卡，沿用資產頁風格）===================== */
-  // openCat: '__auto'=預設展開第一個有持倉的市場 | 'tw'|'us'|'crypto' | '__none'=全部收合
-  // 排序固定依市值（大→小）
-  const pf = { openCat: '__auto' };
+  // pf.open：各市場展開狀態（可同時展開多個）；null = 預設全展開。排序固定依市值（大→小）
+  const pf = { open: null };
 
   // 每頁右上角 ⟳（頂欄已移除）
   function refreshBtnHtml() { return `<button class="ref-btn" id="refresh-btn" aria-label="重新整理">⟳</button>`; }
@@ -34,14 +33,12 @@ App.Views = (function () {
     const byMk = { tw: [], us: [], crypto: [] };
     for (const p of positions) byMk[mkKey(p)].push(p);
     const MKTS = [
-      { key: 'tw', name: '台股', color: COL.tw, oc: 'oc-tw' },
       { key: 'us', name: '美股', color: COL.us, oc: 'oc-us' },
+      { key: 'tw', name: '台股', color: COL.tw, oc: 'oc-tw' },
       { key: 'crypto', name: '加密貨幣', color: COL.crypto, oc: 'oc-cr' },
     ];
     const totalAll = summary.totalMarketValueTwd || 0;
-    const openCat = pf.openCat === '__auto'
-      ? (MKTS.find(m => byMk[m.key].length) || {}).key
-      : (pf.openCat === '__none' ? null : pf.openCat);
+    const isOpen = key => pf.open ? !!pf.open[key] : true; // 預設全展開
 
     // Hero：總倉位 + 今日漲跌（同資產頁淨資產樣式；捲動時固定於頂部）
     const day = summary.dayPnl || 0;
@@ -60,14 +57,7 @@ App.Views = (function () {
       </div>
     </div>`;
 
-    // 統計卡（今日損益已呈現在上方漲跌列，不重複；縮小高度）
-    topHtml += `<div class="card banner banner-sm">
-      ${bcol('總損益', U.fmtBannerSigned(summary.totalPnl), UI.pnlColor(summary.totalPnl))}
-      ${bcol('報酬率', U.fmtPct(summary.totalReturnPct), UI.pnlColor(summary.totalReturnPct || 0))}
-      ${bcol('未實現', U.fmtBannerSigned(summary.totalUnrealizedPnl), UI.pnlColor(summary.totalUnrealizedPnl))}
-    </div>`;
-
-    // 市場卡（手風琴，一次展開一類；空市場不顯示）
+    // 市場卡（可同時展開多個；空市場不顯示）
     let html = '';
     if (!positions.length) html += `<div class="empty" style="padding:48px 16px">尚無持倉，點右上 ＋ 新增交易</div>`;
     for (const M of MKTS) {
@@ -81,7 +71,7 @@ App.Views = (function () {
       const prevMv = tot - dayChg;
       const dayChgPct = Math.abs(prevMv) > 1e-9 ? dayChg / Math.abs(prevMv) * 100 : 0;
       const dArrow = dayChg > 0 ? '▲' : dayChg < 0 ? '▼' : '–';
-      const open = openCat === M.key;
+      const open = isOpen(M.key);
       const names = [...list].sort((a, b) => mvTwd(b) - mvTwd(a)).slice(0, 4).map(p => p.name !== p.symbol ? p.name : p.symbol).join('、');
       html += `<div class="card as-cat">
         <div class="as-head ${open ? 'open ' + M.oc : ''}" data-mk="${M.key}" style="--cc:${M.color}">
@@ -128,7 +118,9 @@ App.Views = (function () {
     const addBtn = root.querySelector('#pf-add-btn');
     if (addBtn) addBtn.addEventListener('click', () => openTxForm(null));
     root.querySelectorAll('.as-head[data-mk]').forEach(h => h.addEventListener('click', () => {
-      pf.openCat = (openCat === h.dataset.mk) ? '__none' : h.dataset.mk;
+      if (!pf.open) pf.open = { us: true, tw: true, crypto: true }; // 從「全展開」起手
+      const k = h.dataset.mk;
+      pf.open[k] = !pf.open[k];
       portfolio(root);
     }));
     root.querySelectorAll('.pf-row').forEach(r =>
@@ -559,12 +551,17 @@ App.Views = (function () {
     const investSummary = [...groups.map(g => g.name), ungrouped.length ? '獨立持股' : null].filter(Boolean).join('、') || '尚無持倉';
     const liabSummary = liabs.map(a => a.name).join('、') || '尚無負債';
 
-    // 分類卡標頭（展開填色、收合顯示摘要+日期）
-    function catHead(cat, name, totalHtml, cc, openCls, summary, dateTs) {
+    // 佔總資產比例（總資產 = 流動資金 + 投資）
+    const grossAssets = sum.cashTwd + sum.investTwd;
+    const pctOfAssets = v => grossAssets > 1e-9 ? v / grossAssets * 100 : 0;
+
+    // 分類卡標頭（名稱前加佔總資產比例；展開填色、收合顯示摘要+日期）
+    function catHead(cat, name, totalHtml, cc, openCls, summary, dateTs, pct) {
       const open = as.openCat === cat;
+      const pctB = pct != null ? `<span class="cat-pct">${Math.round(pct)}%</span>` : '';
       return `<div class="as-head ${open ? 'open ' + openCls : ''}" data-cat="${cat}" style="--cc:${cc}">
         <div class="as-hleft">
-          <span class="as-name">${name}</span>
+          <div class="mk-nameline">${pctB}<span class="as-name">${name}</span></div>
           ${!open ? `<span class="as-hsummary">${summary}</span>` : ''}
         </div>
         <div class="as-hright">
@@ -576,7 +573,7 @@ App.Views = (function () {
 
     // ── 流動資金 ─────────────────────────────────────────
     html += `<div class="card as-cat">` +
-      catHead('cash', '流動資金', U.fmtWhole(sum.cashTwd), '#34C759', 'oc-green', cashSummary, maxUpd(cashAccts));
+      catHead('cash', '流動資金', U.fmtWhole(sum.cashTwd), '#34C759', 'oc-green', cashSummary, maxUpd(cashAccts), pctOfAssets(sum.cashTwd));
     if (as.openCat === 'cash') {
       html += `<div class="as-body">`;
       for (const a of cashAccts) {
@@ -594,7 +591,7 @@ App.Views = (function () {
 
     // ── 投資 ────────────────────────────────────────────
     html += `<div class="card as-cat">` +
-      catHead('invest', '投資', U.fmtWhole(sum.investTwd), AS_PURPLE, 'oc-purple', investSummary, S.getPricesTs());
+      catHead('invest', '投資', U.fmtWhole(sum.investTwd), AS_PURPLE, 'oc-purple', investSummary, S.getPricesTs(), pctOfAssets(sum.investTwd));
     if (as.openCat === 'invest') {
       html += `<div class="as-body">`;
       // 群組列（點擊進入詳情頁）
@@ -629,7 +626,7 @@ App.Views = (function () {
 
     // ── 負債 ────────────────────────────────────────────
     html += `<div class="card as-cat">` +
-      catHead('liab', '負債', (sum.liabTwd > 0 ? '−' : '') + U.fmtWhole(sum.liabTwd), '#8E9BEF', 'oc-blue', liabSummary, maxUpd(liabs));
+      catHead('liab', '負債', (sum.liabTwd > 0 ? '−' : '') + U.fmtWhole(sum.liabTwd), '#8E9BEF', 'oc-blue', liabSummary, maxUpd(liabs), pctOfAssets(sum.liabTwd));
     if (as.openCat === 'liab') {
       html += `<div class="as-body">`;
       for (const a of liabs) {
