@@ -37,12 +37,18 @@ input, select { font-family: inherit; font-size: 15px; }
 .icon-btn.spin { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---- View ---- */
+/* ---- View（無頂欄：直接從安全區開始）---- */
 .view {
-  position: absolute; top: calc(var(--header-h) + env(safe-area-inset-top));
+  position: absolute; top: env(safe-area-inset-top);
   bottom: calc(var(--tab-h) + env(safe-area-inset-bottom));
   left: 0; right: 0; display: flex; flex-direction: column; overflow: hidden;
 }
+/* 每頁右上角的重新整理鈕 */
+.ref-btn { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--card); border: 1px solid var(--divider); color: var(--primary); font-size: 19px; display: flex; align-items: center; justify-content: center; }
+.ref-btn:active { background: var(--soft); }
+.ref-btn.spin { animation: spin 0.8s linear infinite; }
+.nw-btns { display: flex; gap: 10px; align-items: center; }
+.tools-row { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 /* 上方固定 + 下方列表獨立捲動（持倉 / 歷史） */
 .page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .page-top { flex: none; padding: 12px 14px 0; }
@@ -285,6 +291,17 @@ input, select { font-family: inherit; font-size: 15px; }
 .as-head.open.oc-green:active { background: rgba(52,199,89,0.2); }
 .as-head.open.oc-purple:active { background: rgba(109,95,213,0.22); }
 .as-head.open.oc-blue:active { background: rgba(142,155,239,0.27); }
+/* 投資頁市場卡（台股橙 / 美股藍 / 加密紫） */
+.as-head.open.oc-tw { background: rgba(232,130,60,0.10); }
+.as-head.open.oc-us { background: rgba(74,130,200,0.10); }
+.as-head.open.oc-cr { background: rgba(155,89,208,0.10); }
+.as-head.open.oc-tw:active { background: rgba(232,130,60,0.18); }
+.as-head.open.oc-us:active { background: rgba(74,130,200,0.18); }
+.as-head.open.oc-cr:active { background: rgba(155,89,208,0.18); }
+.pf-val { text-align: right; white-space: nowrap; }
+.pf-mv { font-size: 13.5px; font-weight: 700; }
+.pf-pnl { font-size: 11px; margin-top: 2px; }
+.select-sm { padding: 4px 8px; font-size: 12px; }
 .as-body { border-top: 1px solid var(--divider); padding: 4px 0 8px; }
 .as-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; min-height: 52px; }
 .as-row:active { background: var(--soft); }

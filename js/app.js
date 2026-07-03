@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v39';
+  App.VERSION = 'v40';
 
   let currentTab = 'assets';
   const TABS = [
@@ -24,8 +24,6 @@
       case 'report': V.report(root); break;
       case 'settings': V.settings(root); break;
     }
-    // FAB 只在持倉頁顯示
-    document.getElementById('fab').style.display = currentTab === 'portfolio' ? 'flex' : 'none';
     // tab bar 高亮
     document.querySelectorAll('.tab-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === currentTab));
@@ -179,11 +177,9 @@
 
   // 初始化
   function init() {
-    // tab bar 事件
+    // tab bar 事件（頂欄已移除：⟳ 改由各頁右上角提供，見 views 的 bindRefresh）
     document.querySelectorAll('.tab-btn').forEach(b =>
       b.addEventListener('click', () => switchTab(b.dataset.tab)));
-    document.getElementById('fab').addEventListener('click', () => V.openTxForm(null));
-    document.getElementById('refresh-btn').addEventListener('click', () => refresh(undefined, true));
 
     // 從快取立即顯示
     renderCurrent();

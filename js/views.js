@@ -10,142 +10,150 @@ App.Views = (function () {
   // 共用：刷新後重繪目前分頁
   function rerender() { App.renderCurrent(); }
 
-  /* ===================== 持倉 ===================== */
-  const pf = { filter: 'all', sort: 'marketValue', asc: false };
+  /* ===================== 投資（市場分類卡，沿用資產頁風格）===================== */
+  // openCat: '__auto'=預設展開第一個有持倉的市場 | 'tw'|'us'|'crypto' | '__none'=全部收合
+  const pf = { sort: 'marketValue', openCat: '__auto' };
+
+  // 每頁右上角 ⟳（頂欄已移除）
+  function refreshBtnHtml() { return `<button class="ref-btn" id="refresh-btn" aria-label="重新整理">⟳</button>`; }
+  function bindRefresh(root) {
+    const b = root.querySelector('#refresh-btn');
+    if (b) b.addEventListener('click', () => App.refresh(undefined, true));
+  }
 
   function portfolio(root) {
     const positions = C.buildPositions();
     const summary = C.buildSummary(positions);
     const rate = S.getFxRate() || 31.5;
+    const fmtPctBadge = v => (v >= 9.95 ? Math.round(v) : v.toFixed(v >= 1 ? 0 : 1)) + '%';
 
-    // 摘要卡
-    const acc = S.getAccount();
-    let html = `<div class="card summary-card">
-      <div class="sum-net">
-        <div class="sum-label">總倉位</div>
-        <div class="sum-value">NT$ ${U.fmtWhole(summary.totalMarketValueTwd)}</div>
+    const mkKey = p => { const m = U.normalizeMarketKey(p.market); return m === U.Market.us ? 'us' : m === U.Market.crypto ? 'crypto' : 'tw'; };
+    const mvTwd = p => mkKey(p) === 'tw' ? p.marketValue : p.marketValue * rate;
+    const convOf = p => mkKey(p) === 'tw' ? 1 : rate;
+    const byMk = { tw: [], us: [], crypto: [] };
+    for (const p of positions) byMk[mkKey(p)].push(p);
+    const MKTS = [
+      { key: 'tw', name: '台股', color: COL.tw, oc: 'oc-tw' },
+      { key: 'us', name: '美股', color: COL.us, oc: 'oc-us' },
+      { key: 'crypto', name: '加密貨幣', color: COL.crypto, oc: 'oc-cr' },
+    ];
+    const totalAll = summary.totalMarketValueTwd || 0;
+    const openCat = pf.openCat === '__auto'
+      ? (MKTS.find(m => byMk[m.key].length) || {}).key
+      : (pf.openCat === '__none' ? null : pf.openCat);
+
+    // Hero：總倉位 + 今日漲跌（同資產頁淨資產樣式）
+    const day = summary.dayPnl || 0;
+    const prevTot = totalAll - day;
+    const dayPct = Math.abs(prevTot) > 1e-9 ? day / Math.abs(prevTot) * 100 : 0;
+    const arrow = day > 0 ? '▲' : day < 0 ? '▼' : '–';
+    let html = `<div class="nw-hero">
+      <div>
+        <div class="nw-cap">總倉位 (TWD)</div>
+        <div class="nw-num">${U.fmtWhole(totalAll)}</div>
+        <div class="nw-day" style="color:${UI.pnlColor(day)}">${arrow} ${U.fmtWhole(Math.abs(day))} (${Math.abs(dayPct).toFixed(2)}%) 今日</div>
       </div>
-      <div class="sum-grid">
-        <div><div class="k">今日損益</div><div class="v">${UI.money(summary.dayPnl, { signed: true })}</div></div>
-        <div><div class="k">總損益</div><div class="v">${UI.money(summary.totalPnl, { signed: true })}</div></div>
-        <div><div class="k">報酬率</div><div class="v" style="color:${UI.pnlColor(summary.totalReturnPct || 0)}">${U.fmtPct(summary.totalReturnPct)}</div></div>
-        <div><div class="k">未實現</div><div class="v">${UI.money(summary.totalUnrealizedPnl, { signed: true })}</div></div>
-      </div>`;
-
-    // 配置條（台股/美股/加密）
-    const twV = summary.twMarketValue, usV = summary.usMarketValueTwd, crV = summary.cryptoMarketValueTwd || 0;
-    const tot = twV + usV + crV;
-    if (tot > 0) {
-      const twPct = twV / tot * 100, usPct = usV / tot * 100, crPct = crV / tot * 100;
-      html += `<div class="alloc">
-        <div class="alloc-bar">
-          <span style="width:${twPct}%;background:${COL.tw}"></span>
-          <span style="width:${usPct}%;background:${COL.us}"></span>
-          <span style="width:${crPct}%;background:${COL.crypto}"></span>
-        </div>
-        <div class="alloc-legend">
-          <span><i style="background:${COL.tw}"></i>台股 ${twPct.toFixed(0)}%</span>
-          <span><i style="background:${COL.us}"></i>美股 ${usPct.toFixed(0)}%</span>
-          ${crV > 0 ? `<span><i style="background:${COL.crypto}"></i>加密 ${crPct.toFixed(0)}%</span>` : ''}
-          ${acc.initialCash != null ? `<span class="cash">現金 NT$ ${U.fmtKMBB(summary.cashBalance)}</span>` : ''}
-        </div>
-      </div>`;
-    }
-    html += `</div>`;
-
-    // 篩選 + 排序
-    html += `<div class="toolbar">
-      <div class="seg" id="pf-filter">
-        ${seg('all', '全部', pf.filter)}${seg('tw', '台股', pf.filter)}${seg('us', '美股', pf.filter)}${seg('crypto', '加密', pf.filter)}
+      <div class="nw-btns">
+        ${refreshBtnHtml()}
+        <button class="nw-add" id="pf-add-btn" aria-label="新增交易">＋</button>
       </div>
-      <select id="pf-sort" class="select">
-        <option value="marketValue">市值</option>
-        <option value="pnl">損益</option>
-        <option value="price">現價</option>
-        <option value="contribution">佔比</option>
-      </select>
     </div>`;
 
-    // 持倉列表
-    const isUsdMk = m => m === U.Market.us || m === U.Market.crypto; // USD 計價市場
-    let list = positions.filter(p => {
-      const m = U.normalizeMarketKey(p.market);
-      if (pf.filter === 'tw') return !isUsdMk(m);
-      if (pf.filter === 'us') return m === U.Market.us;
-      if (pf.filter === 'crypto') return m === U.Market.crypto;
-      return true;
-    });
-    const mv = p => isUsdMk(U.normalizeMarketKey(p.market)) ? p.marketValue * rate : p.marketValue;
-    list.sort((a, b) => {
-      let av, bv;
-      switch (pf.sort) {
-        case 'pnl': av = a.unrealizedPnl; bv = b.unrealizedPnl; break;
-        case 'price': av = a.lastPrice || 0; bv = b.lastPrice || 0; break;
-        default: av = mv(a); bv = mv(b);
-      }
-      return pf.asc ? av - bv : bv - av;
-    });
+    // 統計卡（同報表摘要樣式）
+    html += `<div class="card banner">
+      ${bcol('今日損益', U.fmtBannerSigned(day), UI.pnlColor(day))}
+      ${bcol('總損益', U.fmtBannerSigned(summary.totalPnl), UI.pnlColor(summary.totalPnl))}
+      ${bcol('報酬率', U.fmtPct(summary.totalReturnPct), UI.pnlColor(summary.totalReturnPct || 0))}
+      ${bcol('未實現', U.fmtBannerSigned(summary.totalUnrealizedPnl), UI.pnlColor(summary.totalUnrealizedPnl))}
+    </div>`;
 
-    // 目前分頁小計（單位跟隨列表：全部/台股=NT$、美股/加密=$）
-    {
-      let fMv = 0, fCost = 0, fUnreal = 0, fDay = 0;
-      for (const p of list) {
-        const c = (isUsdMk(U.normalizeMarketKey(p.market)) && pf.filter === 'all') ? rate : 1;
-        fMv += p.marketValue * c;
-        fCost += p.cost * c;
-        fUnreal += p.unrealizedPnl * c;
-        fDay += (p.dailyChange || 0) * p.shares * c;
-      }
-      const fPct = fCost > 1e-9 ? fUnreal / fCost * 100 : null;
-      const cur = (pf.filter === 'us' || pf.filter === 'crypto') ? '$ ' : 'NT$ ';
-      html += `<div class="card filter-sum">
-        <div><div class="k">市值總和</div><div class="v">${cur}${U.fmtKMBB(fMv)}</div></div>
-        <div><div class="k">當前損益</div><div class="v" style="color:${UI.pnlColor(fUnreal)}">${U.fmtBannerSigned(fUnreal)}<span class="pct">${fPct != null ? ' (' + U.fmtPct(fPct) + ')' : ''}</span></div></div>
-        <div><div class="k">今日漲跌</div><div class="v" style="color:${UI.pnlColor(fDay)}">${U.fmtBannerSigned(fDay)}</div></div>
+    // 配置條 + 圖例 + 排序
+    const twV = summary.twMarketValue, usV = summary.usMarketValueTwd, crV = summary.cryptoMarketValueTwd || 0;
+    if (totalAll > 0) {
+      const pctOf = v => v / totalAll * 100;
+      html += `<div class="alloc-bar" style="margin:2px 2px 6px">
+        <span style="width:${pctOf(twV)}%;background:${COL.tw}"></span>
+        <span style="width:${pctOf(usV)}%;background:${COL.us}"></span>
+        <span style="width:${pctOf(crV)}%;background:${COL.crypto}"></span>
+      </div>
+      <div class="alloc-legend" style="padding:0 2px 12px;align-items:center">
+        ${twV > 0.5 ? `<span><i style="background:${COL.tw}"></i>台股 ${pctOf(twV).toFixed(0)}%</span>` : ''}
+        ${usV > 0.5 ? `<span><i style="background:${COL.us}"></i>美股 ${pctOf(usV).toFixed(0)}%</span>` : ''}
+        ${crV > 0.5 ? `<span><i style="background:${COL.crypto}"></i>加密 ${pctOf(crV).toFixed(0)}%</span>` : ''}
+        <select id="pf-sort" class="select select-sm" style="margin-left:auto">
+          <option value="marketValue">市值</option>
+          <option value="pnl">損益</option>
+          <option value="price">現價</option>
+        </select>
       </div>`;
     }
 
-    let listHtml = '';
-    if (!list.length) {
-      listHtml = `<div class="empty">尚無持倉，點右下角 ＋ 新增交易</div>`;
-    } else {
-      // 「全部」檢視：美股/加密換算成台幣，單位統一為 NT$
-      const toTwd = pf.filter === 'all';
-      listHtml = `<div class="card holdings">`;
-      for (const p of list) {
-        const isUsd = isUsdMk(U.normalizeMarketKey(p.market));
-        const conv = (isUsd && toTwd) ? rate : 1;         // 全部模式 USD 計價 ×匯率
-        const showUsd = isUsd && !toTwd;                   // 美股/加密分頁顯示 $
-        const cur = showUsd ? '$' : '';
-        const mvCur = showUsd ? '$' : 'NT$';
-        const pnlPct = p.cost > 1e-9 ? p.unrealizedPnl / p.cost * 100 : 0; // 比率，與幣別無關
-        const chg = p.dailyChangePct;
-        listHtml += `<div class="hold-row" data-sym="${p.symbol}">
-          <div class="h-left">
-            <div class="h-sym">${p.symbol} <span class="h-name">${p.name}</span></div>
-            <div class="h-sub">${U.formatShares(p.shares)}${shareUnit(p.market)} @ ${U.formatPrice(p.avgCost * conv)}</div>
+    // 市場卡（手風琴，一次展開一類；空市場不顯示）
+    if (!positions.length) html += `<div class="empty" style="padding:48px 16px">尚無持倉，點右上 ＋ 新增交易</div>`;
+    for (const M of MKTS) {
+      const list = byMk[M.key];
+      if (!list.length) continue;
+      list.sort((a, b) => {
+        switch (pf.sort) {
+          case 'pnl': return b.unrealizedPnl * convOf(b) - a.unrealizedPnl * convOf(a);
+          case 'price': return (b.lastPrice || 0) - (a.lastPrice || 0);
+          default: return mvTwd(b) - mvTwd(a);
+        }
+      });
+      const tot = list.reduce((s, p) => s + mvTwd(p), 0);
+      const pct = totalAll > 1e-9 ? tot / totalAll * 100 : 0;
+      const open = openCat === M.key;
+      const names = [...list].sort((a, b) => mvTwd(b) - mvTwd(a)).slice(0, 4).map(p => p.name !== p.symbol ? p.name : p.symbol).join('、');
+      html += `<div class="card as-cat">
+        <div class="as-head ${open ? 'open ' + M.oc : ''}" data-mk="${M.key}" style="--cc:${M.color}">
+          <div class="as-hleft">
+            <span class="as-name">${M.name}</span>
+            ${!open ? `<span class="as-hsummary">${names}</span>` : ''}
           </div>
-          <div class="h-mid">
-            <div class="h-price">${p.lastPrice != null ? cur + U.formatPrice(p.lastPrice * conv) : '--'}</div>
-            <div class="h-chg" style="color:${UI.pnlColor(chg || 0)}">${chg != null ? U.fmtPct(chg) : ''}</div>
-          </div>
-          <div class="h-right">
-            <div class="h-mv">${mvCur} ${U.fmtKMBB(p.marketValue * conv)}</div>
-            <div class="h-pnl" style="color:${UI.pnlColor(p.unrealizedPnl)}">${U.fmtBannerSigned(p.unrealizedPnl * conv)} (${U.fmtPct(pnlPct)})</div>
+          <div class="as-hright">
+            <span class="as-total" style="color:${M.color}">${U.fmtWhole(tot)}</span>
+            <span class="as-hdate">${list.length} 檔 · ${pct.toFixed(0)}%</span>
           </div>
         </div>`;
+      if (open) {
+        html += `<div class="as-body">`;
+        for (const p of list) {
+          const rp = totalAll > 1e-9 ? mvTwd(p) / totalAll * 100 : 0;
+          const cur = M.key === 'tw' ? '' : '$';
+          const price = p.lastPrice != null ? p.lastPrice : p.avgCost;
+          const chg = p.dailyChangePct;
+          const chgHtml = chg != null ? ` <span style="color:${UI.pnlColor(chg)}">${chg >= 0 ? '▲' : '▼'}${Math.abs(chg).toFixed(2)}%</span>` : '';
+          const pnlPct = p.cost > 1e-9 ? p.unrealizedPnl / p.cost * 100 : 0;
+          html += `<div class="as-row pf-row" data-sym="${p.symbol}">
+            <span class="pct-badge sm" style="background:${M.color}">${fmtPctBadge(rp)}</span>
+            <div class="as-main">
+              <div class="as-title">${p.symbol} <span class="h-name">${p.name !== p.symbol ? p.name : ''}</span></div>
+              <div class="as-sub">持有 ${U.formatShares(p.shares)}${shareUnit(p.market)} · ${cur}${U.formatPrice(price)}${chgHtml}</div>
+            </div>
+            <div class="pf-val">
+              <div class="pf-mv">NT$ ${U.fmtKMBB(mvTwd(p))}</div>
+              <div class="pf-pnl" style="color:${UI.pnlColor(p.unrealizedPnl)}">${U.fmtBannerSigned(p.unrealizedPnl * convOf(p))} (${U.fmtPct(pnlPct)})</div>
+            </div>
+          </div>`;
+        }
+        html += `</div>`;
       }
-      listHtml += `</div>`;
+      html += `</div>`;
     }
 
-    root.innerHTML = `<div class="page"><div class="page-top">${html}</div><div class="page-list">${listHtml}</div></div>`;
+    root.innerHTML = `<div class="page-full">${html}</div>`;
 
     // 事件
-    root.querySelector('#pf-sort').value = pf.sort;
-    root.querySelector('#pf-sort').addEventListener('change', e => { pf.sort = e.target.value; portfolio(root); });
-    root.querySelectorAll('#pf-filter .seg-btn').forEach(b =>
-      b.addEventListener('click', () => { pf.filter = b.dataset.v; portfolio(root); }));
-    root.querySelectorAll('.hold-row').forEach(r =>
+    bindRefresh(root);
+    const addBtn = root.querySelector('#pf-add-btn');
+    if (addBtn) addBtn.addEventListener('click', () => openTxForm(null));
+    const sortSel = root.querySelector('#pf-sort');
+    if (sortSel) { sortSel.value = pf.sort; sortSel.addEventListener('change', e => { pf.sort = e.target.value; portfolio(root); }); }
+    root.querySelectorAll('.as-head[data-mk]').forEach(h => h.addEventListener('click', () => {
+      pf.openCat = (openCat === h.dataset.mk) ? '__none' : h.dataset.mk;
+      portfolio(root);
+    }));
+    root.querySelectorAll('.pf-row').forEach(r =>
       r.addEventListener('click', () => openSymbolActions(r.dataset.sym)));
   }
 
@@ -191,13 +199,17 @@ App.Views = (function () {
   function history(root) {
     root.innerHTML = `<div class="page">
       <div class="page-top">
-        <div class="seg seg-wide" id="hist-tab">${seg2('trend', '趨勢', hist.tab)}${seg2('tx', '交易紀錄', hist.tab)}</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <div class="seg seg-wide" id="hist-tab" style="flex:1;width:auto;margin-bottom:0">${seg2('trend', '趨勢', hist.tab)}${seg2('tx', '交易紀錄', hist.tab)}</div>
+          ${refreshBtnHtml()}
+        </div>
         <div id="hist-fixed"></div>
       </div>
       <div class="page-list" id="hist-scroll"></div>
     </div>`;
     root.querySelectorAll('#hist-tab .seg-btn').forEach(b =>
       b.addEventListener('click', () => { hist.tab = b.dataset.v; history(root); }));
+    bindRefresh(root);
     const fixedEl = root.querySelector('#hist-fixed');
     const scrollEl = root.querySelector('#hist-scroll');
     if (hist.tab === 'trend') histTrend(fixedEl, scrollEl); else histTx(fixedEl, scrollEl);
@@ -385,8 +397,11 @@ App.Views = (function () {
     const reports = periodReports();
     const years = [...new Set(S.getSnapshots().map(s => +s.date.slice(0, 4)))].sort();
 
-    let html = `<div class="seg seg-wide" id="rep-mode">
-      ${seg3('yearly', '年度', rep.mode)}${seg3('monthly', '月度', rep.mode)}
+    let html = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+      <div class="seg seg-wide" id="rep-mode" style="flex:1;width:auto;margin-bottom:0">
+        ${seg3('yearly', '年度', rep.mode)}${seg3('monthly', '月度', rep.mode)}
+      </div>
+      ${refreshBtnHtml()}
     </div>`;
 
     if (rep.mode === 'monthly' && years.length) {
@@ -501,6 +516,7 @@ App.Views = (function () {
   }
 
   function bindReportTop(root, years) {
+    bindRefresh(root);
     root.querySelectorAll('#rep-mode .seg-btn').forEach(b =>
       b.addEventListener('click', () => { rep.mode = b.dataset.v; report(root); }));
     root.querySelectorAll('#year-chips .chip').forEach(b =>
@@ -550,7 +566,10 @@ App.Views = (function () {
         <div class="nw-num">${U.fmtWhole(sum.netWorth)}</div>
         <div class="nw-day" style="color:${UI.pnlColor(dayChange)}">${dayArrow} ${U.fmtWhole(Math.abs(dayChange))} (${Math.abs(dayPct).toFixed(2)}%)</div>
       </div>
-      <button class="nw-add" id="as-add-btn" aria-label="新增">＋</button>
+      <div class="nw-btns">
+        ${refreshBtnHtml()}
+        <button class="nw-add" id="as-add-btn" aria-label="新增">＋</button>
+      </div>
     </div>`;
 
     // 收合摘要文字 + 更新日期
@@ -658,6 +677,7 @@ App.Views = (function () {
     }));
     const bind = (sel, fn) => { const el = root.querySelector(sel); if (el) el.addEventListener('click', fn); };
     bind('#as-add-btn', () => openAddChooser(() => assets(root)));
+    bindRefresh(root);
     bind('#nw-open', () => { as.nwDetail = true; netWorthDetail(root); });
     root.querySelectorAll('.as-row[data-kind]').forEach(r => r.addEventListener('click', () => {
       const kind = r.dataset.kind;
@@ -937,6 +957,7 @@ App.Views = (function () {
     const lastTs = S.getPricesTs();
     const rate = S.getFxRate();
     let html = `
+    <div class="tools-row">${refreshBtnHtml()}</div>
     <div class="card setting-card">
       <div class="set-title">雲端同步（GitHub Gist）</div>
       <div class="set-row">
@@ -1006,6 +1027,7 @@ App.Views = (function () {
     </div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
 
+    bindRefresh(root);
     // ── 雲端同步 ──
     const syncStatusEl = root.querySelector('#sync-status');
     function fmtSyncStatus(s) {
