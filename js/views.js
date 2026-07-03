@@ -675,7 +675,7 @@ App.Views = (function () {
     const mdOf = iso => { const p = U.taipeiParts(new Date(iso + 'T00:00:00+08:00')); return p.month + '/' + p.day; };
     let buckets;
     if (gran === 'day') {
-      buckets = series.map(d => ({ date: d.date, nw: d.nw, label: mdOf(d.date), full: d.date }));
+      buckets = series.map(d => ({ date: d.date, nw: d.nw, first: d.nw, label: mdOf(d.date), full: d.date }));
     } else {
       const keyOf = iso => {
         if (gran === 'week') {
@@ -687,14 +687,19 @@ App.Views = (function () {
         return iso.slice(0, 4);
       };
       const map = new Map();
-      for (const d of series) map.set(keyOf(d.date), d); // 同桶取最後一筆
-      buckets = [...map.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([, d]) => ({
-        date: d.date, nw: d.nw,
-        label: gran === 'week' ? mdOf(d.date) : gran === 'month' ? (+d.date.slice(5, 7)) + '月' : d.date.slice(0, 4),
-        full: gran === 'week' ? ('週 ' + mdOf(d.date)) : gran === 'month' ? d.date.slice(0, 7) : d.date.slice(0, 4),
+      for (const d of series) {                        // 同桶：記錄期初(first)與期末(last)
+        const k = keyOf(d.date);
+        if (!map.has(k)) map.set(k, { first: d, last: d });
+        else map.get(k).last = d;
+      }
+      buckets = [...map.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([, o]) => ({
+        date: o.last.date, nw: o.last.nw, first: o.first.nw,
+        label: gran === 'week' ? mdOf(o.last.date) : gran === 'month' ? (+o.last.date.slice(5, 7)) + '月' : o.last.date.slice(0, 4),
+        full: gran === 'week' ? ('週 ' + mdOf(o.last.date)) : gran === 'month' ? o.last.date.slice(0, 7) : o.last.date.slice(0, 4),
       }));
     }
-    const withChange = buckets.map((b, i) => Object.assign({}, b, { change: i > 0 ? b.nw - buckets[i - 1].nw : 0 }));
+    // 漲幅：有前一期→期末對前一期期末；無前一期（最早／唯一）→ 該期間內漲幅（期末−期初）
+    const withChange = buckets.map((b, i) => Object.assign({}, b, { change: i > 0 ? b.nw - buckets[i - 1].nw : b.nw - b.first }));
     const N = gran === 'day' ? 7 : gran === 'week' ? 5 : gran === 'month' ? 12 : 10;
     return withChange.slice(-N);
   }
