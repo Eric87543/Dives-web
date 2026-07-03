@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v47';
+  App.VERSION = 'v48';
 
   let currentTab = 'assets';
   const TABS = [
@@ -128,6 +128,9 @@
     add('AAPL', 'us', 'Apple', 50, 180);
     add('BTC', 'crypto', 'Bitcoin', 0.5, 55000);
     add('ETH', 'crypto', 'Ethereum', 3, 2500);
+    // 交易日期散布在過去數月，讓群組走勢圖能畫出真實曲線（否則全部同一天＝1 個點）
+    const DAY = 86400000, agoBy = { '2330': 165, '0050': 150, '2454': 80, TSLA: 140, GOOGL: 120, NVDA: 95, AAPL: 70, BTC: 60, ETH: 45 };
+    S.setTransactions(S.getTransactions().map(t => Object.assign({}, t, { time: Date.now() - (agoBy[t.symbol] || 100) * DAY })));
     S.setPrices({
       '2330': { price: 2505, dailyChange: 20, prevClose: 2485 },
       '0050': { price: 185, dailyChange: 1, prevClose: 184 },
