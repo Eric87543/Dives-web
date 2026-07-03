@@ -12,7 +12,8 @@ App.Views = (function () {
 
   /* ===================== 投資（市場分類卡，沿用資產頁風格）===================== */
   // openCat: '__auto'=預設展開第一個有持倉的市場 | 'tw'|'us'|'crypto' | '__none'=全部收合
-  const pf = { sort: 'marketValue', openCat: '__auto' };
+  // 排序固定依市值（大→小）
+  const pf = { openCat: '__auto' };
 
   // 每頁右上角 ⟳（頂欄已移除）
   function refreshBtnHtml() { return `<button class="ref-btn" id="refresh-btn" aria-label="重新整理">⟳</button>`; }
@@ -59,23 +60,12 @@ App.Views = (function () {
       </div>
     </div>`;
 
-    // 統計卡（今日損益已呈現在上方漲跌列，不重複）
-    topHtml += `<div class="card banner">
+    // 統計卡（今日損益已呈現在上方漲跌列，不重複；縮小高度）
+    topHtml += `<div class="card banner banner-sm">
       ${bcol('總損益', U.fmtBannerSigned(summary.totalPnl), UI.pnlColor(summary.totalPnl))}
       ${bcol('報酬率', U.fmtPct(summary.totalReturnPct), UI.pnlColor(summary.totalReturnPct || 0))}
       ${bcol('未實現', U.fmtBannerSigned(summary.totalUnrealizedPnl), UI.pnlColor(summary.totalUnrealizedPnl))}
     </div>`;
-
-    // 排序（配置比例已由各市場卡顯示，不再放比例條）
-    if (positions.length) {
-      topHtml += `<div style="display:flex;align-items:center;padding:0 2px 8px">
-        <select id="pf-sort" class="select select-sm" style="margin-left:auto">
-          <option value="marketValue">市值</option>
-          <option value="pnl">損益</option>
-          <option value="price">現價</option>
-        </select>
-      </div>`;
-    }
 
     // 市場卡（手風琴，一次展開一類；空市場不顯示）
     let html = '';
@@ -83,13 +73,7 @@ App.Views = (function () {
     for (const M of MKTS) {
       const list = byMk[M.key];
       if (!list.length) continue;
-      list.sort((a, b) => {
-        switch (pf.sort) {
-          case 'pnl': return b.unrealizedPnl * convOf(b) - a.unrealizedPnl * convOf(a);
-          case 'price': return (b.lastPrice || 0) - (a.lastPrice || 0);
-          default: return mvTwd(b) - mvTwd(a);
-        }
-      });
+      list.sort((a, b) => mvTwd(b) - mvTwd(a));
       const tot = list.reduce((s, p) => s + mvTwd(p), 0);
       const pct = totalAll > 1e-9 ? tot / totalAll * 100 : 0;
       const open = openCat === M.key;
@@ -138,8 +122,6 @@ App.Views = (function () {
     bindRefresh(root);
     const addBtn = root.querySelector('#pf-add-btn');
     if (addBtn) addBtn.addEventListener('click', () => openTxForm(null));
-    const sortSel = root.querySelector('#pf-sort');
-    if (sortSel) { sortSel.value = pf.sort; sortSel.addEventListener('change', e => { pf.sort = e.target.value; portfolio(root); }); }
     root.querySelectorAll('.as-head[data-mk]').forEach(h => h.addEventListener('click', () => {
       pf.openCat = (openCat === h.dataset.mk) ? '__none' : h.dataset.mk;
       portfolio(root);

@@ -132,6 +132,8 @@ input, select { font-family: inherit; font-size: 15px; }
 
 /* ---- Banner (report) ---- */
 .banner { display: flex; padding: 14px 6px; }
+.banner-sm { padding: 8px 6px; margin-bottom: 10px; }
+.banner-sm .bc .v { margin-top: 2px; font-size: 12.5px; }
 .bc { flex: 1; text-align: center; border-right: 1px solid var(--divider); }
 .bc:last-child { border-right: none; }
 .bc .k { font-size: 11px; color: var(--sub); }
