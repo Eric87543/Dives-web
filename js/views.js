@@ -667,41 +667,9 @@ App.Views = (function () {
   }
 
   // 淨資產長條圖頁：淨資產 / 漲幅；X 軸 天(7)／週(5)／月(12)／年(10)
+  // 分桶邏輯抽到 App.Calc.netWorthBuckets（純函式、有測試涵蓋，SPEC §6）
   function nwBuckets(gran) {
-    const cl = C.cashLiabTwd();
-    const snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
-    if (!snaps.length) return [];
-    const series = snaps.map(s => ({ date: s.date, nw: nwOf(s, cl) }));
-    const mdOf = iso => { const p = U.taipeiParts(new Date(iso + 'T00:00:00+08:00')); return p.month + '/' + p.day; };
-    let buckets;
-    if (gran === 'day') {
-      buckets = series.map(d => ({ date: d.date, nw: d.nw, first: d.nw, label: mdOf(d.date), full: d.date }));
-    } else {
-      const keyOf = iso => {
-        if (gran === 'week') {
-          const dt = new Date(iso + 'T00:00:00+08:00');
-          const off = (dt.getDay() + 6) % 7; dt.setDate(dt.getDate() - off);
-          return U.isoDate(dt);
-        }
-        if (gran === 'month') return iso.slice(0, 7);
-        return iso.slice(0, 4);
-      };
-      const map = new Map();
-      for (const d of series) {                        // 同桶：記錄期初(first)與期末(last)
-        const k = keyOf(d.date);
-        if (!map.has(k)) map.set(k, { first: d, last: d });
-        else map.get(k).last = d;
-      }
-      buckets = [...map.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([, o]) => ({
-        date: o.last.date, nw: o.last.nw, first: o.first.nw,
-        label: gran === 'week' ? mdOf(o.last.date) : gran === 'month' ? (+o.last.date.slice(5, 7)) + '月' : o.last.date.slice(0, 4),
-        full: gran === 'week' ? ('週 ' + mdOf(o.last.date)) : gran === 'month' ? o.last.date.slice(0, 7) : o.last.date.slice(0, 4),
-      }));
-    }
-    // 漲幅：有前一期→期末對前一期期末；無前一期（最早／唯一）→ 該期間內漲幅（期末−期初）
-    const withChange = buckets.map((b, i) => Object.assign({}, b, { change: i > 0 ? b.nw - buckets[i - 1].nw : b.nw - b.first }));
-    const N = gran === 'day' ? 7 : gran === 'week' ? 5 : gran === 'month' ? 12 : 10;
-    return withChange.slice(-N);
+    return C.netWorthBuckets(S.getSnapshots(), gran, C.cashLiabTwd());
   }
 
   function netWorthDetail(root) {

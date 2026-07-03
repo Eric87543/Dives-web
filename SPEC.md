@@ -1,0 +1,174 @@
+# Dives 技術規格（SPEC）
+
+> 本文件描述 Dives PWA 的**資料模型、模組職責與關鍵行為/不變式**，供開發與測試對照。
+> 使用者操作手冊見 [README.md](README.md)。對應的自動化測試見 [`tests/`](tests/)。
+
+版本對照：`App.VERSION`（見 `js/app.js`）、Service Worker 快取名 `dives-vNN`（見 `sw.js`）。
+
+---
+
+## 1. 總覽
+
+- 純前端、零後端的單頁 PWA。原生 `<script>` 依序載入，共用全域命名空間 `window.App`。
+- 資料存於 `localStorage`（前綴 `dives_`）。可選以 GitHub Gist 跨裝置同步。
+- 五個分頁：**資產 / 投資 / 歷史 / 報表 / 設定**；預設進入「資產」。
+- 顏色慣例（台股）：**漲＝紅、跌＝綠**（`App.UI.pnlColor`：`v >= 0 → #E53935`，否則 `#43A047`）。
+
+模組（`js/`）：
+
+| 檔案 | 命名空間 | 職責 |
+|------|----------|------|
+| `util.js` | `App.Util` | 純工具：市場判斷、數字/日期格式化、字串清理（**無副作用、無 I/O**） |
+| `store.js` | `App.Store` | localStorage 讀寫、`uuid`、`clearAll` |
+| `calc.js` | `App.Calc` | 持倉/彙總/損益/快照/現金沖銷/淨資產分桶（**運算核心**） |
+| `csv.js` | `App.Csv` | CSV 匯出/匯入（與 iOS App 相容） |
+| `api.js` | `App.Api` | 報價/歷史/匯率/搜尋（外部資料源） |
+| `charts.js` | `App.Charts` | 手繪 SVG 圖：`trend` / `lineChart` / `reportColumn` / `barChart` |
+| `ui.js` | `App.UI` | toast、彈窗、顏色常數 |
+| `sync.js` | `App.Sync` | Gist 同步 |
+| `auth.js` | `App.Auth` | App 鎖定（PIN / WebAuthn） |
+| `views.js` | `App.Views` | 各分頁渲染 + 表單 |
+| `app.js` | `App`（主控） | 分頁路由、報價刷新、初始化、`seedDemo` |
+
+---
+
+## 2. 市場類型（`App.Util.Market`）
+
+```
+Market = { tse, otc, rotc, us, crypto, unknown }
+```
+
+### 2.1 `normalizeMarketKey(market)`
+將多種別名正規化為 `Market` 值（大小寫、中英、iOS 別名）：
+- `tse|twse|上市|listed → tse`
+- `otc|tpex|上櫃|otc_market → otc`
+- `rotc|emerging|興櫃 → rotc`
+- `us|usa|美股 → us`
+- `crypto|coin|加密|虛擬貨幣 → crypto`
+- 其他 → `unknown`
+
+### 2.2 `guessMarketBySymbol(symbol)`（僅憑代碼格式）
+- 含英文字母：
+  - 「4+ 位數字且**恰 1 個字母**」→ `tse`（台股 ETF/債，如 `00679B`）
+  - 其他含字母 → `us`
+- 純數字且長度 4–6 → `tse`
+- 其餘 → `unknown`
+
+### 2.3 幣別換算原則
+美股與加密的市值/成本以 **USD 計**，顯示為 TWD 時一律 `× 匯率`（`App.Store.getFxRate()`，預設 31.5）。台股本身即 TWD。
+
+---
+
+## 3. 資料模型（localStorage，前綴 `dives_`）
+
+| 概念 | 形狀（重點欄位） |
+|------|------------------|
+| 交易 `transactions` | `{ id, symbol, type: 'BUY'|'SELL', shares, price, fee, time, market, name }` |
+| 標的中繼 `meta` | `{ code, name, market }` |
+| 報價 `prices` | `{ [symbol]: { price, dailyChange, prevClose } }` |
+| 匯率 `fxRate` | `number`（USD→TWD） |
+| 現金帳戶 `cashAccounts` | `{ id, name, currency: 'TWD'|'USD', balance, updatedAt? }` |
+| 負債 `liabilities` | `{ id, name, currency, balance, updatedAt? }` |
+| 群組 `groups` | `{ id, name }`（單層） |
+| 群組對應 `groupMap` | `{ [symbol]: groupId }` |
+| 佔比基準 `pctBasis` | `'group' | 'invest' | 'net'` |
+| 每日快照 `snapshots` | 見 §5 |
+
+`App.Store.clearAll()` 會清空以上全部。
+
+---
+
+## 4. 損益與彙總（`App.Calc`）
+
+### 4.1 持倉 `buildPositions()`
+以移動加權平均成本累計各 symbol：BUY 加股數與成本、SELL 減股數（成本按均價扣抵）。輸出每檔 `{ symbol, name, market, shares, avgCost, lastPrice, marketValue, ... }`。
+
+### 4.2 現金沖銷 `txCashDelta(tx)`（**不變式**）
+交易對所選現金帳戶餘額的影響：
+```
+BUY  → -(shares*price + fee)
+SELL → +(shares*price - fee)
+```
+新增/更新/刪除交易時，若指定 `accountId` 則據此增減帳戶餘額；更新與刪除會**反向沖銷**先前效果。
+
+### 4.3 資產彙總 `assetsSummary()`
+```
+cashTwd  = Σ 現金帳戶（USD × 匯率）
+liabTwd  = Σ 負債（USD × 匯率）
+investTwd = 投資總市值（買方持倉，美股/加密 × 匯率）
+netWorth = cashTwd + investTwd − liabTwd
+```
+另回傳 `invSummary`（含 `dayPnl` 等）。`cashLiabTwd()` 只回傳 `{ cashTwd, liabTwd }`。
+
+---
+
+## 5. 每日快照（`saveTodaySnapshot` / `makeSnapshot`）
+
+每日一筆（同日覆蓋），`date` 為台北時區 `YYYY-MM-DD`。關鍵欄位：
+- 市值：`twMarketValue`, `usMarketValueTwd`, `cryptoMarketValueTwd`, `totalMarketValueTwd`
+- 現金/負債/淨資產：`cashAccountsTwd`, `liabilitiesTwd`, **`netWorth = totalMarketValueTwd + cashAccountsTwd − liabilitiesTwd`**
+- 損益：`dayPnl`, `unrealizedPnl`, `realizedPnl`, `totalPnl` …
+
+### 5.1 淨資產回填 `nwOf(s, cl)`（**相容不變式**）
+舊快照可能無 `netWorth` 欄位，讀取時回填以避免走勢斷崖：
+```
+nwOf(s, cl) =
+  s.netWorth               若存在
+  否則 (s.totalMarketValueTwd ?? s.netAsset ?? 0) + cl.cashTwd − cl.liabTwd
+```
+
+---
+
+## 6. 淨資產長條圖分桶（`App.Calc.netWorthBuckets`）
+
+**純函式**（無 Store/DOM 依賴），供「資產 → 點淨資產 → 長條圖頁」使用。
+
+```
+netWorthBuckets(snapshots, gran, cashLiab) -> Bucket[]
+  gran ∈ { 'day', 'week', 'month', 'year' }
+  cashLiab = { cashTwd, liabTwd }
+  Bucket = { label, full, nw, change }
+```
+
+規則（**測試對象**）：
+
+1. 先以 `nwOf`（§5.1）把每筆快照換算成淨資產 `nw`，並依 `date` 升冪排序。
+2. 分桶：
+   - `day`：每筆快照即一桶。
+   - `week`：以該週**週一**（台北時區）為鍵，同桶取**最後一筆**（週末值）。
+   - `month`：以 `YYYY-MM` 為鍵，同桶取最後一筆。
+   - `year`：以 `YYYY` 為鍵，同桶取最後一筆。
+3. **漲幅 `change`**：
+   - 有前一桶 → `本桶.nw − 前一桶.nw`（跨期比較）。
+   - **無前一桶（最早/唯一桶）→ 該桶期間內漲幅 `期末 − 期初`**（避免顯示 0）。
+4. 視窗（取最後 N 桶）：`day → 7`、`week → 5`、`month → 12`、`year → 10`。
+5. 空快照 → 回傳 `[]`。
+
+> `js/views.js` 的 `nwBuckets(gran)` 為薄包裝：`C.netWorthBuckets(S.getSnapshots(), gran, C.cashLiabTwd())`。
+
+---
+
+## 7. 圖表配色（`App.Charts`）
+
+- 淨資產（線/長條）：藍 `#2F80ED`。
+- 倉位走勢（`trend`）：台股橙 `#E8823C`、美股藍 `#4A82C8`、加密紫 `#9B59D0` 堆疊。
+- 漲幅長條：依值上色 `pnlColor`（正紅負綠）。
+- Tooltip 靠右邊界時以量測寬度 `tip.offsetWidth` 夾住，避免跑版。
+
+---
+
+## 8. 關鍵不變式（測試須守住）
+
+- **I1**：`netWorth = cashTwd + investTwd − liabTwd`（§4.3）。
+- **I2**：`txCashDelta` 買負賣正、含手續費方向正確（§4.2）。
+- **I3**：`netWorthBuckets` 對單一年份資料**不得回傳 change=0**，而是期間內漲幅（§6.3）。
+- **I4**：`nwOf` 對無 `netWorth` 的舊快照正確回填（§5.1）。
+- **I5**：`guessMarketBySymbol('00679B')=tse`、`guessMarketBySymbol('AAPL')=us`、`guessMarketBySymbol('2330')=tse`（§2.2）。
+- **I6**：CSV 匯出→匯入為 round-trip：交易筆數與關鍵欄位一致（§9）。
+
+---
+
+## 9. CSV（`App.Csv`）
+
+- `exportCsv()`：輸出交易紀錄 + 每日快照，格式與 iOS App 相容，供下載 `portfolio_backup_YYYY-MM-DD.csv`。
+- `importCsv(content)`：解析回 `{ ok, txCount, snapCount, msg? }`；覆蓋現有資料。無快照時由呼叫端觸發「重建歷史走勢」。

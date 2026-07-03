@@ -404,9 +404,50 @@ App.Calc = (function () {
     return snaps.length;
   }
 
+  // 淨資產長條圖分桶（純函式；SPEC §6）。gran ∈ day|week|month|year
+  //  - nwOf 回填舊快照；同桶(週/月/年)取最後一筆
+  //  - change：有前一桶→跨期差；無前一桶(最早/唯一)→期間內漲幅(期末−期初)，避免顯示 0
+  //  - 視窗：day=7 / week=5 / month=12 / year=10；空快照→[]
+  function netWorthBuckets(snapshots, gran, cashLiab) {
+    const cl = cashLiab || { cashTwd: 0, liabTwd: 0 };
+    const nwOf = s => (s.netWorth != null ? s.netWorth
+      : (s.totalMarketValueTwd != null ? s.totalMarketValueTwd : (s.netAsset || 0)) + (cl.cashTwd || 0) - (cl.liabTwd || 0));
+    const snaps = (snapshots || []).filter(s => s && s.date).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+    if (!snaps.length) return [];
+    const series = snaps.map(s => ({ date: s.date, nw: nwOf(s) }));
+    const md = iso => { const p = iso.split('-'); return (+p[1]) + '/' + (+p[2]); };
+    const weekKey = iso => { // 回到當週週一（以 UTC 正午計算日曆星期，與行程時區無關）
+      const p = iso.split('-').map(Number);
+      const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2], 12));
+      dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7));
+      return dt.toISOString().slice(0, 10);
+    };
+    let buckets;
+    if (gran === 'day') {
+      buckets = series.map(d => ({ date: d.date, nw: d.nw, first: d.nw, label: md(d.date), full: d.date }));
+    } else {
+      const keyOf = iso => gran === 'week' ? weekKey(iso) : gran === 'month' ? iso.slice(0, 7) : iso.slice(0, 4);
+      const map = new Map();
+      for (const d of series) {
+        const k = keyOf(d.date);
+        if (!map.has(k)) map.set(k, { first: d, last: d });
+        else map.get(k).last = d;
+      }
+      buckets = [...map.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([, o]) => ({
+        date: o.last.date, nw: o.last.nw, first: o.first.nw,
+        label: gran === 'week' ? md(o.last.date) : gran === 'month' ? (+o.last.date.slice(5, 7)) + '月' : o.last.date.slice(0, 4),
+        full: gran === 'week' ? ('週 ' + md(o.last.date)) : gran === 'month' ? o.last.date.slice(0, 7) : o.last.date.slice(0, 4),
+      }));
+    }
+    const withChange = buckets.map((b, i) => Object.assign({}, b, { change: i > 0 ? b.nw - buckets[i - 1].nw : b.nw - b.first }));
+    const N = gran === 'day' ? 7 : gran === 'week' ? 5 : gran === 'month' ? 12 : 10;
+    return withChange.slice(-N);
+  }
+
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
+    netWorthBuckets,
   };
 })();
