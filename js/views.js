@@ -42,16 +42,16 @@ App.Views = (function () {
       ? (MKTS.find(m => byMk[m.key].length) || {}).key
       : (pf.openCat === '__none' ? null : pf.openCat);
 
-    // Hero：總倉位 + 今日漲跌（同資產頁淨資產樣式）
+    // Hero：總倉位 + 今日漲跌（同資產頁淨資產樣式；捲動時固定於頂部）
     const day = summary.dayPnl || 0;
     const prevTot = totalAll - day;
     const dayPct = Math.abs(prevTot) > 1e-9 ? day / Math.abs(prevTot) * 100 : 0;
     const arrow = day > 0 ? '▲' : day < 0 ? '▼' : '–';
-    let html = `<div class="nw-hero">
+    let topHtml = `<div class="nw-hero">
       <div>
         <div class="nw-cap">總倉位 (TWD)</div>
         <div class="nw-num">${U.fmtWhole(totalAll)}</div>
-        <div class="nw-day" style="color:${UI.pnlColor(day)}">${arrow} ${U.fmtWhole(Math.abs(day))} (${Math.abs(dayPct).toFixed(2)}%) 今日</div>
+        <div class="nw-day" style="color:${UI.pnlColor(day)}">${arrow} ${U.fmtWhole(Math.abs(day))} (${Math.abs(dayPct).toFixed(2)}%)</div>
       </div>
       <div class="nw-btns">
         ${refreshBtnHtml()}
@@ -59,27 +59,16 @@ App.Views = (function () {
       </div>
     </div>`;
 
-    // 統計卡（同報表摘要樣式）
-    html += `<div class="card banner">
-      ${bcol('今日損益', U.fmtBannerSigned(day), UI.pnlColor(day))}
+    // 統計卡（今日損益已呈現在上方漲跌列，不重複）
+    topHtml += `<div class="card banner">
       ${bcol('總損益', U.fmtBannerSigned(summary.totalPnl), UI.pnlColor(summary.totalPnl))}
       ${bcol('報酬率', U.fmtPct(summary.totalReturnPct), UI.pnlColor(summary.totalReturnPct || 0))}
       ${bcol('未實現', U.fmtBannerSigned(summary.totalUnrealizedPnl), UI.pnlColor(summary.totalUnrealizedPnl))}
     </div>`;
 
-    // 配置條 + 圖例 + 排序
-    const twV = summary.twMarketValue, usV = summary.usMarketValueTwd, crV = summary.cryptoMarketValueTwd || 0;
-    if (totalAll > 0) {
-      const pctOf = v => v / totalAll * 100;
-      html += `<div class="alloc-bar" style="margin:2px 2px 6px">
-        <span style="width:${pctOf(twV)}%;background:${COL.tw}"></span>
-        <span style="width:${pctOf(usV)}%;background:${COL.us}"></span>
-        <span style="width:${pctOf(crV)}%;background:${COL.crypto}"></span>
-      </div>
-      <div class="alloc-legend" style="padding:0 2px 12px;align-items:center">
-        ${twV > 0.5 ? `<span><i style="background:${COL.tw}"></i>台股 ${pctOf(twV).toFixed(0)}%</span>` : ''}
-        ${usV > 0.5 ? `<span><i style="background:${COL.us}"></i>美股 ${pctOf(usV).toFixed(0)}%</span>` : ''}
-        ${crV > 0.5 ? `<span><i style="background:${COL.crypto}"></i>加密 ${pctOf(crV).toFixed(0)}%</span>` : ''}
+    // 排序（配置比例已由各市場卡顯示，不再放比例條）
+    if (positions.length) {
+      topHtml += `<div style="display:flex;align-items:center;padding:0 2px 8px">
         <select id="pf-sort" class="select select-sm" style="margin-left:auto">
           <option value="marketValue">市值</option>
           <option value="pnl">損益</option>
@@ -89,6 +78,7 @@ App.Views = (function () {
     }
 
     // 市場卡（手風琴，一次展開一類；空市場不顯示）
+    let html = '';
     if (!positions.length) html += `<div class="empty" style="padding:48px 16px">尚無持倉，點右上 ＋ 新增交易</div>`;
     for (const M of MKTS) {
       const list = byMk[M.key];
@@ -141,7 +131,8 @@ App.Views = (function () {
       html += `</div>`;
     }
 
-    root.innerHTML = `<div class="page-full">${html}</div>`;
+    // 上方（hero+統計+排序）固定，市場卡清單獨立捲動
+    root.innerHTML = `<div class="page"><div class="page-top">${topHtml}</div><div class="page-list">${html}</div></div>`;
 
     // 事件
     bindRefresh(root);

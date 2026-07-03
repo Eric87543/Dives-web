@@ -52,8 +52,8 @@ input, select { font-family: inherit; font-size: 15px; }
 /* 上方固定 + 下方列表獨立捲動（持倉 / 歷史） */
 .page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .page-top { flex: none; padding: 12px 14px 0; }
-/* 投資頁清單：底部留 tab bar + FAB 的空間，避免 ＋ 蓋住最後一列 */
-.page-list { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 14px calc(var(--tab-h) + env(safe-area-inset-bottom) + 84px); }
+/* 下方清單獨立捲動（FAB 已移除，僅留一般底部空間） */
+.page-list { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 14px 24px; }
 /* 整頁捲動（報表 / 設定） */
 .page-full { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 14px 100px; }
 
