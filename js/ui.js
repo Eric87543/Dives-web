@@ -5,8 +5,8 @@
 window.App = window.App || {};
 
 App.UI = (function () {
-  const GAIN = '#E53935';  // 漲：紅
-  const LOSS = '#43A047';  // 跌：綠
+  const GAIN = '#C43D2B';  // 漲：朱紅（墨色版）
+  const LOSS = '#2F7D4F';  // 跌：墨綠
 
   function pnlColor(v) { return (v >= 0 ? GAIN : LOSS); }
 

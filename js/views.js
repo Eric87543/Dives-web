@@ -5,7 +5,7 @@ window.App = window.App || {};
 
 App.Views = (function () {
   const U = App.Util, S = App.Store, C = App.Calc, UI = App.UI;
-  const COL = { tw: '#E8823C', us: '#4A82C8', crypto: '#9B59D0', total: '#0F766E' }; // 台股橙、美股藍、加密紫
+  const COL = { tw: '#CE7832', us: '#3A5F8F', crypto: '#7E5C9E', total: '#3B69A9' }; // 墨色帳本調：柿橙/靛藍/梅紫
 
   // 共用：刷新後重繪目前分頁
   function rerender() { App.renderCurrent(); }
@@ -183,9 +183,9 @@ App.Views = (function () {
   // 趨勢圖表種類
   const HIST_CHARTS = [['alloc', '倉位'], ['net', '淨資產'], ['cash', '流動資金'], ['liab', '負債']];
   const HIST_LINE_CONF = {
-    net: { label: '淨資產', color: '#2F80ED' },
-    cash: { label: '流動資金', color: '#34A853' },
-    liab: { label: '負債', color: '#D95555' },
+    net: { label: '淨資產', color: '#3B69A9' },
+    cash: { label: '流動資金', color: '#4E8A5A' },
+    liab: { label: '負債', color: '#B05038' },
   };
 
   function history(root) {
@@ -327,10 +327,10 @@ App.Views = (function () {
   const rep = { mode: 'yearly', year: new Date().getFullYear(), col: null, asc: true, trendMode: 'pos' }; // trendMode: pos=倉位 | net=淨資產
   // 欄位 → 圖表標題 / 表頭底線色（藍：淨資產/投入；綠：損益/已未實現）
   const REP_COLS = {
-    netAsset: { title: '總倉位', underline: '#4A82C8' },
-    newInvestment: { title: '本期投入', underline: '#4A82C8' },
-    periodPnl: { title: '本期損益', underline: '#3DAA6A' },
-    realizedUnrealized: { title: '未實現 / 已實現', underline: '#3DAA6A' },
+    netAsset: { title: '總倉位', underline: '#3B69A9' },
+    newInvestment: { title: '本期投入', underline: '#3B69A9' },
+    periodPnl: { title: '本期損益', underline: '#2F7D4F' },
+    realizedUnrealized: { title: '未實現 / 已實現', underline: '#2F7D4F' },
   };
 
   // 淨資產：快照有 netWorth 直接用；舊快照以「市值 + 目前現金 − 目前負債」回填
@@ -468,7 +468,7 @@ App.Views = (function () {
         const cl = C.cashLiabTwd();
         const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: nwOf(s, cl) } }));
         App.Charts.lineChart(host, points, {
-          series: [{ key: 'v', label: '淨資產', color: '#2F80ED', fill: true }],
+          series: [{ key: 'v', label: '淨資產', color: '#3B69A9', fill: true }],
           xLabels: repXLabels(points),
           valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
         });
@@ -510,7 +510,7 @@ App.Views = (function () {
   /* ===================== 資產（淨資產）===================== */
   // 手風琴：一次只展開一類（cash|invest|liab）；detailGroup = 群組詳情頁
   const as = { openCat: 'invest', detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day' } };
-  const AS_PURPLE = '#6D5FD5';
+  const AS_PURPLE = '#3A5F8F'; // 帳本靛藍（投資分類籤）
 
   function mvTwdOf(p, rate) {
     const m = U.normalizeMarketKey(p.market);
@@ -579,7 +579,7 @@ App.Views = (function () {
 
     // ── 流動資金 ─────────────────────────────────────────
     html += `<div class="card as-cat">` +
-      catHead('cash', '流動資金', U.fmtWhole(sum.cashTwd), '#34C759', 'oc-green', cashSummary, maxUpd(cashAccts));
+      catHead('cash', '流動資金', U.fmtWhole(sum.cashTwd), '#3E7D57', 'oc-green', cashSummary, maxUpd(cashAccts));
     if (as.openCat === 'cash') {
       html += `<div class="as-body">`;
       for (const a of cashAccts) {
@@ -632,7 +632,7 @@ App.Views = (function () {
 
     // ── 負債 ────────────────────────────────────────────
     html += `<div class="card as-cat">` +
-      catHead('liab', '負債', (sum.liabTwd > 0 ? '−' : '') + U.fmtWhole(sum.liabTwd), '#8E9BEF', 'oc-blue', liabSummary, maxUpd(liabs));
+      catHead('liab', '負債', (sum.liabTwd > 0 ? '−' : '') + U.fmtWhole(sum.liabTwd), '#A8503A', 'oc-blue', liabSummary, maxUpd(liabs));
     if (as.openCat === 'liab') {
       html += `<div class="as-body">`;
       for (const a of liabs) {
@@ -722,7 +722,7 @@ App.Views = (function () {
     App.Charts.barChart(root.querySelector('#nw-chart'), items, {
       height: 260,
       valueFmt: v => signed ? ((v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v))) : ('NT$ ' + U.fmtKMBB(v)),
-      colorOf: signed ? (v => UI.pnlColor(v)) : (() => '#2F80ED'),
+      colorOf: signed ? (v => UI.pnlColor(v)) : (() => '#3B69A9'),
     });
   }
 
