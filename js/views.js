@@ -924,6 +924,7 @@ App.Views = (function () {
 
     <div class="card setting-card">
       <div class="set-title">關於</div>
+      <div class="set-hint">版本：<b>${App.VERSION || '?'}</b></div>
       <div class="set-hint">最後更新報價：${lastTs ? new Date(lastTs).toLocaleString('zh-TW') : '尚未更新'}</div>
       <div class="set-hint">USD/TWD 匯率：${rate ? rate.toFixed(3) : '--'}</div>
       <div class="set-hint">交易筆數：${S.getTransactions().length}　快照：${S.getSnapshots().length}</div>

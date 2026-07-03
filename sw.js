@@ -1,7 +1,7 @@
 /* =========================================================================
- * sw.js — Service Worker：App 殼層離線快取（網路優先抓報價，殼層快取優先）
+ * sw.js — Service Worker：App 殼層採「網路優先」（永遠拿最新，離線才用快取）
  * ======================================================================= */
-const CACHE = 'dives-v27';
+const CACHE = 'dives-v28';
 const SHELL = [
   './',
   './index.html',
@@ -38,14 +38,14 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // 同源殼層 → cache-first
+  // 同源殼層 → 網路優先（拿最新），失敗（離線）才回退快取
   if (url.origin === location.origin) {
     e.respondWith(
-      caches.match(req).then(cached => cached || fetch(req).then(res => {
+      fetch(req).then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
         return res;
-      }).catch(() => caches.match('./index.html')))
+      }).catch(() => caches.match(req).then(c => c || caches.match('./index.html')))
     );
     return;
   }
