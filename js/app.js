@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v38';
+  App.VERSION = 'v39';
 
   let currentTab = 'assets';
   const TABS = [

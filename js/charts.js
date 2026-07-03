@@ -36,10 +36,9 @@ App.Charts = (function () {
    * points: [{date:Date, values:{tw, us}}]
    * opts: {twKey,usKey,twLabel,usLabel, xLabels:[{idx,label}], valueFmt, height}
    */
-  /* 墨色帳本調色：台股柿橙、美股靛藍、加密梅紫 */
-  const TW_LINE = '#CE7832', TW_FILL = 'rgba(206,120,50,0.16)';
-  const US_LINE = '#3A5F8F', US_FILL = 'rgba(58,95,143,0.14)';
-  const CR_LINE = '#7E5C9E', CR_FILL = 'rgba(126,92,158,0.15)';
+  const TW_LINE = '#E8823C', TW_FILL = 'rgba(232,130,60,0.22)';
+  const US_LINE = '#4A82C8', US_FILL = 'rgba(74,130,200,0.18)';
+  const CR_LINE = '#9B59D0', CR_FILL = 'rgba(155,89,208,0.20)';
 
   function trend(container, points, opts) {
     container.innerHTML = '';
@@ -76,8 +75,8 @@ App.Charts = (function () {
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" class="trend-svg">`;
     for (const t of ticks) {
       const y = yAt(t);
-      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? 'rgba(38,34,26,0.22)' : 'rgba(38,34,26,0.07)'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
-      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#8B8271">${fmtAxis(t)}</text>`;
+      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? '#d6d3d1' : '#eee'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
+      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#78716c">${fmtAxis(t)}</text>`;
     }
     const twPts = rows.map((r, i) => [xAt(i), yAt(r.tw)]);
     const usTopPts = rows.map((r, i) => [xAt(i), yAt(r.tw + r.us)]); // 台股+美股 頂
@@ -103,9 +102,9 @@ App.Charts = (function () {
       });
     }
     if (opts.xLabels) for (const e of opts.xLabels)
-      svg += `<text x="${xAt(e.idx)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="#8B8271">${e.label}</text>`;
+      svg += `<text x="${xAt(e.idx)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="#78716c">${e.label}</text>`;
 
-    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#8B8271" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
+    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#a8a29e" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
     svg += `</svg>`;
 
     const legend = `<div class="chart-legend">
@@ -171,8 +170,8 @@ App.Charts = (function () {
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">`;
     for (const t of ticks) {
       const y = yAt(t);
-      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? 'rgba(38,34,26,0.22)' : 'rgba(38,34,26,0.07)'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
-      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#8B8271">${fmtAxis(t)}</text>`;
+      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? '#d6d3d1' : '#eee'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
+      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#78716c">${fmtAxis(t)}</text>`;
     }
     const y0 = yAt(0);
     items.forEach((it, i) => {
@@ -181,7 +180,7 @@ App.Charts = (function () {
       const top = Math.min(y, y0), h = Math.abs(y - y0);
       const color = opts.colorFn ? opts.colorFn(it.value) : '#4A82C8';
       svg += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, 0.5).toFixed(1)}" rx="2" fill="${color}" opacity="0.78"><title>${it.label}: ${valueFmt(it.value)}</title></rect>`;
-      svg += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#8B8271">${it.label}</text>`;
+      svg += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#78716c">${it.label}</text>`;
     });
     svg += `</svg>`;
     container.innerHTML = svg;
@@ -192,7 +191,7 @@ App.Charts = (function () {
    * col: 'netAsset' | 'newInvestment' | 'periodPnl' | 'realizedUnrealized'
    * 顏色：淨資產/本期投入=藍；本期損益=正綠負紅；已實現/未實現=台股慣例(正紅負綠)
    */
-  const C_BLUE = '#3B69A9', C_GREEN = '#2F7D4F', C_RED = '#C43D2B';
+  const C_BLUE = '#4A82C8', C_GREEN = '#3DAA6A', C_RED = '#D95555';
   function reportColumn(container, items, col) {
     container.innerHTML = '';
     if (!items || !items.length) { container.innerHTML = '<div class="chart-empty">暫無資料</div>'; return; }
@@ -216,8 +215,8 @@ App.Charts = (function () {
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" class="trend-svg">`;
     for (const t of ticks) {
       const y = yAt(t);
-      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? 'rgba(38,34,26,0.22)' : 'rgba(38,34,26,0.07)'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
-      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#8B8271">${fmtAxis(t)}</text>`;
+      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? '#d6d3d1' : '#eee'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
+      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#78716c">${fmtAxis(t)}</text>`;
     }
     function rect(cx, v, color, opacity) {
       const y = yAt(v), top = Math.min(y, y0), h = Math.max(Math.abs(y - y0), 0.5);
@@ -237,9 +236,9 @@ App.Charts = (function () {
         svg += rect(cx, it.periodRealizedPnl, it.periodRealizedPnl >= 0 ? C_RED : C_GREEN, 0.7);
         svg += dashRect(cx, it.unrealizedPnl, it.unrealizedPnl >= 0 ? C_RED : C_GREEN);
       }
-      svg += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#8B8271">${it.label}</text>`;
+      svg += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#78716c">${it.label}</text>`;
     });
-    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#8B8271" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
+    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#a8a29e" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
     svg += `</svg>`;
     container.innerHTML = svg;
 
@@ -308,8 +307,8 @@ App.Charts = (function () {
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" class="trend-svg">`;
     for (const t of ticks) {
       const y = yAt(t);
-      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? 'rgba(38,34,26,0.22)' : 'rgba(38,34,26,0.07)'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
-      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#8B8271">${fmtAxis(t)}</text>`;
+      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? '#d6d3d1' : '#eee'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
+      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#78716c">${fmtAxis(t)}</text>`;
     }
     series.forEach((s, si) => {
       const pts = rows.map((r, i) => [xAt(i), yAt(r.vals[si])]);
@@ -319,8 +318,8 @@ App.Charts = (function () {
       svg += `<path d="${fwd(pts)}" fill="none" stroke="${s.color}" stroke-width="1.8" stroke-linejoin="round"/>`;
     });
     if (opts.xLabels) for (const e of opts.xLabels)
-      svg += `<text x="${xAt(e.idx)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="#8B8271">${e.label}</text>`;
-    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#8B8271" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
+      svg += `<text x="${xAt(e.idx)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="#78716c">${e.label}</text>`;
+    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#a8a29e" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
     svg += `</svg>`;
 
     const legend = `<div class="chart-legend">${series.map(s => `<span class="lg"><i style="background:${s.color}"></i>${s.label}</span>`).join('')}</div>`;
@@ -376,16 +375,16 @@ App.Charts = (function () {
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" class="trend-svg">`;
     for (const t of ticks) {
       const y = yAt(t);
-      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? 'rgba(38,34,26,0.22)' : 'rgba(38,34,26,0.07)'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
-      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#8B8271">${fmtAxis(t)}</text>`;
+      svg += `<line x1="${padL}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="${t === 0 ? '#d6d3d1' : '#eee'}" stroke-width="1" ${t === 0 ? '' : 'stroke-dasharray="3 3"'}/>`;
+      svg += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#78716c">${fmtAxis(t)}</text>`;
     }
     items.forEach((it, i) => {
       const cx = padL + step * (i + 0.5);
       const y = yAt(it.value), top = Math.min(y, y0), h = Math.max(Math.abs(y - y0), 0.5);
       svg += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colorOf(it.value)}" opacity="0.82"/>`;
-      svg += `<text x="${cx.toFixed(1)}" y="${H - 9}" text-anchor="middle" font-size="9" fill="#8B8271">${it.label}</text>`;
+      svg += `<text x="${cx.toFixed(1)}" y="${H - 9}" text-anchor="middle" font-size="9" fill="#78716c">${it.label}</text>`;
     });
-    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#8B8271" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
+    svg += `<line class="cursor-line" x1="0" y1="${padT}" x2="0" y2="${padT + chartH}" stroke="#a8a29e" stroke-width="1" stroke-dasharray="3 2" visibility="hidden"/>`;
     svg += `</svg>`;
     container.innerHTML = svg;
 
