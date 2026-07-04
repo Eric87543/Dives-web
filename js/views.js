@@ -262,8 +262,13 @@ App.Views = (function () {
       opts = opts || {};
       if (!e) return `<div class="stat-row"><div class="stat-lbl">${label}</div><div class="stat-val"><div class="stat-amt" style="color:var(--sub)">—</div></div></div>`;
       const amt = opts.pctMain ? pctTxt(e.pct) : sf(e.amount);
-      const sub = opts.trade ? `${e.symbol} · ${e.date}`
-        : `${e.symbol}${e.name && e.name !== e.symbol ? ' ' + e.name : ''} · ${opts.pctMain ? sf(e.amount) : pctTxt(e.pct)}`;
+      let sub;
+      if (opts.trade) {
+        const usd = e.market === U.Market.us || e.market === U.Market.crypto;
+        sub = `${e.symbol} · ${U.formatShares(e.shares)}${shareUnit(e.market)} @ ${usd ? '$' : ''}${U.formatPrice(e.price)} · ${e.date}`;
+      } else {
+        sub = `${e.symbol}${e.name && e.name !== e.symbol ? ' ' + e.name : ''} · ${opts.pctMain ? sf(e.amount) : pctTxt(e.pct)}`;
+      }
       return `<div class="stat-row"><div class="stat-lbl">${label}</div>
         <div class="stat-val"><div class="stat-amt" style="color:${col(opts.pctMain ? e.pct : e.amount)}">${amt}</div><div class="stat-sub">${sub}</div></div></div>`;
     };

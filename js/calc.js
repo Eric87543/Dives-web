@@ -497,12 +497,13 @@ App.Calc = (function () {
     const weekKey = iso => { const p = iso.split('-').map(Number); const d = new Date(Date.UTC(p[0], p[1] - 1, p[2], 12)); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
     const keyOf = (iso, g) => g === 'day' ? iso : g === 'week' ? weekKey(iso) : g === 'month' ? iso.slice(0, 7) : iso.slice(0, 4);
     // 區間 totalPnl 變化的極值（獲利取正、虧損取負；否則 null）
+    // 忽略第一個期間（i 從 2 起）：第一天/週/月/年的變化以初始基準計算，易失真
     const periodExtremes = (subset, g) => {
       const map = new Map();
       for (const s of subset) map.set(keyOf(s.date, g), s); // 同桶取最後（chronological）
       const arr = [...map.values()];
       let best = null, worst = null;
-      for (let i = 1; i < arr.length; i++) {
+      for (let i = 2; i < arr.length; i++) {
         const chg = (arr[i].totalPnl || 0) - (arr[i - 1].totalPnl || 0);
         if (chg > 0 && (!best || chg > best.amount)) best = { date: arr[i].date, amount: chg };
         if (chg < 0 && (!worst || chg < worst.amount)) worst = { date: arr[i].date, amount: chg };
@@ -513,10 +514,13 @@ App.Calc = (function () {
     const curYear = U.isoDate().slice(0, 4);
     const thisYearSnaps = snaps.filter(s => s.date.slice(0, 4) === curYear);
 
-    // 單筆交易之最（最賺取正、最賠取負）
+    // 單筆交易之最（最賺取正、最賠取負；含成交股數/價格）
+    const mmap = S.metaMap();
     let bestTrade = null, worstTrade = null;
     for (const r of S.getRealized()) {
-      const rec = { symbol: r.symbol, amount: r.realizedPnl, date: U.isoDate(new Date(r.time)) };
+      const rec = { symbol: r.symbol, amount: r.realizedPnl, date: U.isoDate(new Date(r.time)),
+        shares: r.shares, price: r.sellPrice,
+        market: U.normalizeMarketKey((mmap[r.symbol] && mmap[r.symbol].market) || U.guessMarketBySymbol(r.symbol)) };
       if (r.realizedPnl > 0 && (!bestTrade || r.realizedPnl > bestTrade.amount)) bestTrade = rec;
       if (r.realizedPnl < 0 && (!worstTrade || r.realizedPnl < worstTrade.amount)) worstTrade = rec;
     }

@@ -43,17 +43,32 @@ test('賣出全賺 → 最賠一筆為 null；持倉全賺 → 虧損王 null', 
   assert.equal(st.worstTrade, null);
 });
 
-test('單筆交易之最：最賺 / 最賠（依 realizedPnl）', () => {
+test('單筆交易之最：最賺 / 最賠（依 realizedPnl，含股數/價格）', () => {
   S.setRealized([
-    { id: '1', symbol: '2330', realizedPnl: 69800, time: T('2026-05-01') },
-    { id: '2', symbol: 'TSLA', realizedPnl: -12000, time: T('2026-05-10') },
-    { id: '3', symbol: 'NVDA', realizedPnl: 3000, time: T('2026-05-20') },
+    { id: '1', symbol: '2330', shares: 100, sellPrice: 2500, avgCost: 1802, realizedPnl: 69800, time: T('2026-05-01') },
+    { id: '2', symbol: 'TSLA', shares: 30, sellPrice: 300, avgCost: 700, realizedPnl: -12000, time: T('2026-05-10') },
+    { id: '3', symbol: 'NVDA', shares: 10, sellPrice: 200, avgCost: 100, realizedPnl: 3000, time: T('2026-05-20') },
   ]);
   const st = C.tradingStats();
   assert.equal(st.bestTrade.symbol, '2330');
   assert.equal(st.bestTrade.amount, 69800);
+  assert.equal(st.bestTrade.shares, 100);   // 成交股數
+  assert.equal(st.bestTrade.price, 2500);    // 成交價
   assert.equal(st.worstTrade.symbol, 'TSLA');
   assert.equal(st.worstTrade.amount, -12000);
+});
+
+test('區間獲利之最：忽略第一個期間（第一天的變化不計入）', () => {
+  S.setSnapshots([
+    { date: '2026-03-01', totalPnl: 0 },
+    { date: '2026-03-02', totalPnl: 1000 }, // 第一個變化 +1000 → 應忽略
+    { date: '2026-03-03', totalPnl: 1200 }, // +200
+    { date: '2026-03-04', totalPnl: 1100 }, // -100
+  ]);
+  const st = C.tradingStats();
+  assert.equal(st.period.all.day.best.amount, 200);   // 不是 1000
+  assert.equal(st.period.all.day.best.date, '2026-03-03');
+  assert.equal(st.period.all.day.worst.amount, -100);
 });
 
 test('目前持倉之最：未實現獲利/虧損/報酬率（無資料回 null）', () => {
