@@ -18,10 +18,29 @@ test('區間最佳/最差獲利：以 totalPnl 的期間變化計算', () => {
     { date: '2026-03-05', totalPnl: 280 },
   ]);
   const st = C.tradingStats();
-  assert.equal(st.period.day.best.amount, 250);   // 03-04 大漲
-  assert.equal(st.period.day.best.date, '2026-03-04');
-  assert.equal(st.period.day.worst.amount, -50);  // 03-03 大跌
-  assert.equal(st.period.day.worst.date, '2026-03-03');
+  assert.equal(st.period.all.day.best.amount, 250);   // 03-04 大漲
+  assert.equal(st.period.all.day.best.date, '2026-03-04');
+  assert.equal(st.period.all.day.worst.amount, -50);  // 03-03 大跌
+  assert.equal(st.period.all.day.worst.date, '2026-03-03');
+  assert.ok(!('year' in st.period.thisYear));         // 今年不含年度
+});
+
+test('全部上漲 → 最大虧損為 null（虧損必須為負）', () => {
+  S.setSnapshots([
+    { date: '2026-03-01', totalPnl: 0 },
+    { date: '2026-03-02', totalPnl: 100 },
+    { date: '2026-03-03', totalPnl: 250 },
+  ]);
+  const st = C.tradingStats();
+  assert.ok(st.period.all.day.best);          // 有獲利
+  assert.equal(st.period.all.day.worst, null); // 無虧損 → null
+});
+
+test('賣出全賺 → 最賠一筆為 null；持倉全賺 → 虧損王 null', () => {
+  S.setRealized([{ id: '1', symbol: '2330', realizedPnl: 5000, time: T('2026-05-01') }]);
+  const st = C.tradingStats();
+  assert.equal(st.bestTrade.symbol, '2330');
+  assert.equal(st.worstTrade, null);
 });
 
 test('單筆交易之最：最賺 / 最賠（依 realizedPnl）', () => {

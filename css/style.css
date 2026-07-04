@@ -359,6 +359,10 @@ input, select { font-family: inherit; font-size: 15px; }
 /* ---- 歷史 · 統計頁 ---- */
 .stats-card { padding: 14px 16px; }
 .stats-title { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+.stats-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.stats-head .stats-title { margin-bottom: 0; }
+.stats-head .seg { font-size: 12px; }
+.stats-head .seg-btn { padding: 4px 12px; font-size: 12px; }
 .perf-grid { display: grid; grid-template-columns: 0.8fr 1.2fr 1.2fr; gap: 12px 8px; align-items: center; }
 .perf-grid .pg-head { font-size: 11px; color: var(--sub); text-align: right; }
 .pg-lbl { font-size: 13px; font-weight: 600; }

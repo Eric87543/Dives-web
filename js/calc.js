@@ -496,29 +496,32 @@ App.Calc = (function () {
     const rate = S.getFxRate() || 31.5;
     const weekKey = iso => { const p = iso.split('-').map(Number); const d = new Date(Date.UTC(p[0], p[1] - 1, p[2], 12)); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
     const keyOf = (iso, g) => g === 'day' ? iso : g === 'week' ? weekKey(iso) : g === 'month' ? iso.slice(0, 7) : iso.slice(0, 4);
-    // 區間 totalPnl 變化的極值（全歷史）
-    const periodExtremes = g => {
+    // 區間 totalPnl 變化的極值（獲利取正、虧損取負；否則 null）
+    const periodExtremes = (subset, g) => {
       const map = new Map();
-      for (const s of snaps) map.set(keyOf(s.date, g), s); // 同桶取最後（chronological）
+      for (const s of subset) map.set(keyOf(s.date, g), s); // 同桶取最後（chronological）
       const arr = [...map.values()];
       let best = null, worst = null;
       for (let i = 1; i < arr.length; i++) {
         const chg = (arr[i].totalPnl || 0) - (arr[i - 1].totalPnl || 0);
-        if (!best || chg > best.amount) best = { date: arr[i].date, amount: chg };
-        if (!worst || chg < worst.amount) worst = { date: arr[i].date, amount: chg };
+        if (chg > 0 && (!best || chg > best.amount)) best = { date: arr[i].date, amount: chg };
+        if (chg < 0 && (!worst || chg < worst.amount)) worst = { date: arr[i].date, amount: chg };
       }
       return { best, worst };
     };
+    const periodsFor = (subset, grans) => { const o = {}; for (const g of grans) o[g] = periodExtremes(subset, g); return o; };
+    const curYear = U.isoDate().slice(0, 4);
+    const thisYearSnaps = snaps.filter(s => s.date.slice(0, 4) === curYear);
 
-    // 單筆交易之最
+    // 單筆交易之最（最賺取正、最賠取負）
     let bestTrade = null, worstTrade = null;
     for (const r of S.getRealized()) {
       const rec = { symbol: r.symbol, amount: r.realizedPnl, date: U.isoDate(new Date(r.time)) };
-      if (!bestTrade || r.realizedPnl > bestTrade.amount) bestTrade = rec;
-      if (!worstTrade || r.realizedPnl < worstTrade.amount) worstTrade = rec;
+      if (r.realizedPnl > 0 && (!bestTrade || r.realizedPnl > bestTrade.amount)) bestTrade = rec;
+      if (r.realizedPnl < 0 && (!worstTrade || r.realizedPnl < worstTrade.amount)) worstTrade = rec;
     }
 
-    // 目前持倉之最（未實現，換算 TWD）
+    // 目前持倉之最（未實現，換算 TWD；獲利王取正、虧損王取負）
     const isUsd = m => { const k = U.normalizeMarketKey(m); return k === U.Market.us || k === U.Market.crypto; };
     let topGain = null, topLoss = null, topPct = null;
     for (const p of buildPositions()) {
@@ -526,13 +529,16 @@ App.Calc = (function () {
       const amt = p.unrealizedPnl * (isUsd(p.market) ? rate : 1);
       const pct = p.cost > 1e-9 ? p.unrealizedPnl / p.cost * 100 : 0;
       const rec = { symbol: p.symbol, name: p.name, amount: amt, pct };
-      if (!topGain || amt > topGain.amount) topGain = rec;
-      if (!topLoss || amt < topLoss.amount) topLoss = rec;
+      if (amt > 0 && (!topGain || amt > topGain.amount)) topGain = rec;
+      if (amt < 0 && (!topLoss || amt < topLoss.amount)) topLoss = rec;
       if (!topPct || pct > topPct.pct) topPct = rec;
     }
 
     return {
-      period: { day: periodExtremes('day'), week: periodExtremes('week'), month: periodExtremes('month'), year: periodExtremes('year') },
+      period: {
+        thisYear: periodsFor(thisYearSnaps, ['day', 'week', 'month']),
+        all: periodsFor(snaps, ['day', 'week', 'month', 'year']),
+      },
       bestTrade, worstTrade, topGain, topLoss, topPct,
     };
   }

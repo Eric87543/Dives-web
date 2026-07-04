@@ -164,7 +164,7 @@ App.Views = (function () {
   }
 
   /* ===================== 歷史 ===================== */
-  const hist = { tab: 'tx', range: 'ytd', txFilter: 'all', search: '', chart: 'alloc' };
+  const hist = { tab: 'tx', range: 'ytd', txFilter: 'all', search: '', chart: 'alloc', statScope: 'thisYear' };
   const RANGES = [['1m', '1M'], ['3m', '3M'], ['6m', '6M'], ['ytd', 'YTD'], ['1y', '1Y'], ['all', '全部']];
   // 趨勢圖表種類
   const HIST_CHARTS = [['alloc', '倉位'], ['net', '淨資產'], ['cash', '流動資金'], ['liab', '負債']];
@@ -205,11 +205,15 @@ App.Views = (function () {
       return g === 'month' ? `${p[0]}/${+p[1]}` : g === 'year' ? p[0] : `${+p[1]}/${+p[2]}`;
     };
 
-    // 區間表（期間 / 最大獲利 / 最大虧損）
-    const PERIODS = [['day', '單日'], ['week', '單週'], ['month', '單月'], ['year', '年度']];
+    // 區間表（今年/歷史切換；今年只到單月，歷史含年度）
+    const scope = hist.statScope;
+    const pdata = st.period[scope];
+    const PERIODS = scope === 'all'
+      ? [['day', '單日'], ['week', '單週'], ['month', '單月'], ['year', '年度']]
+      : [['day', '單日'], ['week', '單週'], ['month', '單月']];
     const pcell = (g, e) => e ? `<div class="pg-amt" style="color:${col(e.amount)}">${sf(e.amount)}</div><div class="pg-date">${pdate(g, e.date)}</div>` : '<span class="pg-none">—</span>';
     const periodGrid = PERIODS.map(([g, label]) =>
-      `<div class="pg-lbl">${label}</div><div class="pg-cell">${pcell(g, st.period[g].best)}</div><div class="pg-cell">${pcell(g, st.period[g].worst)}</div>`
+      `<div class="pg-lbl">${label}</div><div class="pg-cell">${pcell(g, pdata[g].best)}</div><div class="pg-cell">${pcell(g, pdata[g].worst)}</div>`
     ).join('');
 
     // 單筆交易 / 持倉 之最：一列（左標籤、右金額+副標）
@@ -225,7 +229,10 @@ App.Views = (function () {
 
     scrollEl.innerHTML = `
       <div class="card stats-card">
-        <div class="stats-title">區間獲利之最</div>
+        <div class="stats-head">
+          <div class="stats-title">區間獲利之最</div>
+          <div class="seg" id="stat-scope">${seg('thisYear', '今年', scope)}${seg('all', '歷史', scope)}</div>
+        </div>
         <div class="perf-grid">
           <div class="pg-head"></div><div class="pg-head">最大獲利</div><div class="pg-head">最大虧損</div>
           ${periodGrid}
@@ -244,6 +251,8 @@ App.Views = (function () {
       </div>
       <div class="set-hint" style="text-align:center;padding:8px 16px">區間獲利以每日累計損益變化計算，需累積一段時間的每日快照</div>
     `;
+    scrollEl.querySelectorAll('#stat-scope .seg-btn').forEach(b =>
+      b.addEventListener('click', () => { hist.statScope = b.dataset.v; histStats(fixedEl, scrollEl); }));
   }
   function seg2(v, label, cur) { return `<button class="seg-btn ${cur === v ? 'active' : ''}" data-v="${v}">${label}</button>`; }
 
