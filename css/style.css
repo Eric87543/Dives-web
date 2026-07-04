@@ -165,6 +165,8 @@ input, select { font-family: inherit; font-size: 15px; }
 .search { width: 100%; margin-bottom: 10px; }
 .tx-list { padding: 4px 0; }
 .tx-row { display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 14px; border-bottom: 1px solid var(--divider); overflow: hidden; }
+.tx-row.has-pnl { height: 72px; }
+.tx-pnl { font-size: 11px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
 .tx-row:last-child { border-bottom: none; }
 .tx-row:active { background: var(--soft); }
 .tx-meta { white-space: nowrap; }

@@ -279,11 +279,25 @@ App.Views = (function () {
     </div>
     <input class="input search" id="tx-search" placeholder="搜尋代碼或名稱" value="${hist.search}">`;
 
+    // 賣出的已實現損益：以 symbol@time 對應
+    const rzByKey = {};
+    for (const r of S.getRealized()) rzByKey[r.symbol + '@' + r.time] = r;
+
     let listHtml = `<div class="card tx-list">`;
     if (!txs.length) listHtml += `<div class="empty">無交易紀錄</div>`;
     for (const t of txs) {
       const name = mmap[t.symbol]?.name || t.symbol;
-      listHtml += `<div class="tx-row" data-id="${t.id}">
+      // 賣出 → 顯示獲利與獲利比例
+      let profitHtml = '';
+      if (t.type === 'SELL') {
+        const rz = rzByKey[t.symbol + '@' + t.time];
+        if (rz) {
+          const cost = rz.avgCost * rz.shares;
+          const pct = cost > 1e-9 ? rz.realizedPnl / cost * 100 : 0;
+          profitHtml = `<div class="tx-pnl" style="color:${UI.pnlColor(rz.realizedPnl)}">${U.fmtBannerSigned(rz.realizedPnl)} (${U.fmtPct(pct)})</div>`;
+        }
+      }
+      listHtml += `<div class="tx-row ${profitHtml ? 'has-pnl' : ''}" data-id="${t.id}">
         <span class="tx-type ${t.type === 'BUY' ? 'buy' : 'sell'}">${t.type === 'BUY' ? '買入' : '賣出'}</span>
         <div class="tx-main">
           <div class="tx-sym">${t.symbol} <span class="h-name">${name}</span></div>
@@ -291,6 +305,7 @@ App.Views = (function () {
         </div>
         <div class="tx-meta">
           <div class="tx-amt">${U.fmtKMBB(t.shares * t.price)}</div>
+          ${profitHtml}
           <div class="tx-date">${U.isoDate(new Date(t.time))}</div>
         </div>
       </div>`;
@@ -556,15 +571,16 @@ App.Views = (function () {
     const grossAssets = sum.cashTwd + sum.investTwd;
     const pctOfAssets = v => grossAssets > 1e-9 ? v / grossAssets * 100 : 0;
 
-    // 佔比環形圈（依類別上色、圈內顯示百分比）
+    // 佔比環形圈（依類別上色、圈內顯示百分比；放大以容納 100%）
     function pctRing(pct, cc, ink) {
       const p = Math.max(0, Math.min(100, pct || 0));
       const r = 15.5, C = 2 * Math.PI * r, off = C * (1 - p / 100);
-      return `<svg class="cat-ring" viewBox="0 0 36 36" width="36" height="36" aria-hidden="true">
-        <circle cx="18" cy="18" r="${r}" fill="none" stroke="rgba(0,0,0,0.07)" stroke-width="3.2"/>
-        <circle cx="18" cy="18" r="${r}" fill="none" stroke="${cc}" stroke-width="3.2" stroke-linecap="round"
+      const fs = Math.round(pct) >= 100 ? 9.5 : 11; // 三位數縮小字級
+      return `<svg class="cat-ring" viewBox="0 0 36 36" width="42" height="42" aria-hidden="true">
+        <circle cx="18" cy="18" r="${r}" fill="none" stroke="rgba(0,0,0,0.07)" stroke-width="3"/>
+        <circle cx="18" cy="18" r="${r}" fill="none" stroke="${cc}" stroke-width="3" stroke-linecap="round"
           stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 18 18)"/>
-        <text x="18" y="18" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="700" fill="${ink}">${Math.round(pct)}%</text>
+        <text x="18" y="18" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="700" fill="${ink}">${Math.round(pct)}%</text>
       </svg>`;
     }
 
