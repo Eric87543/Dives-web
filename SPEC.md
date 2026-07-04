@@ -166,7 +166,8 @@ netWorthBuckets(snapshots, gran, cashLiab) -> Bucket[]
 - **I5**：`guessMarketBySymbol('00679B')=tse`、`guessMarketBySymbol('AAPL')=us`、`guessMarketBySymbol('2330')=tse`（§2.2）。
 - **I6**：CSV 匯出→匯入為 round-trip：交易筆數與關鍵欄位一致（§9）。
 - **I7**：手續費防呆 —— `findAbsurdFees(txs)` 找出 `fee > 成交金額×25%` 的交易（fee 計入成本，誤填天文數字會毒掉報表與重建歷史）；`importCsv` 回傳 `feeWarnSymbols`，匯入與重建歷史時以 toast 警告。
-- **I8**：群組走勢 —— `buildGroupSeries(symbols, hist, fxRate)` 依交易 + 成員歷史收盤（carry-forward）回推群組每日市值 `[{date, mv}]`（美股/加密 ×匯率；賣光歸零；無歷史價以成本估）。資產→群組詳情→走勢 icon 進入走勢頁，折線（走勢）/長條（漲幅）× 天/週/月/年，分桶重用 `netWorthBuckets`。
+- **I8**：群組走勢 —— `buildGroupSeries(symbols, hist, fxRate)` 依交易 + 成員歷史收盤（carry-forward）回推群組每日 `{mv, cost}`（美股/加密 ×匯率；賣光歸零；無歷史價以成本估）。資產→群組詳情→走勢 icon：折線（市值實線+成本虛線）/ 長條（投入、持倉盈虧兩圖）× 天/週/月/年。
+- **I9**：統計（歷史→統計 tab）—— `tradingStats()` 回傳：`period.{day,week,month,year}.{best,worst}`（以 totalPnl 期間變化，全歷史取極值）、`bestTrade/worstTrade`（realizedPnl 極值）、`topGain/topLoss/topPct`（現有持倉未實現 TWD/報酬率極值）。
 
 ---
 

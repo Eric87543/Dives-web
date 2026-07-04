@@ -177,7 +177,7 @@ App.Views = (function () {
   function history(root) {
     root.innerHTML = `<div class="page">
       <div class="page-top">
-        <div class="seg seg-wide" id="hist-tab">${seg2('trend', '趨勢', hist.tab)}${seg2('tx', '交易紀錄', hist.tab)}</div>
+        <div class="seg seg-wide" id="hist-tab">${seg2('trend', '趨勢', hist.tab)}${seg2('tx', '交易紀錄', hist.tab)}${seg2('stats', '統計', hist.tab)}</div>
         <div id="hist-fixed"></div>
       </div>
       <div class="page-list" id="hist-scroll"></div>
@@ -186,7 +186,64 @@ App.Views = (function () {
       b.addEventListener('click', () => { hist.tab = b.dataset.v; history(root); }));
     const fixedEl = root.querySelector('#hist-fixed');
     const scrollEl = root.querySelector('#hist-scroll');
-    if (hist.tab === 'trend') histTrend(fixedEl, scrollEl); else histTx(fixedEl, scrollEl);
+    if (hist.tab === 'trend') histTrend(fixedEl, scrollEl);
+    else if (hist.tab === 'stats') histStats(fixedEl, scrollEl);
+    else histTx(fixedEl, scrollEl);
+  }
+
+  // 統計頁：區間 / 單筆交易 / 目前持倉 之最
+  function histStats(fixedEl, scrollEl) {
+    fixedEl.innerHTML = '';
+    const st = C.tradingStats();
+    const sf = v => v == null ? '—' : (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
+    const col = v => UI.pnlColor(v || 0);
+    const pctTxt = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+    // 區間日期文字：日=M/D、週=該週 M/D、月=YYYY/M、年=YYYY
+    const pdate = (g, iso) => {
+      if (!iso) return '';
+      const p = iso.split('-');
+      return g === 'month' ? `${p[0]}/${+p[1]}` : g === 'year' ? p[0] : `${+p[1]}/${+p[2]}`;
+    };
+
+    // 區間表（期間 / 最大獲利 / 最大虧損）
+    const PERIODS = [['day', '單日'], ['week', '單週'], ['month', '單月'], ['year', '年度']];
+    const pcell = (g, e) => e ? `<div class="pg-amt" style="color:${col(e.amount)}">${sf(e.amount)}</div><div class="pg-date">${pdate(g, e.date)}</div>` : '<span class="pg-none">—</span>';
+    const periodGrid = PERIODS.map(([g, label]) =>
+      `<div class="pg-lbl">${label}</div><div class="pg-cell">${pcell(g, st.period[g].best)}</div><div class="pg-cell">${pcell(g, st.period[g].worst)}</div>`
+    ).join('');
+
+    // 單筆交易 / 持倉 之最：一列（左標籤、右金額+副標）
+    const row = (label, e, opts) => {
+      opts = opts || {};
+      if (!e) return `<div class="stat-row"><div class="stat-lbl">${label}</div><div class="stat-val"><div class="stat-amt" style="color:var(--sub)">—</div></div></div>`;
+      const amt = opts.pctMain ? pctTxt(e.pct) : sf(e.amount);
+      const sub = opts.trade ? `${e.symbol} · ${e.date}`
+        : `${e.symbol}${e.name && e.name !== e.symbol ? ' ' + e.name : ''} · ${opts.pctMain ? sf(e.amount) : pctTxt(e.pct)}`;
+      return `<div class="stat-row"><div class="stat-lbl">${label}</div>
+        <div class="stat-val"><div class="stat-amt" style="color:${col(opts.pctMain ? e.pct : e.amount)}">${amt}</div><div class="stat-sub">${sub}</div></div></div>`;
+    };
+
+    scrollEl.innerHTML = `
+      <div class="card stats-card">
+        <div class="stats-title">區間獲利之最</div>
+        <div class="perf-grid">
+          <div class="pg-head"></div><div class="pg-head">最大獲利</div><div class="pg-head">最大虧損</div>
+          ${periodGrid}
+        </div>
+      </div>
+      <div class="card stats-card">
+        <div class="stats-title">單筆交易之最</div>
+        ${row('最賺一筆', st.bestTrade, { trade: true })}
+        ${row('最賠一筆', st.worstTrade, { trade: true })}
+      </div>
+      <div class="card stats-card">
+        <div class="stats-title">目前持倉之最</div>
+        ${row('未實現獲利王', st.topGain)}
+        ${row('未實現虧損王', st.topLoss)}
+        ${row('報酬率最高', st.topPct, { pctMain: true })}
+      </div>
+      <div class="set-hint" style="text-align:center;padding:8px 16px">區間獲利以每日累計損益變化計算，需累積一段時間的每日快照</div>
+    `;
   }
   function seg2(v, label, cur) { return `<button class="seg-btn ${cur === v ? 'active' : ''}" data-v="${v}">${label}</button>`; }
 
@@ -510,8 +567,10 @@ App.Views = (function () {
 
   /* ===================== 資產（淨資產）===================== */
   // 手風琴：一次只展開一類（cash|invest|liab）；detailGroup = 群組詳情頁
-  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day' },
+  const as = { openCat: null, detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day' },
     groupTrend: null, gt: { metric: 'line', gran: 'day' }, gtCache: null };
+  // 點「資產」tab 時回到資產首頁（退出群組/走勢/淨資產詳情）
+  function resetAssetsNav() { as.detailGroup = null; as.groupTrend = null; as.nwDetail = null; }
   const AS_PURPLE = '#6D5FD5';
 
   function mvTwdOf(p, rate) {
@@ -1514,5 +1573,5 @@ App.Views = (function () {
   }
   function isUsSym(s) { return U.guessMarketBySymbol(U.sanitizeSymbol(s)) === U.Market.us; }
 
-  return { portfolio, history, report, assets, settings, openTxForm };
+  return { portfolio, history, report, assets, settings, openTxForm, resetAssetsNav };
 })();

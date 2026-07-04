@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v52';
+  App.VERSION = 'v53';
 
   let currentTab = 'assets';
   const TABS = [
@@ -180,9 +180,12 @@
 
   // 初始化
   function init() {
-    // tab bar 事件（頂欄已移除：⟳ 改由各頁右上角提供，見 views 的 bindRefresh）
+    // tab bar 事件（點資產 tab 時退回資產首頁）
     document.querySelectorAll('.tab-btn').forEach(b =>
-      b.addEventListener('click', () => switchTab(b.dataset.tab)));
+      b.addEventListener('click', () => {
+        if (b.dataset.tab === 'assets' && V.resetAssetsNav) V.resetAssetsNav();
+        switchTab(b.dataset.tab);
+      }));
 
     // 從快取立即顯示
     renderCurrent();
