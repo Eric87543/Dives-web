@@ -367,6 +367,7 @@ App.Views = (function () {
 
   function histTx(fixedEl, scrollEl) {
     const mmap = S.metaMap();
+    const rate = S.getFxRate() || 31.5;
     let txs = S.getTransactions().slice().sort((a, b) => b.time - a.time);
     txs = txs.filter(t => {
       const m = U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol));
@@ -398,9 +399,15 @@ App.Views = (function () {
       if (t.type === 'SELL') {
         const rz = rzByKey[t.symbol + '@' + t.time];
         if (rz) {
+          const mk = U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol));
+          const isUsd = mk === U.Market.us || mk === U.Market.crypto;
+          const toTwd = hist.txFilter === 'all';                 // 全部 → 一律台幣
+          const conv = (isUsd && toTwd) ? rate : 1;
+          const cur = (isUsd && !toTwd) ? '$' : 'NT$';
+          const pnl = rz.realizedPnl * conv;
           const cost = rz.avgCost * rz.shares;
-          const pct = cost > 1e-9 ? rz.realizedPnl / cost * 100 : 0;
-          profitHtml = `<div class="tx-pnl" style="color:${UI.pnlColor(rz.realizedPnl)}">${U.fmtBannerSigned(rz.realizedPnl)} (${U.fmtPct(pct)})</div>`;
+          const pct = cost > 1e-9 ? rz.realizedPnl / cost * 100 : 0; // 比例與幣別無關
+          profitHtml = `<div class="tx-pnl" style="color:${UI.pnlColor(pnl)}">${pnl >= 0 ? '+' : '−'}${cur} ${U.fmtKMBB(Math.abs(pnl))} (${U.fmtPct(pct)})</div>`;
         }
       }
       listHtml += `<div class="tx-row ${profitHtml ? 'has-pnl' : ''}" data-id="${t.id}">
