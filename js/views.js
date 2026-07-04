@@ -14,8 +14,17 @@ App.Views = (function () {
   // pf.open：各市場展開狀態（可同時展開多個）；null = 預設全展開。排序固定依市值（大→小）
   const pf = { open: null };
 
-  // 每頁右上角 ⟳（頂欄已移除）
-  function refreshBtnHtml() { return `<button class="ref-btn" id="refresh-btn" aria-label="重新整理">⟳</button>`; }
+  // 重新整理鈕（只用於資產/投資頁；置於 ＋ 的右上方）
+  function refreshBtnHtml() {
+    return `<button class="ref-btn" id="refresh-btn" aria-label="重新整理"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.7-3.3M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 3.3M20 19v-4h-4"/></svg></button>`;
+  }
+  // ＋ 按鈕外包一層，讓 ⟳ 疊在其右上角
+  function addWithRefreshHtml(addId, addLabel) {
+    return `<div class="add-wrap">
+      <button class="nw-add" id="${addId}" aria-label="${addLabel}">＋</button>
+      ${refreshBtnHtml()}
+    </div>`;
+  }
   function bindRefresh(root) {
     const b = root.querySelector('#refresh-btn');
     if (b) b.addEventListener('click', () => App.refresh(undefined, true));
@@ -52,8 +61,7 @@ App.Views = (function () {
         <div class="nw-day" style="color:${UI.pnlColor(day)}">${arrow} ${U.fmtWhole(Math.abs(day))} (${Math.abs(dayPct).toFixed(2)}%)</div>
       </div>
       <div class="nw-btns">
-        ${refreshBtnHtml()}
-        <button class="nw-add" id="pf-add-btn" aria-label="新增交易">＋</button>
+        ${addWithRefreshHtml('pf-add-btn', '新增交易')}
       </div>
     </div>`;
 
@@ -169,17 +177,13 @@ App.Views = (function () {
   function history(root) {
     root.innerHTML = `<div class="page">
       <div class="page-top">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-          <div class="seg seg-wide" id="hist-tab" style="flex:1;width:auto;margin-bottom:0">${seg2('trend', '趨勢', hist.tab)}${seg2('tx', '交易紀錄', hist.tab)}</div>
-          ${refreshBtnHtml()}
-        </div>
+        <div class="seg seg-wide" id="hist-tab">${seg2('trend', '趨勢', hist.tab)}${seg2('tx', '交易紀錄', hist.tab)}</div>
         <div id="hist-fixed"></div>
       </div>
       <div class="page-list" id="hist-scroll"></div>
     </div>`;
     root.querySelectorAll('#hist-tab .seg-btn').forEach(b =>
       b.addEventListener('click', () => { hist.tab = b.dataset.v; history(root); }));
-    bindRefresh(root);
     const fixedEl = root.querySelector('#hist-fixed');
     const scrollEl = root.querySelector('#hist-scroll');
     if (hist.tab === 'trend') histTrend(fixedEl, scrollEl); else histTx(fixedEl, scrollEl);
@@ -367,11 +371,8 @@ App.Views = (function () {
     const reports = periodReports();
     const years = [...new Set(S.getSnapshots().map(s => +s.date.slice(0, 4)))].sort();
 
-    let html = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-      <div class="seg seg-wide" id="rep-mode" style="flex:1;width:auto;margin-bottom:0">
-        ${seg3('yearly', '年度', rep.mode)}${seg3('monthly', '月度', rep.mode)}
-      </div>
-      ${refreshBtnHtml()}
+    let html = `<div class="seg seg-wide" id="rep-mode">
+      ${seg3('yearly', '年度', rep.mode)}${seg3('monthly', '月度', rep.mode)}
     </div>`;
 
     if (rep.mode === 'monthly' && years.length) {
@@ -486,7 +487,6 @@ App.Views = (function () {
   }
 
   function bindReportTop(root, years) {
-    bindRefresh(root);
     root.querySelectorAll('#rep-mode .seg-btn').forEach(b =>
       b.addEventListener('click', () => { rep.mode = b.dataset.v; report(root); }));
     root.querySelectorAll('#year-chips .chip').forEach(b =>
@@ -539,8 +539,7 @@ App.Views = (function () {
         <div class="nw-day" style="color:${UI.pnlColor(dayChange)}">${dayArrow} ${U.fmtWhole(Math.abs(dayChange))} (${Math.abs(dayPct).toFixed(2)}%)</div>
       </div>
       <div class="nw-btns">
-        ${refreshBtnHtml()}
-        <button class="nw-add" id="as-add-btn" aria-label="新增">＋</button>
+        ${addWithRefreshHtml('as-add-btn', '新增')}
       </div>
     </div>`;
 
@@ -1079,7 +1078,6 @@ App.Views = (function () {
     const lastTs = S.getPricesTs();
     const rate = S.getFxRate();
     let html = `
-    <div class="tools-row">${refreshBtnHtml()}</div>
     <div class="card setting-card">
       <div class="set-title">雲端同步（GitHub Gist）</div>
       <div class="set-row">
@@ -1149,7 +1147,6 @@ App.Views = (function () {
     </div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
 
-    bindRefresh(root);
     // ── 雲端同步 ──
     const syncStatusEl = root.querySelector('#sync-status');
     function fmtSyncStatus(s) {
