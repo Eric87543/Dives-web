@@ -44,13 +44,13 @@ input, select { font-family: inherit; font-size: 15px; }
   left: 0; right: 0; display: flex; flex-direction: column; overflow: hidden;
 }
 /* 每頁右上角的重新整理鈕 */
-/* ＋ 右上角的重新整理鈕 */
-.add-wrap { position: relative; }
-.ref-btn { position: absolute; top: -12px; right: -10px; width: 32px; height: 32px; border-radius: 50%; background: var(--card); border: 1px solid var(--divider); color: var(--primary); display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.1); z-index: 2; }
+/* ＋ 上方的重新整理鈕（垂直堆疊、右對齊，不重疊）*/
+.add-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.ref-btn { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--card); border: 1px solid var(--divider); color: var(--primary); display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 .ref-btn svg { width: 17px; height: 17px; }
 .ref-btn:active { background: var(--soft); }
 .ref-btn.spin svg { animation: spin 0.8s linear infinite; }
-.nw-btns { display: flex; align-items: center; padding-top: 6px; padding-right: 2px; }
+.nw-btns { display: flex; align-items: center; }
 /* 上方固定 + 下方列表獨立捲動（持倉 / 歷史） */
 .page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .page-top { flex: none; padding: 12px 14px 0; }

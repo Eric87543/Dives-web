@@ -18,11 +18,11 @@ App.Views = (function () {
   function refreshBtnHtml() {
     return `<button class="ref-btn" id="refresh-btn" aria-label="重新整理"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.7-3.3M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 3.3M20 19v-4h-4"/></svg></button>`;
   }
-  // ＋ 按鈕外包一層，讓 ⟳ 疊在其右上角
+  // ＋ 上方放 ⟳（垂直堆疊、右對齊，不重疊）
   function addWithRefreshHtml(addId, addLabel) {
     return `<div class="add-wrap">
-      <button class="nw-add" id="${addId}" aria-label="${addLabel}">＋</button>
       ${refreshBtnHtml()}
+      <button class="nw-add" id="${addId}" aria-label="${addLabel}">＋</button>
     </div>`;
   }
   function bindRefresh(root) {
