@@ -30,6 +30,46 @@ App.Views = (function () {
     if (b) b.addEventListener('click', () => App.refresh(undefined, true));
   }
 
+  // 上拉到底 → 觸發更新（資產/投資頁）
+  function attachPullUpRefresh(scrollEl) {
+    if (!scrollEl) return;
+    const ind = document.createElement('div');
+    ind.className = 'pull-refresh';
+    ind.innerHTML = `<span class="pr-icon">↑</span><span class="pr-text">上拉更新</span>`;
+    scrollEl.appendChild(ind);
+    const TH = 66;
+    let startY = 0, pulling = false, dist = 0;
+    const atBottom = () => scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - ind.offsetHeight - 2;
+    scrollEl.addEventListener('touchstart', e => {
+      pulling = atBottom();
+      if (pulling) { startY = e.touches[0].clientY; dist = 0; }
+    }, { passive: true });
+    scrollEl.addEventListener('touchmove', e => {
+      if (!pulling) return;
+      dist = startY - e.touches[0].clientY; // 正 = 上拉
+      if (dist > 0) {
+        e.preventDefault();
+        ind.style.height = Math.min(dist * 0.6, 56) + 'px';
+        const ready = dist >= TH;
+        ind.classList.toggle('ready', ready);
+        ind.querySelector('.pr-text').textContent = ready ? '放開更新' : '上拉更新';
+      } else { ind.style.height = '0px'; ind.classList.remove('ready'); }
+    }, { passive: false });
+    const end = () => {
+      if (!pulling) return;
+      pulling = false;
+      if (dist >= TH) {
+        ind.querySelector('.pr-text').textContent = '更新中…';
+        ind.querySelector('.pr-icon').textContent = '⟳';
+        ind.style.height = '44px';
+        App.refresh(undefined, true); // 完成後 renderCurrent 會重繪，指示器隨之消失
+      } else { ind.style.height = '0px'; ind.classList.remove('ready'); }
+      dist = 0;
+    };
+    scrollEl.addEventListener('touchend', end);
+    scrollEl.addEventListener('touchcancel', end);
+  }
+
   function portfolio(root) {
     const positions = C.buildPositions();
     const summary = C.buildSummary(positions);
@@ -120,6 +160,7 @@ App.Views = (function () {
 
     // 上方（hero+統計+排序）固定，市場卡清單獨立捲動
     root.innerHTML = `<div class="page"><div class="page-top">${topHtml}</div><div class="page-list">${html}</div></div>`;
+    attachPullUpRefresh(root.querySelector('.page-list'));
 
     // 事件
     bindRefresh(root);
@@ -249,7 +290,6 @@ App.Views = (function () {
         ${row('未實現虧損王', st.topLoss)}
         ${row('報酬率最高', st.topPct, { pctMain: true })}
       </div>
-      <div class="set-hint" style="text-align:center;padding:8px 16px">區間獲利以每日累計損益變化計算，需累積一段時間的每日快照</div>
     `;
     scrollEl.querySelectorAll('#stat-scope .seg-btn').forEach(b =>
       b.addEventListener('click', () => { hist.statScope = b.dataset.v; histStats(fixedEl, scrollEl); }));
@@ -744,6 +784,7 @@ App.Views = (function () {
     html += `</div>`;
 
     root.innerHTML = `<div class="page-full">${html}</div>`;
+    attachPullUpRefresh(root.querySelector('.page-full'));
 
     // ── 事件 ─────────────────────────────────────────────
     root.querySelectorAll('.as-head').forEach(h => h.addEventListener('click', () => {

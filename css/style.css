@@ -356,6 +356,11 @@ input, select { font-family: inherit; font-size: 15px; }
 .gt-sum b { color: var(--text); font-weight: 700; }
 .gt-subtitle { font-size: 13px; font-weight: 700; color: var(--text); margin: 4px 2px 2px; }
 
+/* ---- 上拉更新指示器 ---- */
+.pull-refresh { height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; color: var(--sub); transition: height .2s; }
+.pull-refresh .pr-icon { display: inline-block; transition: transform .2s; }
+.pull-refresh.ready .pr-icon { transform: rotate(180deg); }
+
 /* ---- 歷史 · 統計頁 ---- */
 .stats-card { padding: 14px 16px; }
 .stats-title { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
