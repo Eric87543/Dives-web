@@ -3,15 +3,15 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v66';
+  App.VERSION = 'v67';
 
-  const TAB_ORDER = ['assets', 'portfolio', 'history', 'report', 'settings'];
+  const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
   let currentTab = (() => { try { return sessionStorage.getItem('dives_tab') || 'assets'; } catch (e) { return 'assets'; } })();
   const TABS = [
     { id: 'portfolio', label: '持倉', icon: '📊' },
-    { id: 'history', label: '歷史', icon: '📈' },
     { id: 'report', label: '報表', icon: '📋' },
+    { id: 'history', label: '歷史', icon: '📈' },
     { id: 'settings', label: '設定', icon: '⚙️' },
   ];
 
