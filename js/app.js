@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v58';
+  App.VERSION = 'v59';
 
   const TAB_ORDER = ['assets', 'portfolio', 'history', 'report', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -15,6 +15,7 @@
     { id: 'settings', label: '設定', icon: '⚙️' },
   ];
 
+  let slideDir = null; // 換分頁時的滑入方向（next=從右、prev=從左）
   function renderCurrent() {
     const root = document.getElementById('view');
     if (!root) return;
@@ -26,13 +27,24 @@
       case 'report': V.report(root); break;
       case 'settings': V.settings(root); break;
     }
+    // 換分頁 → 讓新內容依方向滑入
+    if (slideDir && root.firstElementChild) {
+      root.firstElementChild.classList.add(slideDir === 'next' ? 'tab-slide-next' : 'tab-slide-prev');
+    }
+    slideDir = null;
     // tab bar 高亮
     document.querySelectorAll('.tab-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === currentTab));
     updateHeader();
   }
 
-  function switchTab(id) { currentTab = id; try { sessionStorage.setItem('dives_tab', id); } catch (e) {} renderCurrent(); }
+  function switchTab(id) {
+    const from = TAB_ORDER.indexOf(currentTab), to = TAB_ORDER.indexOf(id);
+    slideDir = (from >= 0 && to >= 0 && to !== from) ? (to > from ? 'next' : 'prev') : null;
+    currentTab = id;
+    try { sessionStorage.setItem('dives_tab', id); } catch (e) {}
+    renderCurrent();
+  }
   function goTab(id) { if (id === 'assets' && V.resetAssetsNav) V.resetAssetsNav(); switchTab(id); }
 
   // 左右滑切換分頁（水平滑動明顯大於垂直、且非圖表/橫向捲動元件）
