@@ -1384,7 +1384,9 @@ App.Views = (function () {
       el.querySelector('#lock-enable').addEventListener('click', () => openLockSetup(false, () => settings(root)));
       return;
     }
-    const faceAvail = await A.isWebAuthnAvailable();
+    // 優先用已快取的可用性（同步）→ 一次填完，避免鎖定卡先空再撐開造成閃動
+    let faceAvail = A.webAuthnAvailableSync ? A.webAuthnAvailableSync() : null;
+    if (faceAvail === null) faceAvail = await A.isWebAuthnAvailable();
     const hasFace = A.hasWebAuthn();
     const t = A.getTimeout();
     el.innerHTML = `

@@ -16,6 +16,7 @@ App.Auth = (function () {
 
   let unlocked = false;
   let hiddenAt = 0;
+  let webAuthnAvail = null; // 快取生物辨識可用性（一次會話內不變；避免設定頁非同步造成閃動）
 
   // ---- 小工具 ----
   function rand(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return a; }
@@ -34,11 +35,14 @@ App.Auth = (function () {
   function pinLen() { return +localStorage.getItem(K.pinLen) || 4; }
 
   async function isWebAuthnAvailable() {
+    if (webAuthnAvail !== null) return webAuthnAvail;
     try {
-      return !!(window.PublicKeyCredential &&
+      webAuthnAvail = !!(window.PublicKeyCredential &&
         await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
-    } catch (e) { return false; }
+    } catch (e) { webAuthnAvail = false; }
+    return webAuthnAvail;
   }
+  function webAuthnAvailableSync() { return webAuthnAvail; } // 已快取回 true/false；未知回 null
 
   // ---- PIN ----
   async function setPin(pin) {
@@ -190,8 +194,10 @@ App.Auth = (function () {
     if (cb) cb();
   }
 
+  isWebAuthnAvailable(); // 預熱快取：開 App 即查一次，設定頁渲染時可同步取用、不再閃動
+
   return {
-    isEnabled, hasWebAuthn, isWebAuthnAvailable, getTimeout, setTimeout: setTimeout_,
+    isEnabled, hasWebAuthn, isWebAuthnAvailable, webAuthnAvailableSync, getTimeout, setTimeout: setTimeout_,
     setPin, verifyPin, registerWebAuthn, disableWebAuthn, tryFaceId,
     enable, disable, noteHidden, shouldRelock, showLock, unlock,
   };
