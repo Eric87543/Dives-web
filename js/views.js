@@ -30,29 +30,28 @@ App.Views = (function () {
     if (b) b.addEventListener('click', () => App.refresh(undefined, true));
   }
 
-  // 上拉到底 → 觸發更新（資產/投資頁）
-  function attachPullUpRefresh(scrollEl) {
+  // 頂端下拉 → 觸發更新（資產/投資頁，標準下拉刷新）
+  function attachPullRefresh(scrollEl) {
     if (!scrollEl) return;
     const ind = document.createElement('div');
     ind.className = 'pull-refresh';
-    ind.innerHTML = `<span class="pr-icon">↑</span><span class="pr-text">上拉更新</span>`;
-    scrollEl.appendChild(ind);
+    ind.innerHTML = `<span class="pr-icon">↓</span><span class="pr-text">下拉更新</span>`;
+    scrollEl.insertBefore(ind, scrollEl.firstChild); // 置於最上方
     const TH = 66;
     let startY = 0, pulling = false, dist = 0;
-    const atBottom = () => scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - ind.offsetHeight - 2;
     scrollEl.addEventListener('touchstart', e => {
-      pulling = atBottom();
+      pulling = scrollEl.scrollTop <= 0; // 捲到最上方才啟用
       if (pulling) { startY = e.touches[0].clientY; dist = 0; }
     }, { passive: true });
     scrollEl.addEventListener('touchmove', e => {
       if (!pulling) return;
-      dist = startY - e.touches[0].clientY; // 正 = 上拉
-      if (dist > 0) {
+      dist = e.touches[0].clientY - startY; // 正 = 下拉
+      if (dist > 0 && scrollEl.scrollTop <= 0) {
         e.preventDefault();
-        ind.style.height = Math.min(dist * 0.6, 56) + 'px';
+        ind.style.height = Math.min(dist * 0.5, 56) + 'px';
         const ready = dist >= TH;
         ind.classList.toggle('ready', ready);
-        ind.querySelector('.pr-text').textContent = ready ? '放開更新' : '上拉更新';
+        ind.querySelector('.pr-text').textContent = ready ? '放開更新' : '下拉更新';
       } else { ind.style.height = '0px'; ind.classList.remove('ready'); }
     }, { passive: false });
     const end = () => {
@@ -161,7 +160,7 @@ App.Views = (function () {
 
     // 上方（hero+統計+排序）固定，市場卡清單獨立捲動
     root.innerHTML = `<div class="page"><div class="page-top">${topHtml}</div><div class="page-list">${html}</div></div>`;
-    attachPullUpRefresh(root.querySelector('.page-list'));
+    attachPullRefresh(root.querySelector('.page-list'));
 
     // 事件
     bindRefresh(root);
@@ -797,7 +796,7 @@ App.Views = (function () {
     html += `</div>`;
 
     root.innerHTML = `<div class="page-full">${html}</div>`;
-    attachPullUpRefresh(root.querySelector('.page-full'));
+    attachPullRefresh(root.querySelector('.page-full'));
 
     // ── 事件 ─────────────────────────────────────────────
     root.querySelectorAll('.as-head').forEach(h => h.addEventListener('click', () => {
