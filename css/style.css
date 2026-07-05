@@ -323,7 +323,12 @@ input, select { font-family: inherit; font-size: 15px; }
 .cat-ring { flex: none; display: block; }
 .cat-ring text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .as-hchg { display: block; font-size: 11.5px; margin-top: 3px; text-align: right; white-space: nowrap; font-weight: 500; }
-.pf-row .as-sub { font-size: 10px; letter-spacing: -0.1px; }
+.pf-row .as-sub { font-size: 11.5px; }
+/* 投資列標題行：代碼 + 名稱(可縮) + 現價/日漲跌（現價移上來，避免第二行擠爆被截斷）*/
+.pf-title { display: flex; align-items: baseline; gap: 5px; white-space: normal; overflow: visible; text-overflow: clip; }
+.pf-title .pf-sym { flex: none; }
+.pf-title .pf-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-title .pf-price { flex: none; margin-left: 2px; font-size: 12px; font-weight: 400; color: var(--sub); }
 .pf-val { text-align: right; white-space: nowrap; }
 .pf-mv { font-size: 13.5px; font-weight: 700; }
 .pf-pnl { font-size: 11px; margin-top: 2px; }

@@ -149,8 +149,8 @@ App.Views = (function () {
           html += `<div class="as-row pf-row" data-sym="${p.symbol}">
             <span class="pct-badge sm" style="background:${M.color}">${fmtPctBadge(rp)}</span>
             <div class="as-main">
-              <div class="as-title">${p.symbol} <span class="h-name">${p.name !== p.symbol ? p.name : ''}</span></div>
-              <div class="as-sub">${U.formatShares(p.shares)}${shareUnit(p.market)} · 均 ${cur}${fp(p.avgCost)} · ${cur}${fp(price)}${chgHtml}</div>
+              <div class="as-title pf-title"><span class="pf-sym">${p.symbol}</span>${p.name !== p.symbol ? `<span class="h-name pf-name">${p.name}</span>` : ''}<span class="pf-price">${cur}${fp(price)}${chgHtml}</span></div>
+              <div class="as-sub">${U.formatShares(p.shares)}${shareUnit(p.market)} · 均 ${cur}${fp(p.avgCost)}</div>
             </div>
             <div class="pf-val">
               <div class="pf-mv">NT$ ${U.fmtKMBB(mvTwd(p))}</div>
