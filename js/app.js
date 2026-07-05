@@ -3,9 +3,11 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v57';
+  App.VERSION = 'v58';
 
-  let currentTab = 'assets';
+  const TAB_ORDER = ['assets', 'portfolio', 'history', 'report', 'settings'];
+  // 記住當前分頁，避免重新整理/下拉時跳回資產
+  let currentTab = (() => { try { return sessionStorage.getItem('dives_tab') || 'assets'; } catch (e) { return 'assets'; } })();
   const TABS = [
     { id: 'portfolio', label: '持倉', icon: '📊' },
     { id: 'history', label: '歷史', icon: '📈' },
@@ -30,7 +32,26 @@
     updateHeader();
   }
 
-  function switchTab(id) { currentTab = id; renderCurrent(); }
+  function switchTab(id) { currentTab = id; try { sessionStorage.setItem('dives_tab', id); } catch (e) {} renderCurrent(); }
+  function goTab(id) { if (id === 'assets' && V.resetAssetsNav) V.resetAssetsNav(); switchTab(id); }
+
+  // 左右滑切換分頁（水平滑動明顯大於垂直、且非圖表/橫向捲動元件）
+  function initSwipe() {
+    const view = document.getElementById('view');
+    if (!view) return;
+    let sx = 0, sy = 0, ignore = false;
+    view.addEventListener('touchstart', e => {
+      ignore = e.touches.length !== 1 || !!e.target.closest('.chart-host, .chips, input, select, textarea, .switch');
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+    }, { passive: true });
+    view.addEventListener('touchend', e => {
+      if (ignore) return;
+      const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return; // 需明顯水平
+      const i = TAB_ORDER.indexOf(currentTab), n = i + (dx < 0 ? 1 : -1); // 左滑=下一頁
+      if (n >= 0 && n < TAB_ORDER.length) goTab(TAB_ORDER[n]);
+    }, { passive: true });
+  }
 
   function updateHeader() {
     const ts = S.getPricesTs();
@@ -186,6 +207,9 @@
         if (b.dataset.tab === 'assets' && V.resetAssetsNav) V.resetAssetsNav();
         switchTab(b.dataset.tab);
       }));
+
+    // 左右滑切換分頁
+    initSwipe();
 
     // 從快取立即顯示
     renderCurrent();

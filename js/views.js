@@ -138,6 +138,7 @@ App.Views = (function () {
           const rp = totalAll > 1e-9 ? mvTwd(p) / totalAll * 100 : 0;
           const cur = M.key === 'tw' ? '' : '$';
           const price = p.lastPrice != null ? p.lastPrice : p.avgCost;
+          const fp = v => { const s = U.formatPrice(v); return s.endsWith('.00') ? s.slice(0, -3) : s; }; // 去除整數的 .00
           const chg = p.dailyChangePct;
           const chgHtml = chg != null ? ` <span style="color:${UI.pnlColor(chg)}">${chg >= 0 ? '▲' : '▼'}${Math.abs(chg).toFixed(2)}%</span>` : '';
           const pnlPct = p.cost > 1e-9 ? p.unrealizedPnl / p.cost * 100 : 0;
@@ -145,7 +146,7 @@ App.Views = (function () {
             <span class="pct-badge sm" style="background:${M.color}">${fmtPctBadge(rp)}</span>
             <div class="as-main">
               <div class="as-title">${p.symbol} <span class="h-name">${p.name !== p.symbol ? p.name : ''}</span></div>
-              <div class="as-sub">持有 ${U.formatShares(p.shares)}${shareUnit(p.market)} · ${cur}${U.formatPrice(price)}${chgHtml}</div>
+              <div class="as-sub">${U.formatShares(p.shares)}${shareUnit(p.market)} · 均 ${cur}${fp(p.avgCost)} · ${cur}${fp(price)}${chgHtml}</div>
             </div>
             <div class="pf-val">
               <div class="pf-mv">NT$ ${U.fmtKMBB(mvTwd(p))}</div>
