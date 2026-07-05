@@ -1257,7 +1257,7 @@ App.Views = (function () {
       <button class="btn btn-block btn-ghost" id="btn-rebuild" style="margin-top:8px">重建歷史走勢圖</button>
       <div class="set-hint">用交易紀錄 + 台股／美股歷史收盤，補回過去每日資產曲線</div>
       <button class="btn btn-block btn-ghost" id="btn-fixfee" style="margin-top:8px">修正異常手續費</button>
-      <div class="set-hint">掃描並還原舊版編輯 bug 造成、超過成交金額的手續費（開 App 時也會自動修正）</div>
+      <div class="set-hint">掃描並還原舊版編輯 bug 造成、超過成交金額的手續費</div>
     </div>
 
     <div class="card setting-card">
