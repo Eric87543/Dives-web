@@ -11,7 +11,7 @@ App.Views = (function () {
   function rerender() { App.renderCurrent(); }
 
   /* ===================== 投資（市場分類卡，沿用資產頁風格）===================== */
-  // pf.open：各市場展開狀態（可同時展開多個）；null = 預設全展開。排序固定依市值（大→小）
+  // pf.open：各市場展開狀態（可同時展開多個）；預設全收合。排序固定依市值（大→小）
   const pf = { open: null };
 
   // 重新整理鈕（只用於資產/投資頁；置於 ＋ 的右上方）
@@ -91,7 +91,7 @@ App.Views = (function () {
       { key: 'crypto', name: '加密貨幣', color: COL.crypto, oc: 'oc-cr' },
     ];
     const totalAll = summary.totalMarketValueTwd || 0;
-    const isOpen = key => pf.open ? !!pf.open[key] : true; // 預設全展開
+    const isOpen = key => !!(pf.open && pf.open[key]); // 預設全收合
 
     // Hero：總倉位 + 今日漲跌（同資產頁淨資產樣式；捲動時固定於頂部）
     const day = summary.dayPnl || 0;
@@ -172,7 +172,7 @@ App.Views = (function () {
     const addBtn = root.querySelector('#pf-add-btn');
     if (addBtn) addBtn.addEventListener('click', () => openTxForm(null));
     root.querySelectorAll('.as-head[data-mk]').forEach(h => h.addEventListener('click', () => {
-      if (!pf.open) pf.open = { us: true, tw: true, crypto: true }; // 從「全展開」起手
+      if (!pf.open) pf.open = {}; // 從「全收合」起手
       const k = h.dataset.mk;
       pf.open[k] = !pf.open[k];
       portfolio(root);
@@ -633,7 +633,7 @@ App.Views = (function () {
 
   /* ===================== 資產（淨資產）===================== */
   // 手風琴：一次只展開一類（cash|invest|liab）；detailGroup = 群組詳情頁
-  const as = { openCat: null, detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day' },
+  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day' },
     groupTrend: null, gt: { metric: 'line', gran: 'day' }, gtCache: null };
   // 點「資產」tab 時回到資產首頁（退出群組/走勢/淨資產詳情）
   function resetAssetsNav() { as.detailGroup = null; as.groupTrend = null; as.nwDetail = null; }
