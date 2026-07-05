@@ -230,7 +230,7 @@ App.Views = (function () {
       <button class="link-edit" data-id="${t.id}">編輯</button>
     </div>`).join('');
     const ov = UI.openSheet(dispName(sym) + ' 交易明細', rows || '<p>無交易</p>',
-      `<button class="btn btn-ghost" id="rename-sym">重新命名</button><button class="btn btn-ghost" id="add-more">新增此檔交易</button><button class="btn btn-danger" id="del-sym">刪除此檔</button>`);
+      `<button class="btn btn-ghost" id="rename-sym">重新命名</button><button class="btn btn-ghost" id="add-more">新增交易</button><button class="btn btn-danger" id="del-sym">刪除此檔</button>`);
     ov.querySelector('#rename-sym').addEventListener('click', () => openRename(sym));
     ov.querySelector('#del-sym').addEventListener('click', () =>
       UI.confirmDialog(`確定刪除 ${sym} 的所有交易與損益？`, () => { C.deleteSymbol(sym); UI.closeSheet(); App.afterDataChange([]); }, '刪除'));
