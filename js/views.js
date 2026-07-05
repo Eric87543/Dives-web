@@ -30,39 +30,46 @@ App.Views = (function () {
     if (b) b.addEventListener('click', () => App.refresh(undefined, true));
   }
 
-  // 頂端下拉 → 觸發更新（資產/投資頁，標準下拉刷新）
+  // 頂端下拉並「維持 1 秒」→ 觸發更新（避免誤觸；資產/投資頁）
   function attachPullRefresh(scrollEl) {
     if (!scrollEl) return;
     const ind = document.createElement('div');
     ind.className = 'pull-refresh';
     ind.innerHTML = `<span class="pr-icon">↓</span><span class="pr-text">下拉更新</span>`;
     scrollEl.insertBefore(ind, scrollEl.firstChild); // 置於最上方
-    const TH = 66;
-    let startY = 0, pulling = false, dist = 0;
+    const TH = 66, HOLD = 1000;
+    let startY = 0, pulling = false, dist = 0, timer = null, fired = false;
+    const txt = s => { ind.querySelector('.pr-text').textContent = s; };
+    const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    const reset = () => { clearTimer(); fired = false; ind.classList.remove('ready'); ind.style.height = '0px'; ind.querySelector('.pr-icon').textContent = '↓'; txt('下拉更新'); };
+
     scrollEl.addEventListener('touchstart', e => {
       pulling = scrollEl.scrollTop <= 0; // 捲到最上方才啟用
-      if (pulling) { startY = e.touches[0].clientY; dist = 0; }
+      if (pulling) { startY = e.touches[0].clientY; dist = 0; fired = false; }
     }, { passive: true });
     scrollEl.addEventListener('touchmove', e => {
-      if (!pulling) return;
+      if (!pulling || fired) return;
       dist = e.touches[0].clientY - startY; // 正 = 下拉
       if (dist > 0 && scrollEl.scrollTop <= 0) {
         e.preventDefault();
         ind.style.height = Math.min(dist * 0.5, 56) + 'px';
-        const ready = dist >= TH;
-        ind.classList.toggle('ready', ready);
-        ind.querySelector('.pr-text').textContent = ready ? '放開更新' : '下拉更新';
-      } else { ind.style.height = '0px'; ind.classList.remove('ready'); }
+        const past = dist >= TH;
+        ind.classList.toggle('ready', past);
+        if (past && !timer) {
+          txt('維持 1 秒…');
+          timer = setTimeout(() => {                 // 維持 1 秒才觸發
+            timer = null; fired = true;
+            ind.querySelector('.pr-icon').textContent = '⟳';
+            txt('更新中…'); ind.style.height = '44px';
+            App.refresh(undefined, true);
+          }, HOLD);
+        } else if (!past && timer) { clearTimer(); txt('下拉更新'); }
+      } else { clearTimer(); ind.style.height = '0px'; ind.classList.remove('ready'); txt('下拉更新'); }
     }, { passive: false });
     const end = () => {
       if (!pulling) return;
       pulling = false;
-      if (dist >= TH) {
-        ind.querySelector('.pr-text').textContent = '更新中…';
-        ind.querySelector('.pr-icon').textContent = '⟳';
-        ind.style.height = '44px';
-        App.refresh(undefined, true); // 完成後 renderCurrent 會重繪，指示器隨之消失
-      } else { ind.style.height = '0px'; ind.classList.remove('ready'); }
+      if (!fired) reset(); // 維持不足 1 秒就放開 → 收回、不更新
       dist = 0;
     };
     scrollEl.addEventListener('touchend', end);
