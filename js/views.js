@@ -1457,7 +1457,7 @@ App.Views = (function () {
       editing: editing || null,
       isBuy: editing ? editing.type === 'BUY' : true,
       symbol: editing ? editing.symbol : (presetSym || ''),
-      feeMode: 'rate',
+      feeMode: editing ? 'amount' : 'rate', // 編輯：既有 fee 是「絕對金額」，須用固定金額模式（否則被當費率%重算）
     };
     const ed = editing;
     const body = `
@@ -1486,8 +1486,8 @@ App.Views = (function () {
       </label>
       <label class="fld">手續費
         <div class="fee-mode">
-          <button class="fm-btn active" data-m="rate">費率 %</button>
-          <button class="fm-btn" data-m="amount">固定金額</button>
+          <button class="fm-btn ${txState.feeMode === 'rate' ? 'active' : ''}" data-m="rate">費率 %</button>
+          <button class="fm-btn ${txState.feeMode === 'amount' ? 'active' : ''}" data-m="amount">固定金額</button>
         </div>
         <input class="input" id="tx-fee" type="number" inputmode="decimal" value="${ed ? ed.fee : '0.1425'}">
       </label>
