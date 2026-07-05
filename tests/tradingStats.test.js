@@ -71,6 +71,22 @@ test('區間獲利之最：忽略第一個期間（第一天的變化不計入�
   assert.equal(st.period.all.day.worst.amount, -100);
 });
 
+test('區間獲利之最：略過開頭 totalPnl=0 基準造成的假峰（重建歷史前幾天無報價）', () => {
+  // 重建歷史時前 3 天無報價 → totalPnl=0，第 4 天報價進來一次認列 → 250000 假峰不可計入
+  S.setSnapshots([
+    { date: '2026-01-01', totalPnl: 0 },
+    { date: '2026-01-02', totalPnl: 0 },
+    { date: '2026-01-03', totalPnl: 0 },
+    { date: '2026-01-04', totalPnl: 250000 }, // 0→首值的假峰 → 應略過
+    { date: '2026-01-05', totalPnl: 251200 }, // +1200
+    { date: '2026-01-06', totalPnl: 250100 }, // -1100
+  ]);
+  const st = C.tradingStats();
+  assert.equal(st.period.all.day.best.amount, 1200);   // 不是 250000
+  assert.equal(st.period.all.day.best.date, '2026-01-05');
+  assert.equal(st.period.all.day.worst.amount, -1100);
+});
+
 test('目前持倉之最：未實現獲利/虧損/報酬率（無資料回 null）', () => {
   const empty = C.tradingStats();
   assert.equal(empty.bestTrade, null);

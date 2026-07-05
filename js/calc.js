@@ -497,13 +497,17 @@ App.Calc = (function () {
     const weekKey = iso => { const p = iso.split('-').map(Number); const d = new Date(Date.UTC(p[0], p[1] - 1, p[2], 12)); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
     const keyOf = (iso, g) => g === 'day' ? iso : g === 'week' ? weekKey(iso) : g === 'month' ? iso.slice(0, 7) : iso.slice(0, 4);
     // 區間 totalPnl 變化的極值（獲利取正、虧損取負；否則 null）
-    // 忽略第一個期間（i 從 2 起）：第一天/週/月/年的變化以初始基準計算，易失真
+    // 忽略初始失真：(1) 重建歷史時前幾天無報價 → totalPnl=0 的成本基準，其到首個真實值
+    //   的跳變會灌爆單期損益；(2) 第一個真實期間仍以初始為基準。故從「首個非零之後再跳一期」起算。
     const periodExtremes = (subset, g) => {
       const map = new Map();
       for (const s of subset) map.set(keyOf(s.date, g), s); // 同桶取最後（chronological）
       const arr = [...map.values()];
+      let firstReal = arr.findIndex(s => (s.totalPnl || 0) !== 0); // 略過開頭 0 基準
+      if (firstReal < 0) firstReal = arr.length;
+      const start = Math.max(2, firstReal + 1); // +1 跳過 0→首值的假峰；≥2 再忽略第一個期間
       let best = null, worst = null;
-      for (let i = 2; i < arr.length; i++) {
+      for (let i = start; i < arr.length; i++) {
         const chg = (arr[i].totalPnl || 0) - (arr[i - 1].totalPnl || 0);
         if (chg > 0 && (!best || chg > best.amount)) best = { date: arr[i].date, amount: chg };
         if (chg < 0 && (!worst || chg < worst.amount)) worst = { date: arr[i].date, amount: chg };
