@@ -1256,6 +1256,8 @@ App.Views = (function () {
       <div class="set-hint">CSV 格式與 iOS app 相容，可互通資料</div>
       <button class="btn btn-block btn-ghost" id="btn-rebuild" style="margin-top:8px">重建歷史走勢圖</button>
       <div class="set-hint">用交易紀錄 + 台股／美股歷史收盤，補回過去每日資產曲線</div>
+      <button class="btn btn-block btn-ghost" id="btn-fixfee" style="margin-top:8px">修正異常手續費</button>
+      <div class="set-hint">掃描並還原舊版編輯 bug 造成、超過成交金額的手續費（開 App 時也會自動修正）</div>
     </div>
 
     <div class="card setting-card">
@@ -1352,6 +1354,14 @@ App.Views = (function () {
       const n = await App.rebuildHistory();
       btn.textContent = '重建歷史走勢圖'; btn.disabled = false;
       if (n) UI.toast(`已重建 ${n} 天歷史走勢`, 'success');
+    });
+    root.querySelector('#btn-fixfee').addEventListener('click', () => {
+      const rep = C.repairFees();
+      if (!rep.fixed.length) { UI.toast('沒有發現異常手續費', 'info'); return; }
+      C.saveTodaySnapshot(); if (App.Sync) App.Sync.markDirty();
+      const syms = [...new Set(rep.fixed.map(f => f.symbol))].join('、');
+      UI.toast(`已修正 ${rep.fixed.length} 筆（${syms}）`, 'success');
+      settings(root);
     });
     root.querySelector('#btn-adv-save').addEventListener('click', () => {
       const fk = root.querySelector('#set-finnhub').value.trim();

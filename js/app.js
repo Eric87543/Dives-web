@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v69';
+  App.VERSION = 'v70';
 
   const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -303,6 +303,16 @@
 
     // 左右滑切換分頁
     initSwipe();
+
+    // 自動修正舊版編輯 bug 造成的異常手續費（fee > 成交金額）；有修才提示、並重算今日快照
+    try {
+      const rep = C.repairFees();
+      if (rep.fixed.length) {
+        C.saveTodaySnapshot();
+        if (App.Sync) App.Sync.markDirty();
+        UI.toast(`已自動修正 ${rep.fixed.length} 筆異常手續費`, 'success');
+      }
+    } catch (e) { console.error(e); }
 
     // 從快取立即顯示
     renderCurrent();

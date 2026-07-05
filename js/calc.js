@@ -415,6 +415,41 @@ App.Calc = (function () {
     return out;
   }
 
+  // 自動修正舊版編輯 bug 造成的異常手續費。
+  // 舊 bug：編輯交易時把「已存的絕對金額 fee」當成費率% 重算 → fee = amount×(oldFee/100)，
+  // 使 fee 遠大於成交金額。合法手續費永遠遠小於成交金額，故「fee > 成交金額」必為受損資料，
+  // 可精確反推：oldFee = fee×100/amount（多次儲存會複利，迭代還原至 ≤ 成交金額即為原值）。
+  // 僅動「fee > 成交金額」者 → 零誤傷（真實手續費不可能超過整筆成交金額）。
+  function repairFees() {
+    const txs = S.getTransactions();
+    const mmap = S.metaMap();
+    const fixed = [], affected = new Set();
+    for (const t of txs) {
+      const amt = (t.shares || 0) * (t.price || 0);
+      if (amt <= 1e-9) continue;
+      let fee = t.fee || 0;
+      if (fee <= amt) continue;               // 正常：手續費 ≤ 成交金額 → 不動
+      const before = fee;
+      let guard = 0;
+      while (fee > amt && guard < 8) { fee = fee * 100 / amt; guard++; } // 逐次還原每次誤存
+      if (!isFinite(fee) || fee < 0 || fee > amt) {
+        // 極小額交易未收斂 → 以標準費率估回（台股 0.1425% / 美股 0.08% / 加密 0.1%）
+        const mk = U.normalizeMarketKey((mmap[t.symbol] && mmap[t.symbol].market) || U.guessMarketBySymbol(t.symbol));
+        const rate = mk === U.Market.us ? 0.0008 : mk === U.Market.crypto ? 0.001 : 0.001425;
+        fee = amt * rate;
+      }
+      fee = Math.round(fee * 100) / 100;
+      t.fee = fee;
+      fixed.push({ symbol: t.symbol, before, after: fee, time: t.time });
+      affected.add(t.symbol);
+    }
+    if (fixed.length) {
+      S.setTransactions(txs);
+      for (const sym of affected) recomputeRealized(sym); // 重算已實現損益（fee 影響賣出損益與成本）
+    }
+    return { fixed };
+  }
+
   // 淨資產長條圖分桶（純函式；SPEC §6）。gran ∈ day|week|month|year
   //  - nwOf 回填舊快照；同桶(週/月/年)取最後一筆
   //  - change：有前一桶→跨期差；無前一桶(最早/唯一)→期間內漲幅(期末−期初)，避免顯示 0
@@ -555,6 +590,6 @@ App.Calc = (function () {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
-    netWorthBuckets, findAbsurdFees, buildGroupSeries, tradingStats,
+    netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats,
   };
 })();
