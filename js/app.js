@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v65';
+  App.VERSION = 'v66';
 
   const TAB_ORDER = ['assets', 'portfolio', 'history', 'report', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -16,18 +16,21 @@
   ];
 
   let slideDir = null; // 換分頁時的滑入方向（next=從右、prev=從左）
-  function renderCurrent() {
-    const root = document.getElementById('view');
-    if (!root) return;
-    root.scrollTop = 0;
-    switch (currentTab) {
+  function renderTab(root, tab) {
+    switch (tab) {
       case 'portfolio': V.portfolio(root); break;
       case 'assets': V.assets(root); break;
       case 'history': V.history(root); break;
       case 'report': V.report(root); break;
       case 'settings': V.settings(root); break;
     }
-    // 換分頁 → 讓新內容依方向滑入
+  }
+  function renderCurrent() {
+    const root = document.getElementById('view');
+    if (!root) return;
+    root.scrollTop = 0;
+    renderTab(root, currentTab);
+    // 換分頁 → 讓新內容依方向滑入（點 tab bar 用；滑動換頁不套此動畫）
     if (slideDir && root.firstElementChild) {
       root.firstElementChild.classList.add(slideDir === 'next' ? 'tab-slide-next' : 'tab-slide-prev');
     }
@@ -47,21 +50,99 @@
   }
   function goTab(id) { if (id === 'assets' && V.resetAssetsNav) V.resetAssetsNav(); switchTab(id); }
 
-  // 左右滑切換分頁（水平滑動明顯大於垂直、且非圖表/橫向捲動元件）
+  // 左右滑：互動式換頁（內容跟著手指移動，放開時吸附到新頁或回彈）
   function initSwipe() {
     const view = document.getElementById('view');
     if (!view) return;
-    let sx = 0, sy = 0, ignore = false;
+    const IGNORE = '.chart-host, .chips, input, select, textarea, .switch';
+    let sx = 0, sy = 0, t0 = 0, decided = false, horiz = false, dir = 0, neighbor = null, track = null, curPane = null, edge = false, W = 0;
+
+    const rest = () => dir > 0 ? 0 : -W;          // 靜止（顯示當前頁）
+    const full = () => dir > 0 ? -W : 0;          // 完全顯示鄰頁
+    const clampX = x => Math.max(-W, Math.min(0, x));
+    const setX = x => { track.style.transform = 'translateX(' + x + 'px)'; };
+
+    function build() {
+      W = view.clientWidth || window.innerWidth;
+      const cur = view.firstElementChild;
+      track = document.createElement('div'); track.className = 'pager-track';
+      curPane = document.createElement('div'); curPane.className = 'pager-pane';
+      const nb = document.createElement('div'); nb.className = 'pager-pane';
+      if (neighbor != null) { try { renderTab(nb, TAB_ORDER[neighbor]); } catch (e) {} }
+      if (dir > 0) { curPane.appendChild(cur); track.append(curPane, nb); }   // next：當前在左、鄰頁在右
+      else { track.append(nb, curPane); curPane.appendChild(cur); }           // prev：鄰頁在左、當前在右
+      view.appendChild(track);
+      setX(rest());
+    }
+
+    function settle(commit) {
+      if (!track) return;
+      const t = track;
+      t.classList.add('animating');
+      setX(commit ? full() : rest());
+      const done = () => {
+        t.removeEventListener('transitionend', done);
+        if (track !== t) return;
+        if (commit && neighbor != null) {
+          const tab = TAB_ORDER[neighbor];
+          if (tab === 'assets' && V.resetAssetsNav) V.resetAssetsNav();
+          currentTab = tab; try { sessionStorage.setItem('dives_tab', tab); } catch (e) {}
+          t.remove();
+          renderCurrent();                          // slideDir 為 null → 不再疊加動畫
+        } else {
+          const c = curPane && curPane.firstElementChild;
+          t.remove(); if (c) view.appendChild(c);   // 回彈：把原內容放回
+        }
+        track = null; curPane = null; decided = false; horiz = false; neighbor = null; edge = false;
+      };
+      t.addEventListener('transitionend', done);
+      window.setTimeout(() => { if (track === t) done(); }, 340); // 保險（transitionend 未觸發時）
+    }
+
     view.addEventListener('touchstart', e => {
-      ignore = e.touches.length !== 1 || !!e.target.closest('.chart-host, .chips, input, select, textarea, .switch');
-      sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+      if (track) return;
+      decided = false; horiz = false; edge = false;
+      if (e.touches.length !== 1 || (e.target.closest && e.target.closest(IGNORE))) { decided = true; return; }
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY; t0 = e.timeStamp;
     }, { passive: true });
+
+    view.addEventListener('touchmove', e => {
+      if (decided && !horiz) return;                // 已判定為垂直/忽略 → 交給原生捲動
+      if (track && horiz) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - sx;
+        setX(clampX(rest() + (edge ? dx * 0.32 : dx)));
+        return;
+      }
+      if (!decided) {
+        const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dx) <= Math.abs(dy) * 1.2) { decided = true; return; } // 垂直為主 → 放行捲動
+        decided = true; horiz = true;
+        dir = dx < 0 ? 1 : -1;
+        const n = TAB_ORDER.indexOf(currentTab) + dir;
+        if (n < 0 || n >= TAB_ORDER.length) { neighbor = null; edge = true; } else neighbor = n;
+        build();
+        e.preventDefault();
+        setX(clampX(rest() + (edge ? dx * 0.32 : dx)));
+      }
+    }, { passive: false });
+
     view.addEventListener('touchend', e => {
-      if (ignore) return;
-      const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
-      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return; // 需明顯水平
-      const i = TAB_ORDER.indexOf(currentTab), n = i + (dx < 0 ? 1 : -1); // 左滑=下一頁
-      if (n >= 0 && n < TAB_ORDER.length) goTab(TAB_ORDER[n]);
+      if (!track || !horiz) { decided = false; horiz = false; return; }
+      const dx = (e.changedTouches ? e.changedTouches[0].clientX : sx) - sx;
+      const v = dx / Math.max(1, e.timeStamp - t0); // px/ms
+      let commit = false;
+      if (!edge && neighbor != null) {
+        const far = Math.abs(dx) > W * 0.28;
+        const flick = Math.abs(v) > 0.5 && ((dir > 0 && dx < 0) || (dir < 0 && dx > 0));
+        commit = far || flick;
+      }
+      settle(commit);
+    }, { passive: true });
+
+    view.addEventListener('touchcancel', () => {
+      if (track) settle(false); else { decided = false; horiz = false; }
     }, { passive: true });
   }
 
