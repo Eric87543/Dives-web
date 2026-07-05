@@ -167,6 +167,24 @@ input, select { font-family: inherit; font-size: 15px; }
 .rt-h { cursor: pointer; padding-bottom: 3px; transition: color .15s; }
 .rt-h.active { color: var(--text); font-weight: 700; }
 .rt-sort { cursor: pointer; }
+/* 報表方向 A：Hero + 資訊卡 + 期間列 */
+.rep-hero { padding: 6px 4px 14px; }
+.rep-hero .nw-num { font-size: 32px; }
+.rep-mc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.rep-mc { background: var(--soft); border-radius: 12px; padding: 11px 13px; }
+.rep-mc-k { font-size: 12px; color: var(--sub); }
+.rep-mc-v { font-size: 17px; font-weight: 700; margin-top: 2px; letter-spacing: -0.2px; }
+.rep-periods { padding: 0; overflow: hidden; }
+.rep-periods-head { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; font-size: 12px; color: var(--sub); border-bottom: 1px solid var(--divider); }
+.rep-sort { font-size: 12px; color: var(--sub); }
+.rep-prow { display: flex; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--divider); }
+.rep-prow:last-child { border-bottom: none; }
+.rep-prow-main { flex: 1; min-width: 0; }
+.rep-prow-lbl { font-size: 15px; font-weight: 700; }
+.rep-prow-sub { font-size: 11.5px; color: var(--sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rep-prow-val { text-align: right; white-space: nowrap; padding-left: 10px; }
+.rep-prow-pnl { font-size: 14.5px; font-weight: 700; }
+.rep-prow-pct { font-size: 11.5px; margin-top: 1px; }
 .chart-title { font-size: 13px; font-weight: 700; color: var(--text); padding: 2px 2px 8px; }
 .chart-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chart-title-row .chart-title { padding-bottom: 6px; }

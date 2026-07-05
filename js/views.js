@@ -525,87 +525,76 @@ App.Views = (function () {
       return;
     }
 
-    // 摘要橫幅（最新一期）
+    // Hero：本期損益 + 報酬率（沿用資產/投資頁的大數字風格）
     const latest = reports[reports.length - 1];
-    html += `<div class="card banner">
-      ${bcol('本期損益', U.fmtBannerSigned(latest.periodPnl), UI.pnlColor(latest.periodPnl))}
-      ${bcol('累計損益', U.fmtBannerSigned(latest.totalPnl), UI.pnlColor(latest.totalPnl))}
-      ${bcol('報酬率', U.fmtPct(latest.returnPct), UI.pnlColor(latest.returnPct || 0))}
-      ${bcol('未實現', U.fmtBannerSigned(latest.unrealizedPnl), UI.pnlColor(latest.unrealizedPnl))}
+    html += `<div class="rep-hero">
+      <div class="nw-cap">${latest.label} 本期損益</div>
+      <div class="nw-num" style="color:${UI.pnlColor(latest.periodPnl)}">${U.fmtBannerSigned(latest.periodPnl)}</div>
+      <div class="nw-day" style="color:${UI.pnlColor(latest.returnPct || 0)}">報酬率 ${U.fmtPct(latest.returnPct)}</div>
+    </div>`;
+    // 2×2 資訊卡
+    const mc = (k, v, color) => `<div class="rep-mc"><div class="rep-mc-k">${k}</div><div class="rep-mc-v"${color ? ` style="color:${color}"` : ''}>${v}</div></div>`;
+    html += `<div class="rep-mc-grid">
+      ${mc('累計損益', U.fmtBannerSigned(latest.totalPnl), UI.pnlColor(latest.totalPnl))}
+      ${mc('本期投入', U.fmtBannerSigned(latest.newInvestment))}
+      ${mc('未實現', U.fmtBannerSigned(latest.unrealizedPnl), UI.pnlColor(latest.unrealizedPnl))}
+      ${mc('已實現', U.fmtBannerSigned(latest.periodRealizedPnl), UI.pnlColor(latest.periodRealizedPnl))}
     </div>`;
 
-    // 圖表（標題隨選取欄位變化；無選取＝倉位/淨資產走勢圖，可切換）
-    const chartTitle = rep.col ? REP_COLS[rep.col].title : (rep.trendMode === 'net' ? '淨資產走勢圖' : '倉位走勢圖');
+    // 走勢圖（倉位／淨資產可切換）
     html += `<div class="card"><div class="chart-title-row">
-      <div class="chart-title">${chartTitle}</div>
-      ${!rep.col ? `<div class="seg" id="rep-trend-mode">
-        ${seg('pos', '倉位', rep.trendMode)}${seg('net', '淨資產', rep.trendMode)}
-      </div>` : ''}
+      <div class="chart-title">${rep.trendMode === 'net' ? '淨資產走勢' : '倉位走勢'}</div>
+      <div class="seg" id="rep-trend-mode">${seg('pos', '倉位', rep.trendMode)}${seg('net', '淨資產', rep.trendMode)}</div>
     </div><div class="chart-host" id="rep-chart"></div></div>`;
 
-    // 表格（表頭可點擊切換圖表）
-    const ulOf = c => rep.col === c ? `border-bottom:2px solid ${REP_COLS[c].underline}` : '';
-    const acOf = c => rep.col === c ? 'active' : '';
-    html += `<div class="card rep-table">
-      <div class="rt-head">
-        <span class="c0 rt-sort" data-sort="1">期間 ${rep.asc ? '▲' : '▼'}</span>
-        <span class="rt-h ${acOf('netAsset')}" data-col="netAsset" style="${ulOf('netAsset')}">總倉位</span>
-        <span class="rt-h ${acOf('newInvestment')}" data-col="newInvestment" style="${ulOf('newInvestment')}">本期投入</span>
-        <span class="rt-h ${acOf('periodPnl')}" data-col="periodPnl" style="${ulOf('periodPnl')}">本期損益<br><i>${rep.mode === 'yearly' ? '年報酬率' : '月報酬率'}</i></span>
-        <span class="rt-h ${acOf('realizedUnrealized')}" data-col="realizedUnrealized" style="${ulOf('realizedUnrealized')}">未實現<br><i>已實現</i></span>
-      </div>`;
+    // 期間列表（卡片列，可排序；沿用投資列的左標籤右數字風格）
+    html += `<div class="card rep-periods">
+      <div class="rep-periods-head"><span>各期間</span><button class="rep-sort" id="rep-sort">排序 ${rep.asc ? '▲' : '▼'}</button></div>`;
     const rowsOrder = rep.asc ? reports : [...reports].reverse();
     for (const r of rowsOrder) {
-      html += `<div class="rt-row">
-        <span class="c0">${r.label}</span>
-        <span>${U.fmtBanner(r.netAsset)}</span>
-        <span>${U.fmtBannerSigned(r.newInvestment)}</span>
-        <span><b style="color:${UI.pnlColor(r.periodPnl)}">${U.fmtBannerSigned(r.periodPnl)}</b><br><i style="color:${UI.pnlColor(r.periodReturnPct)}">${U.fmtPct(r.periodReturnPct)}</i></span>
-        <span><b style="color:${UI.pnlColor(r.unrealizedPnl)}">${U.fmtBannerSigned(r.unrealizedPnl)}</b><br><i style="color:${UI.pnlColor(r.periodRealizedPnl)}">${U.fmtBannerSigned(r.periodRealizedPnl)}</i></span>
+      html += `<div class="rep-prow">
+        <div class="rep-prow-main">
+          <div class="rep-prow-lbl">${r.label}</div>
+          <div class="rep-prow-sub">總倉位 ${U.fmtKMBB(r.netAsset)} · 投入 ${U.fmtBannerSigned(r.newInvestment)}</div>
+        </div>
+        <div class="rep-prow-val">
+          <div class="rep-prow-pnl" style="color:${UI.pnlColor(r.periodPnl)}">${U.fmtBannerSigned(r.periodPnl)}</div>
+          <div class="rep-prow-pct" style="color:${UI.pnlColor(r.periodReturnPct)}">${U.fmtPct(r.periodReturnPct)}</div>
+        </div>
       </div>`;
     }
     html += `</div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
     bindReportTop(root, years);
 
-    // 表頭點擊：切換對應欄位圖表（再點一次回走勢圖）
-    root.querySelectorAll('.rt-h').forEach(h => h.addEventListener('click', () => {
-      rep.col = (rep.col === h.dataset.col) ? null : h.dataset.col;
-      report(root);
-    }));
-    const sortBtn = root.querySelector('.rt-sort');
+    const sortBtn = root.querySelector('#rep-sort');
     if (sortBtn) sortBtn.addEventListener('click', () => { rep.asc = !rep.asc; report(root); });
-
     // 走勢圖模式切換（倉位/淨資產）
     root.querySelectorAll('#rep-trend-mode .seg-btn').forEach(b =>
       b.addEventListener('click', () => { rep.trendMode = b.dataset.v; report(root); }));
 
-    // 繪製圖表
+    // 繪製走勢圖
     const host = root.querySelector('#rep-chart');
-    if (rep.col) {
-      App.Charts.reportColumn(host, reports, rep.col);
+    let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
+    if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
+    if (rep.trendMode === 'net') {
+      // 淨資產走勢（= 倉位 + 流動資金 − 負債；舊快照回填見 nwOf）
+      const cl = C.cashLiabTwd();
+      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: nwOf(s, cl) } }));
+      App.Charts.lineChart(host, points, {
+        series: [{ key: 'v', label: '淨資產', color: '#2F80ED', fill: true }],
+        xLabels: repXLabels(points),
+        valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
+      });
     } else {
-      let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
-      if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
-      if (rep.trendMode === 'net') {
-        // 淨資產走勢（= 倉位 + 流動資金 − 負債；舊快照回填見 nwOf）
-        const cl = C.cashLiabTwd();
-        const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: nwOf(s, cl) } }));
-        App.Charts.lineChart(host, points, {
-          series: [{ key: 'v', label: '淨資產', color: '#2F80ED', fill: true }],
-          xLabels: repXLabels(points),
-          valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
-        });
-      } else {
-        const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: {
-          tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0,
-        } }));
-        App.Charts.trend(host, points, {
-          twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
-          xLabels: repXLabels(points),
-          valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
-        });
-      }
+      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: {
+        tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0,
+      } }));
+      App.Charts.trend(host, points, {
+        twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
+        xLabels: repXLabels(points),
+        valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
+      });
     }
   }
   function seg3(v, label, cur) { return `<button class="seg-btn ${cur === v ? 'active' : ''}" data-v="${v}">${label}</button>`; }
