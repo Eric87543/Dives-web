@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v62';
+  App.VERSION = 'v63';
 
   const TAB_ORDER = ['assets', 'portfolio', 'history', 'report', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產

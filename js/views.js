@@ -54,17 +54,15 @@ App.Views = (function () {
         e.preventDefault();
         ind.style.height = Math.min(dist * 0.5, 56) + 'px';
         const past = dist >= TH;
-        ind.classList.toggle('ready', past);
         if (past && !timer) {
-          txt('維持 1 秒…');
-          timer = setTimeout(() => {                 // 維持 1 秒才觸發
+          timer = setTimeout(() => {                 // 維持 1 秒才觸發（不顯示提示文字）
             timer = null; fired = true;
             ind.querySelector('.pr-icon').textContent = '⟳';
             txt('更新中…'); ind.style.height = '44px';
             App.refresh(undefined, true);
           }, HOLD);
-        } else if (!past && timer) { clearTimer(); txt('下拉更新'); }
-      } else { clearTimer(); ind.style.height = '0px'; ind.classList.remove('ready'); txt('下拉更新'); }
+        } else if (!past && timer) { clearTimer(); }
+      } else { clearTimer(); ind.style.height = '0px'; }
     }, { passive: false });
     const end = () => {
       if (!pulling) return;
