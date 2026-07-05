@@ -149,7 +149,7 @@ App.Views = (function () {
           html += `<div class="as-row pf-row" data-sym="${p.symbol}">
             <span class="pct-badge sm" style="background:${M.color}">${fmtPctBadge(rp)}</span>
             <div class="as-main">
-              <div class="as-title pf-title"><span class="pf-sym">${p.symbol}</span>${p.name !== p.symbol ? `<span class="h-name pf-name">${p.name}</span>` : ''}<span class="pf-price">${cur}${fp(price)}${chgHtml}</span></div>
+              <div class="as-title pf-title"><span class="pf-sym">${dispName(p.symbol)}</span><span class="pf-price">${cur}${fp(price)}${chgHtml}</span></div>
               <div class="as-sub">${U.formatShares(p.shares)}${shareUnit(p.market)} · 均 ${cur}${fp(p.avgCost)}</div>
             </div>
             <div class="pf-val">
@@ -190,6 +190,37 @@ App.Views = (function () {
     return U.normalizeMarketKey(market) === U.Market.crypto ? '' : ' 股';
   }
 
+  // 顯示名稱：自訂 alias 優先；否則台股用名稱、美股/加密用代號
+  function defaultName(sym) {
+    const m = S.metaMap()[sym] || {};
+    const mk = U.normalizeMarketKey(m.market || U.guessMarketBySymbol(sym));
+    if (mk === U.Market.us || mk === U.Market.crypto) return sym;
+    return m.name && m.name !== sym ? m.name : sym;
+  }
+  function dispName(sym) {
+    const m = S.metaMap()[sym] || {};
+    return m.alias || defaultName(sym);
+  }
+  function openRename(sym) {
+    const m = S.metaMap()[sym] || {};
+    const mkLabel = U.marketLabel(U.normalizeMarketKey(m.market || U.guessMarketBySymbol(sym)));
+    const def = defaultName(sym);
+    const esc = s => (s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const ov = UI.openSheet('重新命名',
+      `<div style="padding:2px 2px 4px">
+        <div class="set-hint" style="margin-bottom:8px">${sym} · ${mkLabel}</div>
+        <input class="input" id="rn-input" value="${esc(m.alias)}" placeholder="${esc(def)}" autocomplete="off">
+        <div class="set-hint" style="margin-top:7px">留空 = 回到預設（${esc(def)}）</div>
+      </div>`,
+      `<button class="btn btn-ghost" id="rn-cancel">取消</button><button class="btn btn-primary" id="rn-save">儲存</button>`);
+    const input = ov.querySelector('#rn-input');
+    input.focus();
+    const save = () => { S.setAlias(sym, input.value.trim()); if (App.Sync) App.Sync.markDirty(); UI.closeSheet(); App.renderCurrent(); };
+    ov.querySelector('#rn-cancel').addEventListener('click', UI.closeSheet);
+    ov.querySelector('#rn-save').addEventListener('click', save);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+  }
+
   function openSymbolActions(sym) {
     const txs = S.getTransactions().filter(t => t.symbol === sym).sort((a, b) => b.time - a.time);
     let rows = txs.map(t => `<div class="tx-mini" data-id="${t.id}">
@@ -198,8 +229,9 @@ App.Views = (function () {
       <span class="tx-date">${U.isoDate(new Date(t.time))}</span>
       <button class="link-edit" data-id="${t.id}">編輯</button>
     </div>`).join('');
-    const ov = UI.openSheet(sym + ' 交易明細', rows || '<p>無交易</p>',
-      `<button class="btn btn-ghost" id="add-more">新增此檔交易</button><button class="btn btn-danger" id="del-sym">刪除此檔</button>`);
+    const ov = UI.openSheet(dispName(sym) + ' 交易明細', rows || '<p>無交易</p>',
+      `<button class="btn btn-ghost" id="rename-sym">重新命名</button><button class="btn btn-ghost" id="add-more">新增此檔交易</button><button class="btn btn-danger" id="del-sym">刪除此檔</button>`);
+    ov.querySelector('#rename-sym').addEventListener('click', () => openRename(sym));
     ov.querySelector('#del-sym').addEventListener('click', () =>
       UI.confirmDialog(`確定刪除 ${sym} 的所有交易與損益？`, () => { C.deleteSymbol(sym); UI.closeSheet(); App.afterDataChange([]); }, '刪除'));
     ov.querySelector('#add-more').addEventListener('click', () => { UI.closeSheet(); openTxForm(null, sym); });

@@ -63,6 +63,14 @@ App.Store = (function () {
     }
     setMeta(Object.values(map));
   }
+  // 自訂顯示名稱（存於 meta.alias；留空＝清除，回到市場預設）
+  function setAlias(code, alias) {
+    const map = metaMap();
+    if (map[code]) { if (alias) map[code].alias = alias; else delete map[code].alias; }
+    else if (alias) map[code] = { code, name: code, market: '', alias };
+    else return;
+    setMeta(Object.values(map));
+  }
 
   // ---- Realized ----  {id, symbol, shares, sellPrice, avgCost, realizedPnl, time(ms)}
   function getRealized() { return read(K.realized, []); }
@@ -139,7 +147,7 @@ App.Store = (function () {
   return {
     uuid,
     getTransactions, setTransactions,
-    getMeta, setMeta, metaMap, upsertMeta,
+    getMeta, setMeta, metaMap, upsertMeta, setAlias,
     getRealized, setRealized,
     getSnapshots, setSnapshots,
     getAccount, setAccount,
