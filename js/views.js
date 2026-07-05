@@ -22,7 +22,7 @@ App.Views = (function () {
   function addWithRefreshHtml(addId, addLabel) {
     return `<div class="add-wrap">
       ${refreshBtnHtml()}
-      <button class="nw-add" id="${addId}" aria-label="${addLabel}">＋</button>
+      <button class="nw-add" id="${addId}" aria-label="${addLabel}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></svg></button>
     </div>`;
   }
   function bindRefresh(root) {

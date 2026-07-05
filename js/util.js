@@ -77,10 +77,14 @@ App.Util = (function () {
   function formatShares(v) {
     v = v || 0;
     if (Math.abs(v - Math.round(v)) < 1e-9) return _grp.format(Math.round(v));
-    let s = v.toFixed(4);
-    while (s.endsWith('0')) s = s.slice(0, -1);
-    if (s.endsWith('.')) s = s.slice(0, -1);
-    return s;
+    // 最多顯示一位小數；若太小（1 位會變 0，如少量加密貨幣）則保留有效位數
+    if (Math.round(v * 10) / 10 === 0) {
+      let s = v.toFixed(4);
+      while (s.endsWith('0')) s = s.slice(0, -1);
+      if (s.endsWith('.')) s = s.slice(0, -1);
+      return s;
+    }
+    return v.toLocaleString('en-US', { maximumFractionDigits: 1 });
   }
 
   function formatPrice(v) {
