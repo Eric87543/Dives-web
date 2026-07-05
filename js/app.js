@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v61';
+  App.VERSION = 'v62';
 
   const TAB_ORDER = ['assets', 'portfolio', 'history', 'report', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -237,7 +237,8 @@
     document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState === 'hidden') { if (App.Auth) App.Auth.noteHidden(); return; }
       if (App.Auth && App.Auth.shouldRelock()) {
-        App.Auth.showLock(() => { foregroundSync(); });
+        // 鎖定畫面已在顯示就不重複呼叫（避免蓋掉解鎖 callback / 重觸發驗證）
+        if (!document.getElementById('lock-overlay')) App.Auth.showLock(() => { foregroundSync(); });
         return;
       }
       foregroundSync();
@@ -250,6 +251,9 @@
       let reloaded = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!hadController || reloaded) return; // 首次安裝不重載，避免迴圈
+        // 有開 App 鎖定時不自動重載：重載會再觸發一次 Face ID（造成開啟需驗證兩次）。
+        // 網路優先已確保內容最新，新版 SW 會在下次啟動接管。
+        if (App.Auth && App.Auth.isEnabled()) return;
         reloaded = true;
         window.location.reload();
       });
