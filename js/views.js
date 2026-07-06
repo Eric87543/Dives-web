@@ -12,7 +12,8 @@ App.Views = (function () {
 
   /* ===================== 投資（市場分類卡，沿用資產頁風格）===================== */
   // pf.open：各市場展開狀態（可同時展開多個）；預設全收合。排序固定依市值（大→小）
-  const pf = { open: null };
+  const pf = { open: null, catChart: null };
+  function resetPortfolioNav() { pf.catChart = null; }
 
   // 重新整理鈕（只用於資產/投資頁；置於 ＋ 的右上方）
   function refreshBtnHtml() {
@@ -75,6 +76,7 @@ App.Views = (function () {
   }
 
   function portfolio(root) {
+    if (pf.catChart) return metricChartPage(root, pf.catChart, () => { pf.catChart = null; portfolio(root); });
     const positions = C.buildPositions();
     const summary = C.buildSummary(positions);
     const rate = S.getFxRate() || 31.5;
@@ -137,6 +139,7 @@ App.Views = (function () {
             <span class="as-total" style="color:${M.color}">${U.fmtWhole(tot)}</span>
             <span class="as-hchg" style="color:${UI.pnlColor(dayChg)}">${dArrow} ${U.fmtWhole(Math.abs(dayChg))} (${Math.abs(dayChgPct).toFixed(2)}%)</span>
           </div>
+          <button class="as-htrend" data-trend="${M.key}" aria-label="走勢圖"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></button>
         </div>`;
       if (open) {
         html += `<div class="as-body">`;
@@ -178,6 +181,9 @@ App.Views = (function () {
       const k = h.dataset.mk;
       pf.open[k] = !pf.open[k];
       portfolio(root);
+    }));
+    root.querySelectorAll('.as-htrend[data-trend]').forEach(t => t.addEventListener('click', e => {
+      e.stopPropagation(); pf.catChart = t.dataset.trend; portfolio(root);
     }));
     root.querySelectorAll('.pf-row').forEach(r =>
       r.addEventListener('click', () => openSymbolActions(r.dataset.sym)));
@@ -733,7 +739,7 @@ App.Views = (function () {
 
   /* ===================== 資產（淨資產）===================== */
   // 手風琴：一次只展開一類（cash|invest|liab）；detailGroup = 群組詳情頁
-  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', range: 'all', from: null, to: null, year: new Date().getFullYear() },
+  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, catChart: null, nw: { metric: 'net', range: 'all', from: null, to: null, year: new Date().getFullYear() },
     groupTrend: null, gt: { metric: 'line', range: 'all', from: null, to: null, year: new Date().getFullYear() }, gtCache: null };
 
   // 時間區間過濾（供淨資產圖 / 群組圖）：spec = {range:'all'|'ytd'|'custom', from, to}；items 皆有 .date
@@ -792,7 +798,7 @@ App.Views = (function () {
     if (t) t.addEventListener('change', () => { spec.to = t.value; rerender(); });
   }
   // 點「資產」tab 時回到資產首頁（退出群組/走勢/淨資產詳情）
-  function resetAssetsNav() { as.detailGroup = null; as.groupTrend = null; as.nwDetail = null; }
+  function resetAssetsNav() { as.detailGroup = null; as.groupTrend = null; as.catChart = null; }
   const AS_PURPLE = '#6D5FD5';
 
   function mvTwdOf(p, rate) {
@@ -801,7 +807,7 @@ App.Views = (function () {
   }
 
   function assets(root) {
-    if (as.nwDetail) return netWorthDetail(root);
+    if (as.catChart) return metricChartPage(root, as.catChart, () => { as.catChart = null; assets(root); });
     if (as.groupTrend) return groupTrendPage(root, as.groupTrend);
     if (as.detailGroup) return groupDetail(root, as.detailGroup);
     const rate = S.getFxRate() || 31.5;
@@ -882,6 +888,7 @@ App.Views = (function () {
           <span class="as-total">${totalHtml}</span>
           ${!open && dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : ''}
         </div>
+        <button class="as-htrend" data-trend="${cat}" aria-label="走勢圖"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></button>
       </div>`;
     }
 
@@ -965,10 +972,13 @@ App.Views = (function () {
       as.openCat = (as.openCat === k) ? null : k; // 再點一次收合；否則只展開被點的
       assets(root);
     }));
+    root.querySelectorAll('.as-htrend[data-trend]').forEach(t => t.addEventListener('click', e => {
+      e.stopPropagation(); as.catChart = t.dataset.trend; assets(root);
+    }));
     const bind = (sel, fn) => { const el = root.querySelector(sel); if (el) el.addEventListener('click', fn); };
     bind('#as-add-btn', () => openAddChooser(() => assets(root)));
     bindRefresh(root);
-    bind('#nw-open', () => { as.nwDetail = true; netWorthDetail(root); });
+    bind('#nw-open', () => { as.catChart = 'nw'; assets(root); });
     root.querySelectorAll('.as-row[data-kind]').forEach(r => r.addEventListener('click', () => {
       const kind = r.dataset.kind;
       const list = kind === 'cash' ? S.getCashAccounts() : S.getLiabilities();
@@ -987,13 +997,31 @@ App.Views = (function () {
     return C.netWorthBuckets(S.getSnapshots(), gran, C.cashLiabTwd());
   }
 
-  function netWorthDetail(root) {
+  const METRIC_META = {
+    nw: { title: '淨資產', color: '#2F80ED' }, cash: { title: '資金', color: '#34C759' },
+    invest: { title: '投資', color: '#6D5FD5' }, liab: { title: '負債', color: '#E8823C' },
+    us: { title: '美股', color: '#4A82C8' }, tw: { title: '台股', color: '#E8823C' }, crypto: { title: '加密貨幣', color: '#9B59D0' },
+  };
+  function metricSeries(key, snaps, cl) {
+    const f = {
+      nw: s => nwOf(s, cl),
+      cash: s => s.cashAccountsTwd != null ? s.cashAccountsTwd : cl.cashTwd,
+      invest: s => s.totalMarketValueTwd || 0,
+      liab: s => s.liabilitiesTwd != null ? s.liabilitiesTwd : cl.liabTwd,
+      us: s => s.usMarketValueTwd || 0, tw: s => s.twMarketValue || 0, crypto: s => s.cryptoMarketValueTwd || 0,
+    }[key] || (() => 0);
+    return snaps.map(s => ({ date: s.date, netWorth: f(s) }));
+  }
+  // 各類別走勢/漲幅圖（淨資產/資金/投資/負債、美股/台股/加密）；資料取自每日快照，共用 as.nw 控制狀態
+  function metricChartPage(root, key, backFn) {
+    const meta = METRIC_META[key] || METRIC_META.nw;
     const st = as.nw;
     const isBar = st.metric === 'change';
     const money = v => 'NT$ ' + U.fmtKMBB(v);
     const sfMoney = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
+    const rerender = () => metricChartPage(root, key, backFn);
 
-    const allSnaps = S.getSnapshots().filter(s => s && s.date).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+    const allSnaps = metricSeries(key, S.getSnapshots().filter(s => s && s.date).slice().sort((a, b) => a.date < b.date ? -1 : 1), C.cashLiabTwd());
     const dates = allSnaps.map(s => s.date);
     const years = [...new Set(allSnaps.map(s => +s.date.slice(0, 4)))].sort((a, b) => a - b);
 
@@ -1029,27 +1057,27 @@ App.Views = (function () {
         const chg = B[B.length - 1].nw - B[0].nw, base = B[0].nw;
         const pctTxt = Math.abs(base) > 1e-9 ? '，較期初 ' + (chg >= 0 ? '+' : '−') + Math.abs(chg / base * 100).toFixed(0) + '%' : '';
         summary = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div>
-          <div>淨資產 ${chg >= 0 ? '增加了' : '減少了'} <b>${money(Math.abs(chg))}</b>${pctTxt}</div></div>`;
+          <div>${meta.title} ${chg >= 0 ? '增加了' : '減少了'} <b>${money(Math.abs(chg))}</b>${pctTxt}</div></div>`;
       }
     }
 
     let html = `<div class="gd-head">
       <button class="gd-back" aria-label="返回">‹</button>
-      <div class="gd-title">${isBar ? '漲幅' : '淨資產走勢'}</div>
+      <div class="gd-title">${meta.title}${isBar ? ' 漲幅' : ' 走勢'}</div>
       <div class="gd-actions"></div>
     </div>
     <div class="card">
-      <div class="seg seg-wide" id="nw-metric">${seg('net', '淨資產', st.metric)}${seg('change', '漲幅', st.metric)}</div>
+      <div class="seg seg-wide" id="nw-metric">${seg('net', '走勢', st.metric)}${seg('change', '漲幅', st.metric)}</div>
       ${isBar ? yearControlHtml(st, 'nw', years) : rangeControlHtml(st, 'nw')}
       ${summary}
       <div class="chart-host" id="nw-chart" style="margin-top:12px"></div>
     </div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
 
-    root.querySelector('.gd-back').addEventListener('click', () => { as.nwDetail = false; assets(root); });
-    root.querySelectorAll('#nw-metric .seg-btn').forEach(b => b.addEventListener('click', () => { as.nw.metric = b.dataset.v; netWorthDetail(root); }));
-    if (isBar) bindYearControl(root, st, 'nw', () => netWorthDetail(root));
-    else bindRangeControl(root, st, 'nw', dates, () => netWorthDetail(root));
+    root.querySelector('.gd-back').addEventListener('click', backFn);
+    root.querySelectorAll('#nw-metric .seg-btn').forEach(b => b.addEventListener('click', () => { st.metric = b.dataset.v; rerender(); }));
+    if (isBar) bindYearControl(root, st, 'nw', rerender);
+    else bindRangeControl(root, st, 'nw', dates, rerender);
 
     const host = root.querySelector('#nw-chart');
     if (!B.length) { host.innerHTML = `<div class="chart-empty" style="padding:50px 0">此區間尚無資料</div>`; return; }
@@ -1060,7 +1088,7 @@ App.Views = (function () {
     } else {
       const pts = B.map(b => ({ date: new Date(b.date + 'T00:00:00+08:00'), values: { v: b.nw } }));
       App.Charts.lineChart(host, pts, {
-        height: 260, series: [{ key: 'v', label: '淨資產', color: '#2F80ED', fill: true }],
+        height: 260, series: [{ key: 'v', label: meta.title, color: meta.color, fill: true }],
         xLabels: XL.xLabels, valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
       });
     }
@@ -1857,5 +1885,5 @@ App.Views = (function () {
   }
   function isUsSym(s) { return U.guessMarketBySymbol(U.sanitizeSymbol(s)) === U.Market.us; }
 
-  return { portfolio, history, report, assets, settings, openTxForm, resetAssetsNav, resetReportNav };
+  return { portfolio, history, report, assets, settings, openTxForm, resetAssetsNav, resetReportNav, resetPortfolioNav };
 })();
