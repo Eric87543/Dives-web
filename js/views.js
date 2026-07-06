@@ -119,7 +119,9 @@ App.Views = (function () {
       const tot = list.reduce((s, p) => s + mvTwd(p), 0);
       const pct = totalAll > 1e-9 ? tot / totalAll * 100 : 0;
       // 該市場當日漲跌（TWD）＋比例（相對前一日市值）
-      const dayChg = list.reduce((s, p) => s + (p.dailyChange || 0) * p.shares * convOf(p), 0);
+      // twday 模式：台股白天美股未開盤 → 美股卡當日漲跌顯示 0（與 Hero 一致）
+      const dayOn = S.getDayMode() !== 'twday' || M.key !== 'us' || U.usCountsTowardToday();
+      const dayChg = dayOn ? list.reduce((s, p) => s + (p.dailyChange || 0) * p.shares * convOf(p), 0) : 0;
       const prevMv = tot - dayChg;
       const dayChgPct = Math.abs(prevMv) > 1e-9 ? dayChg / Math.abs(prevMv) * 100 : 0;
       const dArrow = dayChg > 0 ? '▲' : dayChg < 0 ? '▼' : '–';
@@ -500,6 +502,15 @@ App.Views = (function () {
   function periodReports() {
     const snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
     const cl = C.cashLiabTwd();
+    if (rep.mode === 'daily') {
+      // 每日損益 = 當日累計損益 − 前一日（以台股日為界；美股當晚整盤落在同一台股日）
+      const md = iso => { const p = iso.split('-'); return +p[1] + '/' + +p[2]; };
+      const N = 60, start = Math.max(1, snaps.length - N);
+      const out = [];
+      for (let i = start; i < snaps.length; i++) out.push(mkReport(md(snaps[i].date), snaps[i], snaps[i - 1], cl));
+      if (snaps.length === 1) out.push(mkReport(md(snaps[0].date), snaps[0], null, cl));
+      return out;
+    }
     if (rep.mode === 'yearly') {
       const byYear = {};
       for (const s of snaps) byYear[s.date.slice(0, 4)] = s;
@@ -542,8 +553,9 @@ App.Views = (function () {
     const years = [...new Set(S.getSnapshots().map(s => +s.date.slice(0, 4)))].sort();
 
     let html = `<div class="seg seg-wide" id="rep-mode">
-      ${seg3('yearly', '年度', rep.mode)}${seg3('monthly', '月度', rep.mode)}
+      ${seg3('daily', '日', rep.mode)}${seg3('monthly', '月度', rep.mode)}${seg3('yearly', '年度', rep.mode)}
     </div>`;
+    if (rep.mode === 'daily') html += `<div class="set-hint" style="margin:2px 2px 8px">每日損益以台股日為界；美股當晚整盤計入同一天，凌晨已收的盤歸前一天</div>`;
 
     if (rep.mode === 'monthly' && years.length) {
       html += `<div class="chips" id="year-chips">` +
@@ -560,7 +572,7 @@ App.Views = (function () {
     // Hero：本期損益 + 報酬率（沿用資產/投資頁的大數字風格）
     const latest = reports[reports.length - 1];
     html += `<div class="rep-hero">
-      <div class="nw-cap">${latest.label} 本期損益</div>
+      <div class="nw-cap">${latest.label} ${rep.mode === 'daily' ? '當日損益' : '本期損益'}</div>
       <div class="nw-num" style="color:${UI.pnlColor(latest.periodPnl)}">${U.fmtBannerSigned(latest.periodPnl)}</div>
       <div class="nw-day" style="color:${UI.pnlColor(latest.returnPct || 0)}">報酬率 ${U.fmtPct(latest.returnPct)}</div>
     </div>`;
@@ -609,13 +621,15 @@ App.Views = (function () {
     const host = root.querySelector('#rep-chart');
     let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
     if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
+    if (rep.mode === 'daily') snaps = snaps.slice(-60);
+    const xLab = rep.mode === 'daily' ? monthLabels : repXLabels;
     if (rep.trendMode === 'net') {
       // 淨資產走勢（= 倉位 + 流動資金 − 負債；舊快照回填見 nwOf）
       const cl = C.cashLiabTwd();
       const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: nwOf(s, cl) } }));
       App.Charts.lineChart(host, points, {
         series: [{ key: 'v', label: '淨資產', color: '#2F80ED', fill: true }],
-        xLabels: repXLabels(points),
+        xLabels: xLab(points),
         valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
       });
     } else {
@@ -624,7 +638,7 @@ App.Views = (function () {
       } }));
       App.Charts.trend(host, points, {
         twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
-        xLabels: repXLabels(points),
+        xLabels: xLab(points),
         valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
       });
     }
@@ -1267,6 +1281,11 @@ App.Views = (function () {
         ${seg('group', '組內', S.getPctBasis())}${seg('invest', '投資', S.getPctBasis())}${seg('net', '淨資產', S.getPctBasis())}
       </div>
       <div class="set-hint">資產頁投資列的佔比要以「群組內／投資總額／淨資產」為分母</div>
+      <div class="set-sub" style="margin-top:12px">當日漲跌計算</div>
+      <div class="seg seg-wide" id="set-daymode">
+        ${seg('native', '原始', S.getDayMode())}${seg('twday', '台股日', S.getDayMode())}
+      </div>
+      <div class="set-hint">「原始」＝各市場自己的當日漲跌相加。「台股日」＝以台股開盤 09:00 起算；台股盤中時段美股顯示 0，等台北晚上美股開盤才計入今晚漲跌（凌晨那盤歸昨天）。</div>
     </div>
 
     <div class="card setting-card">
@@ -1349,6 +1368,10 @@ App.Views = (function () {
       S.setPctBasis(b.dataset.v);
       root.querySelectorAll('#set-pct-basis .seg-btn').forEach(x => x.classList.toggle('active', x.dataset.v === b.dataset.v));
       if (App.Sync) App.Sync.markDirty();
+    }));
+    root.querySelectorAll('#set-daymode .seg-btn').forEach(b => b.addEventListener('click', () => {
+      S.setDayMode(b.dataset.v);
+      root.querySelectorAll('#set-daymode .seg-btn').forEach(x => x.classList.toggle('active', x.dataset.v === b.dataset.v));
     }));
     root.querySelector('#btn-export').addEventListener('click', doExport);
     root.querySelector('#file-import').addEventListener('change', e => {

@@ -62,6 +62,8 @@ App.Calc = (function () {
   function buildSummary(positions) {
     const rate = S.getFxRate() || 31.5;
     const mmap = S.metaMap();
+    // 當日漲跌計算方式：twday 模式下，台股白天(美股尚未開盤)美股當日貢獻 0（凌晨那盤歸昨天）
+    const usDayOn = S.getDayMode() !== 'twday' || U.usCountsTowardToday();
     const s = {
       twMarketValue: 0, usMarketValueTwd: 0, cryptoMarketValueTwd: 0,
       twCostBasis: 0, usCostBasisTwd: 0, cryptoCostBasisTwd: 0,
@@ -82,7 +84,7 @@ App.Calc = (function () {
         s.usMarketValueTwd += mv * rate;
         s.usCostBasisTwd += p.cost * rate;
         s.usUnrealizedPnlTwd += p.unrealizedPnl * rate;
-        s.usDayPnlTwd += (p.dailyChange || 0) * p.shares * rate;
+        s.usDayPnlTwd += (usDayOn ? (p.dailyChange || 0) : 0) * p.shares * rate;
       } else {
         s.twMarketValue += mv;
         s.twCostBasis += p.cost;

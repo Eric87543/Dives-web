@@ -23,6 +23,7 @@ App.Store = (function () {
     groups: 'dives_groups',
     groupMap: 'dives_group_map',
     pctBasis: 'dives_pct_basis',
+    dayMode: 'dives_day_mode',
   };
 
   function read(key, fallback) {
@@ -130,6 +131,9 @@ App.Store = (function () {
   // ---- 佔比基準：'group' | 'invest' | 'net' ----
   function getPctBasis() { return localStorage.getItem(K.pctBasis) || 'invest'; }
   function setPctBasis(b) { localStorage.setItem(K.pctBasis, b); }
+  // 當日漲跌計算方式：native=各市場當日(預設) | twday=以台股開盤起算(美股凌晨算昨天)
+  function getDayMode() { return localStorage.getItem(K.dayMode) === 'twday' ? 'twday' : 'native'; }
+  function setDayMode(m) { localStorage.setItem(K.dayMode, m === 'twday' ? 'twday' : 'native'); }
 
   // ---- 清空所有資料（同步清除快照與資產頁資料）----
   function clearAll() {
@@ -158,7 +162,7 @@ App.Store = (function () {
     getCashAccounts, setCashAccounts, adjustCashBalance,
     getLiabilities, setLiabilities,
     getGroups, setGroups, getGroupMap, setGroupMap,
-    getPctBasis, setPctBasis,
+    getPctBasis, setPctBasis, getDayMode, setDayMode,
     clearAll,
   };
 })();

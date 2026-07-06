@@ -165,6 +165,23 @@ App.Util = (function () {
     return mins >= 9 * 60 && mins < 14 * 60 + 30;
   }
 
+  // 美東是否夏令時間(EDT, UTC−4)；否則 EST(UTC−5)
+  function usEasternIsDst() {
+    const now = new Date();
+    const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const utc = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    return Math.round((utc - et) / 3600000) === 4;
+  }
+  // 「台股今日(09:00 起算)」這個視窗內，美股是否已經開過盤。
+  //   台股白天(09:00 ~ 美股開盤前) → 美股當天還沒開 → false（凌晨已收那盤歸昨天）
+  //   台北晚上美股開盤後 ~ 隔天 09:00 前 → true（今晚這盤算今日）
+  function usCountsTowardToday() {
+    const p = taipeiParts();
+    const mins = p.hour * 60 + p.minute;
+    const usOpen = usEasternIsDst() ? (21 * 60 + 30) : (22 * 60 + 30); // 美股開盤(台北時間)
+    return !(mins >= 9 * 60 && mins < usOpen);
+  }
+
   // 解析數字字串（處理逗號、空字串、"-"）
   function parseNum(s) {
     if (s === null || s === undefined) return null;
@@ -178,6 +195,6 @@ App.Util = (function () {
     Market, normalizeMarketKey, guessMarketBySymbol, marketLabel,
     sanitizeSymbol, canonicalizeTwCode,
     fmtWhole, formatShares, formatPrice, fmtKMBB, fmtBanner, fmtBannerSigned, fmtPct,
-    isoDate, taipeiParts, isWeekend, shouldUseMisRealtime, parseNum
+    isoDate, taipeiParts, isWeekend, shouldUseMisRealtime, usCountsTowardToday, parseNum
   };
 })();
