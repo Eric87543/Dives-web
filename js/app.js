@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v79';
+  App.VERSION = 'v80';
 
   const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -48,7 +48,7 @@
     try { sessionStorage.setItem('dives_tab', id); } catch (e) {}
     renderCurrent();
   }
-  function goTab(id) { if (id === 'assets' && V.resetAssetsNav) V.resetAssetsNav(); switchTab(id); }
+  function goTab(id) { if (id === 'assets' && V.resetAssetsNav) V.resetAssetsNav(); if (id === 'report' && V.resetReportNav) V.resetReportNav(); switchTab(id); }
 
   // 左右滑：互動式換頁（內容跟著手指移動，放開時吸附到新頁或回彈）
   function initSwipe() {
@@ -86,6 +86,7 @@
         if (commit && neighbor != null) {
           const tab = TAB_ORDER[neighbor];
           if (tab === 'assets' && V.resetAssetsNav) V.resetAssetsNav();
+          if (tab === 'report' && V.resetReportNav) V.resetReportNav();
           currentTab = tab; try { sessionStorage.setItem('dives_tab', tab); } catch (e) {}
           t.remove();
           renderCurrent();                          // slideDir 為 null → 不再疊加動畫
@@ -329,6 +330,7 @@
     document.querySelectorAll('.tab-btn').forEach(b =>
       b.addEventListener('click', () => {
         if (b.dataset.tab === 'assets' && V.resetAssetsNav) V.resetAssetsNav();
+        if (b.dataset.tab === 'report' && V.resetReportNav) V.resetReportNav();
         switchTab(b.dataset.tab);
       }));
 

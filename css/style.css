@@ -171,6 +171,13 @@ input, select { font-family: inherit; font-size: 15px; }
 .rep-hero { padding: 6px 4px 14px; }
 .rep-hero .nw-num { font-size: 32px; }
 .rep-mc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+/* 走勢圖入口按鈕（點擊進入獨立頁）*/
+.rep-chart-btn { display: flex; align-items: center; gap: 11px; width: 100%; padding: 13px 16px; margin-bottom: 12px; background: var(--card); border: 1px solid var(--divider); border-radius: 12px; color: var(--text); }
+.rep-chart-btn:active { background: var(--soft); }
+.rep-chart-btn .rcb-icon { color: var(--primary); display: flex; }
+.rep-chart-btn .rcb-icon svg { width: 20px; height: 20px; }
+.rep-chart-btn .rcb-label { flex: 1; text-align: left; font-size: 14px; font-weight: 700; }
+.rep-chart-btn .rcb-chevron { color: var(--sub); font-size: 20px; line-height: 1; }
 .rep-mc { background: var(--soft); border-radius: 12px; padding: 11px 13px; }
 .rep-mc-k { font-size: 12px; color: var(--sub); }
 .rep-mc-v { font-size: 17px; font-weight: 700; margin-top: 2px; letter-spacing: -0.2px; }

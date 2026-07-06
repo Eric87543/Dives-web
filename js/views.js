@@ -491,7 +491,8 @@ App.Views = (function () {
   }
 
   /* ===================== 報表 ===================== */
-  const rep = { mode: 'yearly', year: new Date().getFullYear(), col: null, asc: true, trendMode: 'pos' }; // trendMode: pos=倉位 | net=淨資產
+  const rep = { mode: 'yearly', year: new Date().getFullYear(), col: null, asc: true, trendMode: 'pos', chartPage: false }; // trendMode: pos=倉位 | net=淨資產
+  function resetReportNav() { rep.chartPage = false; }
   // 欄位 → 圖表標題 / 表頭底線色（藍：淨資產/投入；綠：損益/已未實現）
   const REP_COLS = {
     netAsset: { title: '總倉位', underline: '#4A82C8' },
@@ -558,6 +559,7 @@ App.Views = (function () {
   }
 
   function report(root) {
+    if (rep.chartPage) return reportChartPage(root);
     const reports = periodReports();
     const years = [...new Set(S.getSnapshots().map(s => +s.date.slice(0, 4)))].sort();
 
@@ -594,11 +596,12 @@ App.Views = (function () {
       ${mc('已實現', U.fmtBannerSigned(latest.periodRealizedPnl), UI.pnlColor(latest.periodRealizedPnl))}
     </div>`;
 
-    // 走勢圖（倉位／淨資產可切換）
-    html += `<div class="card"><div class="chart-title-row">
-      <div class="chart-title">${rep.trendMode === 'net' ? '淨資產走勢' : '倉位走勢'}</div>
-      <div class="seg" id="rep-trend-mode">${seg('pos', '倉位', rep.trendMode)}${seg('net', '淨資產', rep.trendMode)}</div>
-    </div><div class="chart-host" id="rep-chart"></div></div>`;
+    // 走勢圖：改用 icon 進入獨立頁呈現
+    html += `<button class="rep-chart-btn" id="rep-chart-open">
+      <span class="rcb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v16a2 2 0 0 0 2 2h15"/><path d="M7 14l3.5-3.5 3 2.5L18 7"/><path d="M14.5 7H18v3.5"/></svg></span>
+      <span class="rcb-label">走勢圖</span>
+      <span class="rcb-chevron">›</span>
+    </button>`;
 
     // 期間列表（卡片列，可排序；沿用投資列的左標籤右數字風格）
     html += `<div class="card rep-periods">
@@ -622,12 +625,29 @@ App.Views = (function () {
 
     const sortBtn = root.querySelector('#rep-sort');
     if (sortBtn) sortBtn.addEventListener('click', () => { rep.asc = !rep.asc; report(root); });
-    // 走勢圖模式切換（倉位/淨資產）
-    root.querySelectorAll('#rep-trend-mode .seg-btn').forEach(b =>
-      b.addEventListener('click', () => { rep.trendMode = b.dataset.v; report(root); }));
+    root.querySelector('#rep-chart-open').addEventListener('click', () => { rep.chartPage = true; report(root); });
+  }
 
-    // 繪製走勢圖
+  // 走勢圖獨立頁（返回 / 標題 / 倉位·淨資產切換 / 全幅圖）
+  function reportChartPage(root) {
+    const html = `<div class="gd-head">
+      <button class="gd-back" aria-label="返回">‹</button>
+      <div class="gd-title">${rep.trendMode === 'net' ? '淨資產走勢' : '倉位走勢'}</div>
+      <div class="gd-actions"></div>
+    </div>
+    <div class="card">
+      <div class="seg seg-wide" id="rep-trend-mode">${seg('pos', '倉位', rep.trendMode)}${seg('net', '淨資產', rep.trendMode)}</div>
+      <div class="chart-host" id="rep-chart" style="margin-top:12px"></div>
+    </div>`;
+    root.innerHTML = `<div class="page-full">${html}</div>`;
+    root.querySelector('.gd-back').addEventListener('click', () => { rep.chartPage = false; report(root); });
+    root.querySelectorAll('#rep-trend-mode .seg-btn').forEach(b =>
+      b.addEventListener('click', () => { rep.trendMode = b.dataset.v; reportChartPage(root); }));
+    drawReportChart(root);
+  }
+  function drawReportChart(root) {
     const host = root.querySelector('#rep-chart');
+    if (!host) return;
     let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
     if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
     if (rep.mode === 'daily') snaps = snaps.slice(-60);
@@ -1705,5 +1725,5 @@ App.Views = (function () {
   }
   function isUsSym(s) { return U.guessMarketBySymbol(U.sanitizeSymbol(s)) === U.Market.us; }
 
-  return { portfolio, history, report, assets, settings, openTxForm, resetAssetsNav };
+  return { portfolio, history, report, assets, settings, openTxForm, resetAssetsNav, resetReportNav };
 })();
