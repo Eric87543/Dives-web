@@ -399,10 +399,12 @@ input, select { font-family: inherit; font-size: 15px; }
 .gd-actions button { width: 38px; height: 38px; border-radius: 50%; font-size: 18px; color: var(--text); display: flex; align-items: center; justify-content: center; }
 .gd-actions button:active { background: var(--divider); }
 .gd-trend svg { width: 19px; height: 19px; }
-/* 類別/市場標頭的走勢圖 icon（點擊進走勢頁；不觸發展開）*/
-.as-htrend { flex: none; align-self: center; margin-left: 10px; width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--sub); background: transparent; }
-.as-htrend svg { width: 18px; height: 18px; }
-.as-htrend:active { background: var(--soft); }
+/* 展開後內容底部的「走勢圖」列 */
+.cat-trend-row { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-top: 1px solid var(--divider); font-size: 13px; font-weight: 500; color: var(--primary); }
+.cat-trend-row:active { background: var(--soft); }
+.cat-trend-row .ctr-ic { display: flex; }
+.cat-trend-row .ctr-ic svg { width: 17px; height: 17px; }
+.cat-trend-row .ctr-chev { margin-left: auto; color: var(--sub); font-size: 17px; }
 .range-dates { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .range-dates .input { flex: 1; min-width: 0; }
 .range-dates span { color: var(--sub); font-size: 13px; flex: none; }
