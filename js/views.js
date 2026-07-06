@@ -275,6 +275,7 @@ App.Views = (function () {
   function histStats(fixedEl, scrollEl) {
     fixedEl.innerHTML = '';
     const st = C.tradingStats();
+    const sm = C.buildSummary(C.buildPositions()); // 累計報酬（vs 投入本金）
     const sf = v => v == null ? '—' : (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
     const col = v => UI.pnlColor(v || 0);
     const pctTxt = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
@@ -313,6 +314,14 @@ App.Views = (function () {
     };
 
     scrollEl.innerHTML = `
+      <div class="card stats-card">
+        <div class="stats-title">自投入本金以來</div>
+        <div class="tr-row">
+          <div class="tr-amt" style="color:${col(sm.totalPnl)}">${sf(sm.totalPnl)}</div>
+          <div class="tr-pct" style="color:${col(sm.totalReturnPct || 0)}">${pctTxt(sm.totalReturnPct || 0)}</div>
+        </div>
+        <div class="tr-sub">投入本金 NT$ ${U.fmtKMBB(sm.totalCostBasisTwd)}${sm.totalRealizedPnl ? ` · 未實現 ${sf(sm.totalUnrealizedPnl)} · 已實現 ${sf(sm.totalRealizedPnl)}` : ''}</div>
+      </div>
       <div class="card stats-card">
         <div class="stats-head">
           <div class="stats-title">區間獲利之最</div>
