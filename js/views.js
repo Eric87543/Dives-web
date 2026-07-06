@@ -320,7 +320,12 @@ App.Views = (function () {
           <div class="tr-amt" style="color:${col(sm.totalPnl)}">${sf(sm.totalPnl)}</div>
           <div class="tr-pct" style="color:${col(sm.totalReturnPct || 0)}">${pctTxt(sm.totalReturnPct || 0)}</div>
         </div>
-        <div class="tr-sub">投入本金 NT$ ${U.fmtKMBB(sm.totalCostBasisTwd)}${sm.totalRealizedPnl ? ` · 未實現 ${sf(sm.totalUnrealizedPnl)} · 已實現 ${sf(sm.totalRealizedPnl)}` : ''}</div>
+        <div class="tr-grid">
+          <div class="trg"><span class="trg-k">投入本金</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalCostBasisTwd)}</span></div>
+          <div class="trg"><span class="trg-k">目前市值</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalMarketValueTwd)}</span></div>
+          <div class="trg"><span class="trg-k">未實現</span><span class="trg-v" style="color:${col(sm.totalUnrealizedPnl)}">${sf(sm.totalUnrealizedPnl)}</span></div>
+          <div class="trg"><span class="trg-k">已實現</span><span class="trg-v" style="color:${col(sm.totalRealizedPnl)}">${sf(sm.totalRealizedPnl)}</span></div>
+        </div>
       </div>
       <div class="card stats-card">
         <div class="stats-head">
@@ -491,8 +496,8 @@ App.Views = (function () {
   }
 
   /* ===================== 報表 ===================== */
-  const rep = { mode: 'yearly', year: new Date().getFullYear(), col: null, asc: true, trendMode: 'pos', chartPage: false }; // trendMode: pos=倉位 | net=淨資產
-  function resetReportNav() { rep.chartPage = false; }
+  const rep = { mode: 'yearly', year: new Date().getFullYear(), month: null, asc: true, trendMode: 'pos', chartPage: false }; // 鑽取：年→月→日
+  function resetReportNav() { rep.chartPage = false; rep.mode = 'yearly'; rep.month = null; } // 進報表一律回年報表
   // 欄位 → 圖表標題 / 表頭底線色（藍：淨資產/投入；綠：損益/已未實現）
   const REP_COLS = {
     netAsset: { title: '總倉位', underline: '#4A82C8' },
@@ -512,34 +517,34 @@ App.Views = (function () {
   function periodReports() {
     const snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
     const cl = C.cashLiabTwd();
-    if (rep.mode === 'daily') {
-      // 每日損益 = 當日累計損益 − 前一日（以台股日為界；美股當晚整盤落在同一台股日）
-      const md = iso => { const p = iso.split('-'); return +p[1] + '/' + +p[2]; };
-      const N = 60, start = Math.max(1, snaps.length - N);
-      const out = [];
-      for (let i = start; i < snaps.length; i++) out.push(mkReport(md(snaps[i].date), snaps[i], snaps[i - 1], cl));
-      if (snaps.length === 1) out.push(mkReport(md(snaps[0].date), snaps[0], null, cl));
-      return out;
-    }
     if (rep.mode === 'yearly') {
       const byYear = {};
       for (const s of snaps) byYear[s.date.slice(0, 4)] = s;
       const years = Object.keys(byYear).sort();
       return years.map((y, i) => {
-        const s = byYear[y], prev = i > 0 ? byYear[years[i - 1]] : null;
-        return mkReport(y, s, prev, cl);
+        const r = mkReport(y, byYear[y], i > 0 ? byYear[years[i - 1]] : null, cl);
+        r.key = +y; return r;
       });
-    } else {
+    }
+    if (rep.mode === 'monthly') {
       const ys = String(rep.year);
       const byMonth = {};
       for (const s of snaps) if (s.date.slice(0, 4) === ys) byMonth[s.date.slice(5, 7)] = s;
       const prevYearLast = snaps.filter(s => s.date.slice(0, 4) === String(rep.year - 1)).pop() || null;
       const months = Object.keys(byMonth).sort();
       return months.map((m, i) => {
-        const s = byMonth[m], prev = i === 0 ? prevYearLast : byMonth[months[i - 1]];
-        return mkReport(m + '月', s, prev, cl);
+        const r = mkReport(+m + '月', byMonth[m], i === 0 ? prevYearLast : byMonth[months[i - 1]], cl);
+        r.key = +m; return r;
       });
     }
+    // daily：指定年月的每日損益 = 當日累計 − 前一日（台股日為界）
+    const ym = String(rep.year) + '-' + String(rep.month).padStart(2, '0');
+    const inMonth = snaps.filter(s => s.date.slice(0, 7) === ym);
+    const prevBefore = snaps.filter(s => s.date < ym + '-01').pop() || null;
+    return inMonth.map((s, i) => {
+      const r = mkReport(+s.date.slice(5, 7) + '/' + +s.date.slice(8, 10), s, i === 0 ? prevBefore : inMonth[i - 1], cl);
+      r.key = +s.date.slice(8, 10); return r;
+    });
   }
   function mkReport(label, s, prev, cl) {
     const cost = s.totalCostBasisTwd;
@@ -560,55 +565,71 @@ App.Views = (function () {
 
   function report(root) {
     if (rep.chartPage) return reportChartPage(root);
+    const cl = C.cashLiabTwd();
+    const allSnaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
     const reports = periodReports();
-    const years = [...new Set(S.getSnapshots().map(s => +s.date.slice(0, 4)))].sort();
 
-    let html = `<div class="seg seg-wide" id="rep-mode">
-      ${seg3('daily', '日', rep.mode)}${seg3('monthly', '月度', rep.mode)}${seg3('yearly', '年度', rep.mode)}
-    </div>`;
-    if (rep.mode === 'daily') html += `<div class="set-hint" style="margin:2px 2px 8px">每日損益以台股日為界；美股當晚整盤計入同一天，凌晨已收的盤歸前一天</div>`;
-
-    if (rep.mode === 'monthly' && years.length) {
-      html += `<div class="chips" id="year-chips">` +
-        years.map(y => `<button class="chip ${rep.year === y ? 'active' : ''}" data-v="${y}">${y} 年</button>`).join('') + `</div>`;
-    }
+    // 表頭：年報表無返回；月/日報表有返回鈕 + 標題
+    let html;
+    if (rep.mode === 'yearly') html = `<div class="rep-head"><div class="rep-head-title">年報表</div></div>`;
+    else html = `<div class="gd-head"><button class="gd-back" aria-label="返回">‹</button><div class="gd-title">${rep.mode === 'monthly' ? rep.year + ' 年' : rep.year + '年 ' + rep.month + '月'}</div><div class="gd-actions"></div></div>`;
 
     if (!reports.length) {
-      html += `<div class="empty">暫無報表資料，使用一段時間後每日快照將彙整於此</div>`;
+      html += `<div class="empty">${rep.mode === 'yearly' ? '暫無報表資料，使用一段時間後每日快照將彙整於此' : '此期間暫無資料'}</div>`;
       root.innerHTML = `<div class="page-full">${html}</div>`;
-      bindReportTop(root, years);
+      bindReportHead(root);
       return;
     }
 
-    // Hero：本期損益 + 報酬率（沿用資產/投資頁的大數字風格）
-    const latest = reports[reports.length - 1];
-    html += `<div class="rep-hero">
-      <div class="nw-cap">${latest.label} ${rep.mode === 'daily' ? '當日損益' : '本期損益'}</div>
-      <div class="nw-num" style="color:${UI.pnlColor(latest.periodPnl)}">${U.fmtBannerSigned(latest.periodPnl)}</div>
-      <div class="nw-day" style="color:${UI.pnlColor(latest.returnPct || 0)}">報酬率 ${U.fmtPct(latest.returnPct)}</div>
-    </div>`;
-    // 2×2 資訊卡
-    const mc = (k, v, color) => `<div class="rep-mc"><div class="rep-mc-k">${k}</div><div class="rep-mc-v"${color ? ` style="color:${color}"` : ''}>${v}</div></div>`;
-    html += `<div class="rep-mc-grid">
-      ${mc('累計損益', U.fmtBannerSigned(latest.totalPnl), UI.pnlColor(latest.totalPnl))}
-      ${mc('本期投入', U.fmtBannerSigned(latest.newInvestment))}
-      ${mc('未實現', U.fmtBannerSigned(latest.unrealizedPnl), UI.pnlColor(latest.unrealizedPnl))}
-      ${mc('已實現', U.fmtBannerSigned(latest.periodRealizedPnl), UI.pnlColor(latest.periodRealizedPnl))}
+    // Hero：依層級顯示 累計 / 該年 / 該月 的損益（用該範圍的最後一筆 − 範圍前一筆）
+    let hSnaps, hPrev, hLabel;
+    if (rep.mode === 'yearly') { hSnaps = allSnaps; hPrev = null; hLabel = '累計損益'; }
+    else if (rep.mode === 'monthly') {
+      const ys = String(rep.year);
+      hSnaps = allSnaps.filter(s => s.date.slice(0, 4) === ys);
+      hPrev = allSnaps.filter(s => s.date < ys + '-01-01').pop() || null;
+      hLabel = rep.year + '年 本期損益';
+    } else {
+      const ym = String(rep.year) + '-' + String(rep.month).padStart(2, '0');
+      hSnaps = allSnaps.filter(s => s.date.slice(0, 7) === ym);
+      hPrev = allSnaps.filter(s => s.date < ym + '-01').pop() || null;
+      hLabel = rep.year + '年' + rep.month + '月 本期損益';
+    }
+    const hero = hSnaps.length ? mkReport('', hSnaps[hSnaps.length - 1], hPrev, cl) : null;
+    if (hero) html += `<div class="rep-hero">
+      <div class="nw-cap">${hLabel}</div>
+      <div class="nw-num" style="color:${UI.pnlColor(hero.periodPnl)}">${U.fmtBannerSigned(hero.periodPnl)}</div>
+      <div class="nw-day" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">報酬率 ${U.fmtPct(hero.periodReturnPct)}</div>
     </div>`;
 
-    // 走勢圖：改用 icon 進入獨立頁呈現
+    // 2×2 資訊卡：只在年報表（最上層）顯示全期概況
+    if (rep.mode === 'yearly' && hSnaps.length) {
+      const last = hSnaps[hSnaps.length - 1];
+      const mc = (k, v, color) => `<div class="rep-mc"><div class="rep-mc-k">${k}</div><div class="rep-mc-v"${color ? ` style="color:${color}"` : ''}>${v}</div></div>`;
+      html += `<div class="rep-mc-grid">
+        ${mc('累計損益', U.fmtBannerSigned(last.totalPnl), UI.pnlColor(last.totalPnl))}
+        ${mc('目前市值', 'NT$ ' + U.fmtKMBB(last.totalMarketValueTwd || 0))}
+        ${mc('未實現', U.fmtBannerSigned(last.unrealizedPnl), UI.pnlColor(last.unrealizedPnl))}
+        ${mc('已實現', U.fmtBannerSigned(last.realizedPnl), UI.pnlColor(last.realizedPnl))}
+      </div>`;
+    }
+
+    // 走勢圖 icon
     html += `<button class="rep-chart-btn" id="rep-chart-open">
       <span class="rcb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v16a2 2 0 0 0 2 2h15"/><path d="M7 14l3.5-3.5 3 2.5L18 7"/><path d="M14.5 7H18v3.5"/></svg></span>
       <span class="rcb-label">走勢圖</span>
       <span class="rcb-chevron">›</span>
     </button>`;
+    if (rep.mode === 'daily') html += `<div class="set-hint" style="margin:0 2px 8px">每日損益以台股日為界；美股當晚整盤計入同一天，凌晨已收的盤歸前一天</div>`;
 
-    // 期間列表（卡片列，可排序；沿用投資列的左標籤右數字風格）
+    // 期間列表：年→月、月→日 可鑽入（日為葉層）
+    const drill = rep.mode !== 'daily';
+    const head = rep.mode === 'yearly' ? '各年度' : rep.mode === 'monthly' ? '各月' : '各日';
     html += `<div class="card rep-periods">
-      <div class="rep-periods-head"><span>各期間</span><button class="rep-sort" id="rep-sort">排序 ${rep.asc ? '▲' : '▼'}</button></div>`;
+      <div class="rep-periods-head"><span>${head}</span><button class="rep-sort" id="rep-sort">排序 ${rep.asc ? '▲' : '▼'}</button></div>`;
     const rowsOrder = rep.asc ? reports : [...reports].reverse();
     for (const r of rowsOrder) {
-      html += `<div class="rep-prow">
+      html += `<div class="rep-prow${drill ? ' rep-prow-drill' : ''}"${drill ? ` data-key="${r.key}"` : ''}>
         <div class="rep-prow-main">
           <div class="rep-prow-lbl">${r.label}</div>
           <div class="rep-prow-sub">總倉位 ${U.fmtKMBB(r.netAsset)} · 投入 ${U.fmtBannerSigned(r.newInvestment)}</div>
@@ -617,15 +638,30 @@ App.Views = (function () {
           <div class="rep-prow-pnl" style="color:${UI.pnlColor(r.periodPnl)}">${U.fmtBannerSigned(r.periodPnl)}</div>
           <div class="rep-prow-pct" style="color:${UI.pnlColor(r.periodReturnPct)}">${U.fmtPct(r.periodReturnPct)}</div>
         </div>
+        ${drill ? '<span class="rep-prow-chev">›</span>' : ''}
       </div>`;
     }
     html += `</div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
-    bindReportTop(root, years);
+    bindReportHead(root);
 
     const sortBtn = root.querySelector('#rep-sort');
     if (sortBtn) sortBtn.addEventListener('click', () => { rep.asc = !rep.asc; report(root); });
     root.querySelector('#rep-chart-open').addEventListener('click', () => { rep.chartPage = true; report(root); });
+    root.querySelectorAll('.rep-prow-drill').forEach(rw => rw.addEventListener('click', () => {
+      const key = +rw.dataset.key;
+      if (rep.mode === 'yearly') { rep.year = key; rep.mode = 'monthly'; }
+      else { rep.month = key; rep.mode = 'daily'; }
+      report(root);
+    }));
+  }
+  function bindReportHead(root) {
+    const back = root.querySelector('.gd-back');
+    if (back) back.addEventListener('click', () => {
+      if (rep.mode === 'daily') { rep.mode = 'monthly'; rep.month = null; }
+      else if (rep.mode === 'monthly') rep.mode = 'yearly';
+      report(root);
+    });
   }
 
   // 走勢圖獨立頁（返回 / 標題 / 倉位·淨資產切換 / 全幅圖）
@@ -650,7 +686,7 @@ App.Views = (function () {
     if (!host) return;
     let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
     if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
-    if (rep.mode === 'daily') snaps = snaps.slice(-60);
+    if (rep.mode === 'daily') { const ym = String(rep.year) + '-' + String(rep.month).padStart(2, '0'); snaps = snaps.filter(s => s.date.slice(0, 7) === ym); }
     const xLab = rep.mode === 'daily' ? monthLabels : repXLabels;
     if (rep.trendMode === 'net') {
       // 淨資產走勢（= 倉位 + 流動資金 − 負債；舊快照回填見 nwOf）
