@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v77';
+  App.VERSION = 'v78';
 
   const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -218,6 +218,35 @@
     return n;
   }
 
+  // 缺漏的「交易日(週間)」天數：從最早快照到今天，扣掉週末後仍沒有快照的天數
+  function snapshotGapDays() {
+    const snaps = S.getSnapshots();
+    if (!snaps.length) return 0;
+    const have = new Set(snaps.map(s => s.date));
+    const min = snaps.reduce((a, s) => (s.date < a ? s.date : a), snaps[0].date);
+    const today = App.Util.isoDate();
+    let gap = 0;
+    const cur = new Date(min + 'T12:00:00+08:00'), end = new Date(today + 'T12:00:00+08:00');
+    while (cur <= end) {
+      if (!App.Util.isWeekend(cur) && !have.has(App.Util.isoDate(cur))) gap++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return gap;
+  }
+  // 登入後自動補齊：每天最多檢查一次；有缺（沒開 App 的那些交易日）就用收盤價補回
+  async function maybeBackfill() {
+    try {
+      if (!navigator.onLine || !S.getTransactions().length) return;
+      const today = App.Util.isoDate();
+      if (localStorage.getItem('dives_backfill_date') === today) return; // 今天已檢查過
+      const gap = snapshotGapDays();
+      if (gap <= 0) { localStorage.setItem('dives_backfill_date', today); return; } // 無缺口
+      await rebuildHistory();                                    // 用收盤價重建，填平缺口
+      localStorage.setItem('dives_backfill_date', today);
+      UI.toast(`已自動補齊 ${gap} 天歷史`, 'success');
+    } catch (e) { console.warn('auto backfill failed', e); }
+  }
+
   // 載入示範資料（測試用）：現金/負債/台美股+加密/群組/120 天歷史快照
   function seedDemo() {
     const U = App.Util;
@@ -290,6 +319,8 @@
   App.switchTab = switchTab;
   App.refresh = refresh;
   App.rebuildHistory = rebuildHistory;
+  App.snapshotGapDays = snapshotGapDays;
+  App.maybeBackfill = maybeBackfill;
   App.seedDemo = seedDemo;
 
   // 初始化
@@ -349,8 +380,9 @@
         if (r.changed) renderCurrent();
       }
       const hasTx = S.getTransactions().length > 0;
-      if (hasTx) refresh();
+      if (hasTx) await refresh();
       Api.loadTwUniverse(false).catch(() => {});
+      maybeBackfill(); // 登入後自動補齊歷史缺口（每天最多一次）
     })();
   }
 
