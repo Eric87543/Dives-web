@@ -733,8 +733,32 @@ App.Views = (function () {
 
   /* ===================== 資產（淨資產）===================== */
   // 手風琴：一次只展開一類（cash|invest|liab）；detailGroup = 群組詳情頁
-  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day' },
-    groupTrend: null, gt: { metric: 'line', gran: 'day' }, gtCache: null };
+  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, nwDetail: false, nw: { metric: 'net', gran: 'day', range: 'all', from: null, to: null },
+    groupTrend: null, gt: { metric: 'line', gran: 'day', range: 'all', from: null, to: null }, gtCache: null };
+
+  // 時間區間過濾（供淨資產圖 / 群組圖）：spec = {range:'all'|'ytd'|'custom', from, to}；items 皆有 .date
+  function applyRange(items, spec) {
+    if (!spec || spec.range === 'all') return { items, noWindow: false };
+    if (spec.range === 'ytd') { const y0 = U.isoDate().slice(0, 4) + '-01-01'; return { items: items.filter(s => s.date >= y0), noWindow: true }; }
+    const from = spec.from, to = spec.to;
+    return { items: items.filter(s => (!from || s.date >= from) && (!to || s.date <= to)), noWindow: true };
+  }
+  function rangeControlHtml(spec, id) {
+    const RG = [['all', '全部'], ['ytd', 'YTD'], ['custom', '自選']];
+    let h = `<div class="seg seg-wide" id="${id}-range" style="margin-top:8px">${RG.map(([v, l]) => `<button class="seg-btn ${spec.range === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
+    if (spec.range === 'custom') h += `<div class="range-dates"><input type="date" class="input" id="${id}-from" value="${spec.from || ''}"><span>至</span><input type="date" class="input" id="${id}-to" value="${spec.to || ''}"></div>`;
+    return h;
+  }
+  function bindRangeControl(root, spec, id, dates, rerender) {
+    root.querySelectorAll(`#${id}-range .seg-btn`).forEach(b => b.addEventListener('click', () => {
+      spec.range = b.dataset.v;
+      if (spec.range === 'custom' && dates.length) { if (!spec.from) spec.from = dates[0]; if (!spec.to) spec.to = dates[dates.length - 1]; }
+      rerender();
+    }));
+    const f = root.querySelector(`#${id}-from`), t = root.querySelector(`#${id}-to`);
+    if (f) f.addEventListener('change', () => { spec.from = f.value; rerender(); });
+    if (t) t.addEventListener('change', () => { spec.to = t.value; rerender(); });
+  }
   // 點「資產」tab 時回到資產首頁（退出群組/走勢/淨資產詳情）
   function resetAssetsNav() { as.detailGroup = null; as.groupTrend = null; as.nwDetail = null; }
   const AS_PURPLE = '#6D5FD5';
@@ -933,51 +957,68 @@ App.Views = (function () {
 
   function netWorthDetail(root) {
     const st = as.nw;
-    const signed = st.metric === 'change';
-    const items = nwBuckets(st.gran).map(b => ({ label: b.label, fullLabel: b.full, value: signed ? b.change : b.nw }));
+    const isBar = st.metric === 'change';
     const GRAN = [['day', '天'], ['week', '週'], ['month', '月'], ['year', '年']];
-
-    // 圖下小統計，填補留白
-    const nfMoney = v => 'NT$ ' + U.fmtKMBB(v);
+    const money = v => 'NT$ ' + U.fmtKMBB(v);
     const sfMoney = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
-    const statRow = cols => `<div class="nw-stats">${cols.map(([k, v, c]) =>
-      `<div class="ns"><span class="ns-k">${k}</span><span class="ns-v"${c ? ` style="color:${c}"` : ''}>${v}</span></div>`).join('')}</div>`;
-    let stats = '';
-    if (items.length) {
-      const vals = items.map(i => i.value);
-      if (signed) {
-        const up = Math.max(0, ...vals), down = Math.min(0, ...vals), sum = vals.reduce((a, b) => a + b, 0);
-        stats = statRow([['最大漲', sfMoney(up), UI.pnlColor(up)], ['最大跌', sfMoney(down), UI.pnlColor(down)], ['合計', sfMoney(sum), UI.pnlColor(sum)]]);
+
+    const allSnaps = S.getSnapshots().filter(s => s && s.date).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+    const dates = allSnaps.map(s => s.date);
+    const { items: fSnaps, noWindow } = applyRange(allSnaps, st);
+    const B = C.netWorthBuckets(fSnaps, st.gran, C.cashLiabTwd(), noWindow);
+
+    // 摘要（沿用群組圖的 gt-sum 風格）
+    let summary = '';
+    if (B.length) {
+      const p = iso => ({ y: +iso.slice(0, 4), m: +iso.slice(5, 7) });
+      const a = p(B[0].date), b = p(B[B.length - 1].date);
+      const periodTxt = a.y === b.y ? `${a.y}年${a.m}月至${b.m}月` : `${a.y}年${a.m}月至${b.y}年${b.m}月`;
+      if (isBar) {
+        const vals = B.map(x => x.change), sum = vals.reduce((s, v) => s + v, 0);
+        const up = Math.max(0, ...vals), down = Math.min(0, ...vals);
+        summary = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div>
+          <div>合計 <b style="color:${UI.pnlColor(sum)}">${sfMoney(sum)}</b></div>
+          <div>最大漲 <b style="color:${UI.pnlColor(up)}">${sfMoney(up)}</b> · 最大跌 <b style="color:${UI.pnlColor(down)}">${sfMoney(down)}</b></div></div>`;
       } else {
-        const hi = Math.max(...vals), lo = Math.min(...vals), chg = vals[vals.length - 1] - vals[0];
-        stats = statRow([['最高', nfMoney(hi), ''], ['最低', nfMoney(lo), ''], ['區間變化', sfMoney(chg), UI.pnlColor(chg)]]);
+        const chg = B[B.length - 1].nw - B[0].nw, base = B[0].nw;
+        const pctTxt = Math.abs(base) > 1e-9 ? '，較期初 ' + (chg >= 0 ? '+' : '−') + Math.abs(chg / base * 100).toFixed(0) + '%' : '';
+        summary = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div>
+          <div>淨資產 ${chg >= 0 ? '增加了' : '減少了'} <b>${money(Math.abs(chg))}</b>${pctTxt}</div></div>`;
       }
     }
 
     let html = `<div class="gd-head">
       <button class="gd-back" aria-label="返回">‹</button>
-      <div class="gd-title">${signed ? '漲幅長條圖' : '淨資產長條圖'}</div>
+      <div class="gd-title">${isBar ? '漲幅' : '淨資產走勢'}</div>
       <div class="gd-actions"></div>
     </div>
     <div class="card">
       <div class="seg seg-wide" id="nw-metric">${seg('net', '淨資產', st.metric)}${seg('change', '漲幅', st.metric)}</div>
-      <div class="seg seg-wide" id="nw-gran" style="margin-top:8px">
-        ${GRAN.map(([v, l]) => `<button class="seg-btn ${st.gran === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}
-      </div>
+      <div class="seg seg-wide" id="nw-gran" style="margin-top:8px">${GRAN.map(([v, l]) => `<button class="seg-btn ${st.gran === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
+      ${rangeControlHtml(st, 'nw')}
+      ${summary}
       <div class="chart-host" id="nw-chart" style="margin-top:12px"></div>
-      ${stats}
     </div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
 
     root.querySelector('.gd-back').addEventListener('click', () => { as.nwDetail = false; assets(root); });
     root.querySelectorAll('#nw-metric .seg-btn').forEach(b => b.addEventListener('click', () => { as.nw.metric = b.dataset.v; netWorthDetail(root); }));
     root.querySelectorAll('#nw-gran .seg-btn').forEach(b => b.addEventListener('click', () => { as.nw.gran = b.dataset.v; netWorthDetail(root); }));
+    bindRangeControl(root, st, 'nw', dates, () => netWorthDetail(root));
 
-    App.Charts.barChart(root.querySelector('#nw-chart'), items, {
-      height: 260,
-      valueFmt: v => signed ? ((v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v))) : ('NT$ ' + U.fmtKMBB(v)),
-      colorOf: signed ? (v => UI.pnlColor(v)) : (() => '#2F80ED'),
-    });
+    const host = root.querySelector('#nw-chart');
+    if (!B.length) { host.innerHTML = `<div class="chart-empty" style="padding:50px 0">此區間尚無資料</div>`; return; }
+    if (isBar) {
+      App.Charts.barChart(host, B.map(b => ({ label: b.label, fullLabel: b.full, value: b.change })), {
+        height: 260, colorOf: v => UI.pnlColor(v), valueFmt: sfMoney,
+      });
+    } else {
+      const pts = B.map(b => ({ date: new Date(b.date + 'T00:00:00+08:00'), values: { v: b.nw } }));
+      App.Charts.lineChart(host, pts, {
+        height: 260, series: [{ key: 'v', label: '淨資產', color: '#2F80ED', fill: true }],
+        xLabels: bucketXLabels(B), valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
+      });
+    }
   }
 
   // 群組詳情頁（返回 / 標題 / ⋯ / ＋ / 合計排序 / 成員卡片）
@@ -1095,9 +1136,11 @@ App.Views = (function () {
     const isBar = st.metric === 'change';
     const GRAN = [['day', '天'], ['week', '週'], ['month', '月'], ['year', '年']];
     const CL = { cashTwd: 0, liabTwd: 0 };
+    const dates = series.map(s => s.date);
+    const { items: fSeries, noWindow } = applyRange(series, st);
     // 市值 / 成本 分別分桶（同日期 → 逐一對齊）
-    const mvB = C.netWorthBuckets(series.map(s => ({ date: s.date, netWorth: s.mv })), st.gran, CL);
-    const coB = C.netWorthBuckets(series.map(s => ({ date: s.date, netWorth: s.cost })), st.gran, CL);
+    const mvB = C.netWorthBuckets(fSeries.map(s => ({ date: s.date, netWorth: s.mv })), st.gran, CL, noWindow);
+    const coB = C.netWorthBuckets(fSeries.map(s => ({ date: s.date, netWorth: s.cost })), st.gran, CL, noWindow);
     const GC_MV = '#6D5FD5', GC_COST = '#A8A29E';        // 市值紫實線、成本灰虛線
     const BAR_IN = '#4B3F9E', BAR_PL = '#8B7FE0';         // 投入深紫、損益淺紫
 
@@ -1134,6 +1177,7 @@ App.Views = (function () {
       <div class="seg seg-wide" id="gt-gran" style="margin-top:8px">
         ${GRAN.map(([v, l]) => `<button class="seg-btn ${st.gran === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}
       </div>
+      ${rangeControlHtml(st, 'gt')}
       ${summary}
       ${isBar
         ? `<div class="gt-subtitle">投入</div><div class="chart-host" id="gt-chart-a"></div>
@@ -1145,6 +1189,7 @@ App.Views = (function () {
     root.querySelector('.gd-back').addEventListener('click', () => { as.groupTrend = null; assets(root); });
     root.querySelectorAll('#gt-metric .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.metric = b.dataset.v; groupTrendPage(root, gid); }));
     root.querySelectorAll('#gt-gran .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.gran = b.dataset.v; groupTrendPage(root, gid); }));
+    bindRangeControl(root, st, 'gt', dates, () => groupTrendPage(root, gid));
 
     if (!mvB.length) { (root.querySelector('#gt-chart') || root.querySelector('#gt-chart-a')).innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }
     const sfBar = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));

@@ -456,7 +456,7 @@ App.Calc = (function () {
   //  - nwOf 回填舊快照；同桶(週/月/年)取最後一筆
   //  - change：有前一桶→跨期差；無前一桶(最早/唯一)→期間內漲幅(期末−期初)，避免顯示 0
   //  - 視窗：day=7 / week=5 / month=12 / year=10；空快照→[]
-  function netWorthBuckets(snapshots, gran, cashLiab) {
+  function netWorthBuckets(snapshots, gran, cashLiab, noWindow) {
     const cl = cashLiab || { cashTwd: 0, liabTwd: 0 };
     const nwOf = s => (s.netWorth != null ? s.netWorth
       : (s.totalMarketValueTwd != null ? s.totalMarketValueTwd : (s.netAsset || 0)) + (cl.cashTwd || 0) - (cl.liabTwd || 0));
@@ -489,7 +489,7 @@ App.Calc = (function () {
     }
     const withChange = buckets.map((b, i) => Object.assign({}, b, { change: i > 0 ? b.nw - buckets[i - 1].nw : b.nw - b.first }));
     const N = gran === 'day' ? 7 : gran === 'week' ? 5 : gran === 'month' ? 12 : 10;
-    return withChange.slice(-N);
+    return noWindow ? withChange : withChange.slice(-N); // 指定區間(YTD/自選)→ 顯示全部桶，不套最後N筆視窗
   }
 
   // 群組每日市值序列（依交易 + 成員歷史收盤回推；美股/加密 ×匯率）
