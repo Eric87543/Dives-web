@@ -1068,7 +1068,7 @@ App.Views = (function () {
     const updTs = S.getPricesTs();
     const updDate = updTs ? U.isoDate(new Date(updTs)) : '';
 
-    let html = `<div class="gd-head">
+    const topHtml = `<div class="gd-head">
       <button class="gd-back" aria-label="返回">‹</button>
       <div class="gd-title">${g.name}</div>
       <div class="gd-actions">
@@ -1079,14 +1079,15 @@ App.Views = (function () {
     </div>
     <div class="gd-total">合計 NT$ ${U.fmtWhole(gTotal)} <button class="gd-sort" aria-label="排序">${as.detailAsc ? '▲' : '▼'}</button></div>`;
 
+    let listHtml = '';
     if (!members.length) {
-      html += `<div class="empty" style="padding:40px 16px">此群組尚無持倉<br>點右上 ＋ 買入並加入，或從投資清單指定群組</div>`;
+      listHtml += `<div class="empty" style="padding:40px 16px">此群組尚無持倉<br>點右上 ＋ 買入並加入，或從投資清單指定群組</div>`;
     }
     for (const p of members) {
       const mv = mvTwdOf(p, rate);
       const pct = denomV > 1e-9 ? mv / denomV * 100 : 0;
       const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
-      html += `<div class="card gd-row" data-sym="${p.symbol}">
+      listHtml += `<div class="card gd-row" data-sym="${p.symbol}">
         <span class="pct-badge">${fmtPctBadge(pct)}</span>
         <div class="as-main">
           <div class="gd-sym">${p.symbol} <span class="h-name">${p.name !== p.symbol ? p.name : ''}</span></div>
@@ -1099,7 +1100,7 @@ App.Views = (function () {
       </div>`;
     }
 
-    root.innerHTML = `<div class="page-full">${html}</div>`;
+    root.innerHTML = `<div class="page"><div class="page-top">${topHtml}</div><div class="page-list">${listHtml}</div></div>`;
 
     root.querySelector('.gd-back').addEventListener('click', () => { as.detailGroup = null; assets(root); });
     root.querySelector('.gd-sort').addEventListener('click', () => { as.detailAsc = !as.detailAsc; assets(root); });
