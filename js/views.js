@@ -704,6 +704,15 @@ App.Views = (function () {
       else ungrouped.push(p);
     }
     const groupTotal = gid => (byGroup[gid] || []).reduce((s, p) => s + mvTwdOf(p, rate), 0);
+    // 群組今日漲跌（TWD）：各持倉當日 × 股數 × 匯率；台股日模式下美股未開盤則當日計 0
+    const usGated = S.getDayMode() === 'twday' && !U.usCountsTowardToday();
+    const posDayTwd = p => {
+      const mk = U.normalizeMarketKey(p.market);
+      if (usGated && mk === U.Market.us) return 0;
+      const conv = (mk === U.Market.us || mk === U.Market.crypto) ? rate : 1;
+      return (p.dailyChange || 0) * p.shares * conv;
+    };
+    const groupDayChg = gid => (byGroup[gid] || []).reduce((s, p) => s + posDayTwd(p), 0);
     const fmtPctBadge = v => (v >= 9.95 ? Math.round(v) : v.toFixed(v >= 1 ? 0 : 1)) + '%';
     // 佔比分母：組內=該群組、投資=投資總市值、淨資產=淨資產
     const denom = gTotal => basis === 'group' ? (gTotal || sum.investTwd) : basis === 'invest' ? sum.investTwd : sum.netWorth;
@@ -752,20 +761,10 @@ App.Views = (function () {
     }
 
     // 分類卡標頭（名稱前加佔總資產比例環圈；展開填色、收合顯示摘要+日期）
-    // dayChg：有值 → 於數值下方顯示今日漲跌（投資會日內波動；現金/負債不變故不傳）
-    function catHead(cat, name, totalHtml, cc, openCls, summary, dateTs, pct, dayChg) {
+    function catHead(cat, name, totalHtml, cc, openCls, summary, dateTs, pct) {
       const open = as.openCat === cat;
       const ink = openCls === 'oc-green' ? '#1E8E4E' : openCls === 'oc-purple' ? '#5A4FC0' : '#4A56B5';
       const ring = pct != null ? pctRing(pct, cc, ink) : '';
-      let rightSub;
-      if (dayChg != null) {
-        const prev = sum.investTwd - dayChg;
-        const dpct = Math.abs(prev) > 1e-9 ? dayChg / Math.abs(prev) * 100 : 0;
-        const dArrow = dayChg > 0 ? '▲' : dayChg < 0 ? '▼' : '–';
-        rightSub = `<span class="as-hchg" style="color:${UI.pnlColor(dayChg)}">${dArrow} ${U.fmtWhole(Math.abs(dayChg))} (${Math.abs(dpct).toFixed(2)}%)</span>`;
-      } else {
-        rightSub = !open && dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : '';
-      }
       return `<div class="as-head ${open ? 'open ' + openCls : ''}" data-cat="${cat}" style="--cc:${cc}">
         <div class="as-hleft cat-hleft">
           ${ring}
@@ -776,7 +775,7 @@ App.Views = (function () {
         </div>
         <div class="as-hright">
           <span class="as-total">${totalHtml}</span>
-          ${rightSub}
+          ${!open && dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : ''}
         </div>
       </div>`;
     }
@@ -804,7 +803,7 @@ App.Views = (function () {
 
     // ── 投資 ────────────────────────────────────────────
     html += `<div class="card as-cat">` +
-      catHead('invest', '投資', U.fmtWhole(sum.investTwd), AS_PURPLE, 'oc-purple', investSummary, S.getPricesTs(), pctOfAssets(sum.investTwd), dayChange);
+      catHead('invest', '投資', U.fmtWhole(sum.investTwd), AS_PURPLE, 'oc-purple', investSummary, S.getPricesTs(), pctOfAssets(sum.investTwd));
     if (as.openCat === 'invest') {
       html += `<div class="as-body">`;
       // 群組列（點擊進入詳情頁）
@@ -812,11 +811,18 @@ App.Views = (function () {
         const gTotal = groupTotal(g.id);
         const gPct = (basis === 'net' ? sum.netWorth : sum.investTwd) > 1e-9
           ? gTotal / (basis === 'net' ? sum.netWorth : sum.investTwd) * 100 : 0;
+        const gDay = groupDayChg(g.id);
+        const gPrev = gTotal - gDay;
+        const gDayPct = Math.abs(gPrev) > 1e-9 ? gDay / Math.abs(gPrev) * 100 : 0;
+        const gArrow = gDay > 0 ? '▲' : gDay < 0 ? '▼' : '–';
         html += `<div class="as-grow" data-gid="${g.id}">
           <span class="pct-badge sm">${fmtPctBadge(gPct)}</span>
           <div class="as-main"><div class="as-title">${g.name}</div>
             <div class="as-sub">${(byGroup[g.id] || []).length} 檔 ›</div></div>
-          <div class="as-val">${U.fmtWhole(gTotal)}</div>
+          <div class="as-gv">
+            <div class="as-val">${U.fmtWhole(gTotal)}</div>
+            <span class="as-hchg" style="color:${UI.pnlColor(gDay)}">${gArrow} ${U.fmtWhole(Math.abs(gDay))} (${Math.abs(gDayPct).toFixed(2)}%)</span>
+          </div>
         </div>`;
       }
       // 未分組持倉（與群組同層）

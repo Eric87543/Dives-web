@@ -376,6 +376,7 @@ input, select { font-family: inherit; font-size: 15px; }
 .as-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .as-sub { font-size: 11px; color: var(--sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .as-val { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.as-gv { flex: none; text-align: right; white-space: nowrap; }
 .as-add { display: block; width: calc(100% - 32px); margin: 8px 16px 6px; padding: 9px; border-radius: 9px; background: var(--soft); color: var(--sub); font-size: 13px; text-align: center; }
 .as-add:active { background: var(--divider); }
 .as-grow { display: flex; align-items: center; gap: 10px; padding: 11px 8px 11px 16px; min-height: 56px; border-top: 1px solid var(--divider); cursor: pointer; }
