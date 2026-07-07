@@ -553,6 +553,26 @@ App.Views = (function () {
     };
   }
 
+  // 迷你走勢（sparkline）：以 totalPnl 序列畫面積線；stroke 不隨拉伸變粗
+  function sparklineHtml(vals, color) {
+    vals = (vals || []).filter(v => typeof v === 'number' && isFinite(v));
+    if (vals.length < 2) return '';
+    let pts = vals;
+    const N = 44;
+    if (vals.length > N) { const step = vals.length / N; pts = []; for (let i = 0; i < N; i++) pts.push(vals[Math.floor(i * step)]); pts.push(vals[vals.length - 1]); }
+    const W = 300, H = 52, pad = 4;
+    let lo = Math.min(...pts), hi = Math.max(...pts);
+    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    const xAt = i => pts.length > 1 ? i / (pts.length - 1) * W : W / 2;
+    const yAt = v => pad + (1 - (v - lo) / (hi - lo)) * (H - pad * 2);
+    const line = pts.map((v, i) => (i ? 'L' : 'M') + xAt(i).toFixed(1) + ' ' + yAt(v).toFixed(1)).join(' ');
+    const fill = color === UI.LOSS ? 'rgba(67,160,71,0.13)' : color === UI.GAIN ? 'rgba(229,57,53,0.13)' : 'rgba(109,95,213,0.13)';
+    return `<svg class="rep-spark" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" aria-hidden="true">
+      <path d="${line} L${W} ${H} L0 ${H} Z" fill="${fill}"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    </svg>`;
+  }
+
   function report(root) {
     if (rep.statsPage) return reportStatsPage(root);
     const cl = C.cashLiabTwd();
@@ -567,17 +587,17 @@ App.Views = (function () {
       if (allSnaps.length) {
         const last = allSnaps[allSnaps.length - 1];
         const hero = mkReport('', last, null, cl);
-        const mc = (k, v, color) => `<div class="rep-mc"><div class="rep-mc-k">${k}</div><div class="rep-mc-v"${color ? ` style="color:${color}"` : ''}>${v}</div></div>`;
+        const col = UI.pnlColor(hero.periodPnl);
         topHtml += `<div class="rep-hero">
           <div class="nw-cap">累計損益</div>
-          <div class="nw-num" style="color:${UI.pnlColor(hero.periodPnl)}">${U.fmtBannerSigned(hero.periodPnl)}</div>
-          <div class="nw-day" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">報酬率 ${U.fmtPct(hero.periodReturnPct)}</div>
-        </div>
-        <div class="rep-mc-grid">
-          ${mc('累計損益', U.fmtBannerSigned(last.totalPnl), UI.pnlColor(last.totalPnl))}
-          ${mc('目前市值', 'NT$ ' + U.fmtKMBB(last.totalMarketValueTwd || 0))}
-          ${mc('未實現', U.fmtBannerSigned(last.unrealizedPnl), UI.pnlColor(last.unrealizedPnl))}
-          ${mc('已實現', U.fmtBannerSigned(last.realizedPnl), UI.pnlColor(last.realizedPnl))}
+          <div class="rep-heroline"><span class="nw-num" style="color:${col}">${U.fmtBannerSigned(hero.periodPnl)}</span><span class="rep-heropct" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">${U.fmtPct(hero.periodReturnPct)}</span></div>
+          ${sparklineHtml(allSnaps.map(s => s.totalPnl || 0), col)}
+          <div class="rep-chips">
+            <span>投入本金 <b>NT$ ${U.fmtKMBB(last.totalCostBasisTwd)}</b></span>
+            <span>目前市值 <b>NT$ ${U.fmtKMBB(last.totalMarketValueTwd || 0)}</b></span>
+            <span>未實現 <b style="color:${UI.pnlColor(last.unrealizedPnl)}">${U.fmtBannerSigned(last.unrealizedPnl)}</b></span>
+            <span>已實現 <b style="color:${UI.pnlColor(last.realizedPnl)}">${U.fmtBannerSigned(last.realizedPnl)}</b></span>
+          </div>
         </div>`;
       }
     } else {
@@ -595,11 +615,14 @@ App.Views = (function () {
         hLabel = rep.year + '年' + rep.month + '月 本期損益';
       }
       const hero = hSnaps.length ? mkReport('', hSnaps[hSnaps.length - 1], hPrev, cl) : null;
-      if (hero) topHtml += `<div class="rep-hero">
-        <div class="nw-cap">${hLabel}</div>
-        <div class="nw-num" style="color:${UI.pnlColor(hero.periodPnl)}">${U.fmtBannerSigned(hero.periodPnl)}</div>
-        <div class="nw-day" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">報酬率 ${U.fmtPct(hero.periodReturnPct)}</div>
-      </div>`;
+      if (hero) {
+        const col = UI.pnlColor(hero.periodPnl);
+        topHtml += `<div class="rep-hero">
+          <div class="nw-cap">${hLabel}</div>
+          <div class="rep-heroline"><span class="nw-num" style="color:${col}">${U.fmtBannerSigned(hero.periodPnl)}</span><span class="rep-heropct" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">${U.fmtPct(hero.periodReturnPct)}</span></div>
+          ${sparklineHtml(hSnaps.map(s => s.totalPnl || 0), col)}
+        </div>`;
+      }
     }
 
     // 捲動內容
