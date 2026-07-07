@@ -515,8 +515,26 @@ App.Views = (function () {
 
     // 固定頂部：年報表無返回；月/日報表有返回鈕 + 標題（月/日再加本期損益 Hero）
     let topHtml;
-    if (rep.mode === 'yearly') topHtml = `<div class="rep-head"><div class="rep-head-title">年報表</div></div>`;
-    else {
+    if (rep.mode === 'yearly') {
+      topHtml = `<div class="rep-head"><div class="rep-head-title">年報表</div></div>`;
+      // 累計概況：Hero 累計損益 + 2×2 資訊卡（累計損益 / 目前市值 / 未實現 / 已實現）
+      if (allSnaps.length) {
+        const last = allSnaps[allSnaps.length - 1];
+        const hero = mkReport('', last, null, cl);
+        const mc = (k, v, color) => `<div class="rep-mc"><div class="rep-mc-k">${k}</div><div class="rep-mc-v"${color ? ` style="color:${color}"` : ''}>${v}</div></div>`;
+        topHtml += `<div class="rep-hero">
+          <div class="nw-cap">累計損益</div>
+          <div class="nw-num" style="color:${UI.pnlColor(hero.periodPnl)}">${U.fmtBannerSigned(hero.periodPnl)}</div>
+          <div class="nw-day" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">報酬率 ${U.fmtPct(hero.periodReturnPct)}</div>
+        </div>
+        <div class="rep-mc-grid">
+          ${mc('累計損益', U.fmtBannerSigned(last.totalPnl), UI.pnlColor(last.totalPnl))}
+          ${mc('目前市值', 'NT$ ' + U.fmtKMBB(last.totalMarketValueTwd || 0))}
+          ${mc('未實現', U.fmtBannerSigned(last.unrealizedPnl), UI.pnlColor(last.unrealizedPnl))}
+          ${mc('已實現', U.fmtBannerSigned(last.realizedPnl), UI.pnlColor(last.realizedPnl))}
+        </div>`;
+      }
+    } else {
       topHtml = `<div class="gd-head"><button class="gd-back" aria-label="返回">‹</button><div class="gd-title">${rep.mode === 'monthly' ? rep.year + ' 年' : rep.year + '年 ' + rep.month + '月'}</div><div class="gd-actions"></div></div>`;
       let hSnaps, hPrev, hLabel;
       if (rep.mode === 'monthly') {
@@ -550,7 +568,6 @@ App.Views = (function () {
         <span class="rcb-label">${statsLabel}</span>
         <span class="rcb-chevron">›</span>
       </button>`;
-      if (rep.mode === 'daily') listHtml += `<div class="set-hint" style="margin:0 2px 8px">每日損益以台股日為界；美股當晚整盤計入同一天，凌晨已收的盤歸前一天</div>`;
 
       // 期間列表：年→月、月→日 可鑽入（日為葉層）；預設倒序（新→舊）
       const drill = rep.mode !== 'daily';
