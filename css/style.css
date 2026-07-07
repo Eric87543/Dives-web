@@ -205,8 +205,19 @@ input, select { font-family: inherit; font-size: 15px; }
 /* ---- TX list ---- */
 .search { width: 100%; margin-bottom: 10px; }
 .tx-list { padding: 4px 0; }
-.tx-row { display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 14px; border-bottom: 1px solid var(--divider); overflow: hidden; }
+.tx-row { display: flex; align-items: center; gap: 10px; min-height: 66px; padding: 10px 14px; border-bottom: 1px solid var(--divider); overflow: hidden; }
 .tx-row.has-pnl { height: 72px; }
+/* 歷史：搜尋 + 漏斗 + 篩選面板 */
+.tx-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tx-bar .search { flex: 1; margin-bottom: 0; }
+.tx-funnel { flex: none; width: 42px; height: 42px; border: 1px solid var(--divider); border-radius: 10px; background: var(--card); color: var(--primary); display: flex; align-items: center; justify-content: center; position: relative; }
+.tx-funnel svg { width: 20px; height: 20px; }
+.tx-funnel:active { background: var(--soft); }
+.tx-funnel.on { color: var(--accent); border-color: var(--accent); }
+.tx-funnel.on::after { content: ''; position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.tx-cap { font-size: 11px; color: var(--sub); margin-top: 3px; white-space: nowrap; }
+.flt-grp { margin-bottom: 14px; }
+.flt-lbl { font-size: 12px; color: var(--sub); margin-bottom: 6px; }
 .tx-pnl { font-size: 11px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
 .tx-row:last-child { border-bottom: none; }
 .tx-row:active { background: var(--soft); }

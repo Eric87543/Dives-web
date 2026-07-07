@@ -268,7 +268,7 @@ App.Views = (function () {
 
   /* ===================== 歷史 ===================== */
   // txFilter/search：交易紀錄篩選；statScope：報表統計卡的「今年/歷史」切換
-  const hist = { txFilter: 'all', search: '' };
+  const hist = { txFilter: 'all', search: '', type: 'all', from: null, to: null }; // type:all|buy|sell；from/to:日期區間
 
   // 歷史頁：僅交易紀錄（統計已移至報表；趨勢已由各類別走勢圖取代）
   function history(root) {
@@ -369,73 +369,104 @@ App.Views = (function () {
   function histTx(fixedEl, scrollEl) {
     const mmap = S.metaMap();
     const rate = S.getFxRate() || 31.5;
+    const isUsdMk = mk => mk === U.Market.us || mk === U.Market.crypto;
     let txs = S.getTransactions().slice().sort((a, b) => b.time - a.time);
+    const q = hist.search.trim().toUpperCase();
     txs = txs.filter(t => {
+      if (hist.type === 'buy' && t.type !== 'BUY') return false;
+      if (hist.type === 'sell' && t.type !== 'SELL') return false;
       const m = U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol));
-      if (hist.txFilter === 'tw') return m !== U.Market.us && m !== U.Market.crypto;
-      if (hist.txFilter === 'us') return m === U.Market.us;
-      if (hist.txFilter === 'crypto') return m === U.Market.crypto;
+      if (hist.txFilter === 'tw' && (m === U.Market.us || m === U.Market.crypto)) return false;
+      if (hist.txFilter === 'us' && m !== U.Market.us) return false;
+      if (hist.txFilter === 'crypto' && m !== U.Market.crypto) return false;
+      const d = U.isoDate(new Date(t.time));
+      if (hist.from && d < hist.from) return false;
+      if (hist.to && d > hist.to) return false;
+      if (q && !(t.symbol.includes(q) || (mmap[t.symbol]?.name || '').toUpperCase().includes(q))) return false;
       return true;
     });
-    if (hist.search) {
-      const q = hist.search.toUpperCase();
-      txs = txs.filter(t => t.symbol.includes(q) || (mmap[t.symbol]?.name || '').toUpperCase().includes(q));
-    }
 
-    fixedEl.innerHTML = `<div class="toolbar">
-      <div class="seg" id="tx-filter">${seg('all', '全部', hist.txFilter)}${seg('tw', '台股', hist.txFilter)}${seg('us', '美股', hist.txFilter)}${seg('crypto', '加密', hist.txFilter)}</div>
-    </div>
-    <input class="input search" id="tx-search" placeholder="搜尋代碼或名稱" value="${hist.search}">`;
+    // 搜尋 + 漏斗篩選（買賣／市場／時間區間 收在漏斗面板）
+    const filterOn = hist.type !== 'all' || hist.txFilter !== 'all' || hist.from || hist.to;
+    fixedEl.innerHTML = `<div class="tx-bar">
+      <input class="input search" id="tx-search" placeholder="搜尋代碼或名稱" value="${hist.search}">
+      <button class="tx-funnel${filterOn ? ' on' : ''}" id="tx-funnel" aria-label="篩選"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg></button>
+    </div>`;
 
-    // 賣出的已實現損益：以 symbol@time 對應
     const rzByKey = {};
     for (const r of S.getRealized()) rzByKey[r.symbol + '@' + r.time] = r;
+    const toTwd = hist.txFilter === 'all'; // 全部市場 → 金額一律換算台幣
 
     let listHtml = `<div class="card tx-list">`;
-    if (!txs.length) listHtml += `<div class="empty">無交易紀錄</div>`;
+    if (!txs.length) listHtml += `<div class="empty">${filterOn || q ? '無符合篩選的交易' : '無交易紀錄'}</div>`;
     for (const t of txs) {
       const name = mmap[t.symbol]?.name || t.symbol;
-      // 賣出 → 顯示獲利與獲利比例
-      let profitHtml = '';
+      const isUsd = isUsdMk(U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol)));
+      const conv = (isUsd && toTwd) ? rate : 1;
+      const cur = (isUsd && !toTwd) ? '$' : 'NT$';
+      let valHtml;
       if (t.type === 'SELL') {
         const rz = rzByKey[t.symbol + '@' + t.time];
         if (rz) {
-          const mk = U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol));
-          const isUsd = mk === U.Market.us || mk === U.Market.crypto;
-          const toTwd = hist.txFilter === 'all';                 // 全部 → 一律台幣
-          const conv = (isUsd && toTwd) ? rate : 1;
-          const cur = (isUsd && !toTwd) ? '$' : 'NT$';
           const pnl = rz.realizedPnl * conv;
-          const cost = rz.avgCost * rz.shares;
-          const pct = cost > 1e-9 ? rz.realizedPnl / cost * 100 : 0; // 比例與幣別無關
-          profitHtml = `<div class="tx-pnl" style="color:${UI.pnlColor(pnl)}">${pnl >= 0 ? '+' : '−'}${cur} ${U.fmtKMBB(Math.abs(pnl))} (${U.fmtPct(pct)})</div>`;
+          const base = rz.avgCost * rz.shares;
+          const pct = base > 1e-9 ? rz.realizedPnl / base * 100 : 0;
+          valHtml = `<div class="tx-amt" style="color:${UI.pnlColor(pnl)}">${pnl >= 0 ? '+' : '−'}${cur} ${U.fmtKMBB(Math.abs(pnl))}</div><div class="tx-cap" style="color:${UI.pnlColor(pnl)}">獲利 ${U.fmtPct(pct)}</div>`;
+        } else {
+          valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(t.shares * t.price * conv)}</div><div class="tx-cap">賣出</div>`;
         }
+      } else {
+        const cost = (t.shares * t.price + (t.fee || 0)) * conv;
+        valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(cost)}</div><div class="tx-cap">成本</div>`;
       }
-      listHtml += `<div class="tx-row ${profitHtml ? 'has-pnl' : ''}" data-id="${t.id}">
+      listHtml += `<div class="tx-row" data-id="${t.id}">
         <span class="tx-type ${t.type === 'BUY' ? 'buy' : 'sell'}">${t.type === 'BUY' ? '買入' : '賣出'}</span>
         <div class="tx-main">
           <div class="tx-sym">${t.symbol} <span class="h-name">${name}</span></div>
-          <div class="tx-sub">${U.formatShares(t.shares)}${shareUnit(mmap[t.symbol]?.market)} @ ${U.formatPrice(t.price)}　手續費 ${U.formatPrice(t.fee)}</div>
+          <div class="tx-sub">${U.formatShares(t.shares)}${shareUnit(mmap[t.symbol]?.market)} @ ${U.formatPrice(t.price)} · ${U.isoDate(new Date(t.time))}</div>
         </div>
-        <div class="tx-meta">
-          <div class="tx-amt">${U.fmtKMBB(t.shares * t.price)}</div>
-          ${profitHtml}
-          <div class="tx-date">${U.isoDate(new Date(t.time))}</div>
-        </div>
+        <div class="tx-meta">${valHtml}</div>
       </div>`;
     }
     listHtml += `</div>`;
     scrollEl.innerHTML = listHtml;
 
-    fixedEl.querySelectorAll('#tx-filter .seg-btn').forEach(b =>
-      b.addEventListener('click', () => { hist.txFilter = b.dataset.v; histTx(fixedEl, scrollEl); }));
     const se = fixedEl.querySelector('#tx-search');
     se.addEventListener('input', e => { hist.search = e.target.value; });
     se.addEventListener('change', () => histTx(fixedEl, scrollEl));
+    fixedEl.querySelector('#tx-funnel').addEventListener('click', () => openHistFilter(fixedEl, scrollEl));
     scrollEl.querySelectorAll('.tx-row').forEach(r => r.addEventListener('click', () => {
       const tx = S.getTransactions().find(t => t.id === r.dataset.id);
       if (tx) openTxForm(tx);
     }));
+  }
+
+  // 歷史篩選面板（漏斗）：買賣類型 / 市場 / 時間區間
+  function openHistFilter(fixedEl, scrollEl) {
+    let tType = hist.type, tMkt = hist.txFilter;
+    const segRow = (id, cur, opts) => `<div class="seg seg-wide" id="${id}">${opts.map(([v, l]) => seg(v, l, cur)).join('')}</div>`;
+    const body = `
+      <div class="flt-grp"><div class="flt-lbl">買賣類型</div>${segRow('flt-type', tType, [['all', '全部'], ['buy', '買入'], ['sell', '賣出']])}</div>
+      <div class="flt-grp"><div class="flt-lbl">市場</div>${segRow('flt-mkt', tMkt, [['all', '全部'], ['tw', '台股'], ['us', '美股'], ['crypto', '加密']])}</div>
+      <div class="flt-grp"><div class="flt-lbl">時間區間</div><div class="range-dates"><input type="date" class="input" id="flt-from" value="${hist.from || ''}"><span>至</span><input type="date" class="input" id="flt-to" value="${hist.to || ''}"></div></div>`;
+    const ov = UI.openSheet('篩選', body, `<button class="btn btn-ghost" id="flt-reset">重設</button><button class="btn btn-primary" id="flt-apply">套用</button>`);
+    const bindSeg = (id, setv) => ov.querySelectorAll(`#${id} .seg-btn`).forEach(b => b.addEventListener('click', () => {
+      setv(b.dataset.v);
+      ov.querySelectorAll(`#${id} .seg-btn`).forEach(x => x.classList.toggle('active', x === b));
+    }));
+    bindSeg('flt-type', v => tType = v);
+    bindSeg('flt-mkt', v => tMkt = v);
+    ov.querySelector('#flt-reset').addEventListener('click', () => {
+      hist.type = 'all'; hist.txFilter = 'all'; hist.from = null; hist.to = null;
+      UI.closeSheet(); histTx(fixedEl, scrollEl);
+    });
+    ov.querySelector('#flt-apply').addEventListener('click', () => {
+      hist.type = tType; hist.txFilter = tMkt;
+      let a = ov.querySelector('#flt-from').value || null, b = ov.querySelector('#flt-to').value || null;
+      if (a && b && a > b) { const x = a; a = b; b = x; }
+      hist.from = a; hist.to = b;
+      UI.closeSheet(); histTx(fixedEl, scrollEl);
+    });
   }
 
   /* ===================== 報表 ===================== */
