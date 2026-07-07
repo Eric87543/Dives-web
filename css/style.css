@@ -216,6 +216,11 @@ input, select { font-family: inherit; font-size: 15px; }
 .tx-funnel.on { color: var(--accent); border-color: var(--accent); }
 .tx-funnel.on::after { content: ''; position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .tx-cap { font-size: 11px; color: var(--sub); margin-top: 3px; white-space: nowrap; }
+.hist-sum { display: flex; background: var(--card); border-radius: var(--radius); box-shadow: 0 2px 4px rgba(0,0,0,0.04); padding: 11px 4px; margin-bottom: 10px; }
+.hs-cell { flex: 1; text-align: center; min-width: 0; }
+.hs-cell + .hs-cell { border-left: 1px solid var(--divider); }
+.hs-k { font-size: 11px; color: var(--sub); }
+.hs-v { font-size: 15px; font-weight: 800; margin-top: 3px; white-space: nowrap; }
 .flt-grp { margin-bottom: 14px; }
 .flt-lbl { font-size: 12px; color: var(--sub); margin-bottom: 6px; }
 .tx-pnl { font-size: 11px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
@@ -418,7 +423,6 @@ input, select { font-family: inherit; font-size: 15px; }
 .as-grow:active { background: var(--soft); }
 .pct-badge { flex: none; width: 40px; height: 40px; border-radius: 50%; background: #6D5FD5; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .pct-badge.sm { width: 34px; height: 34px; font-size: 11px; background: #8B7FE0; }
-.pct-ring { flex: none; display: block; }
 .g-menu { flex: none; width: 34px; height: 34px; border-radius: 50%; color: var(--sub); font-size: 17px; }
 .g-menu:active { background: var(--soft); }
 .basis-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px 6px; }

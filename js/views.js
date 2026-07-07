@@ -29,21 +29,6 @@ App.Views = (function () {
   const pf = { open: null, catChart: null };
   function resetPortfolioNav() { pf.catChart = null; }
 
-  // 比例圓圈（環形進度）：群組／持倉／現金帳戶用；arc + 中央百分比，顏色隨類別/市場
-  function pctRingBadge(pct, color, size) {
-    size = size || 40;
-    const p = Math.max(0, Math.min(100, pct || 0));
-    const txt = p >= 9.95 ? String(Math.round(p)) : (p > 0 ? p.toFixed(1) : '0');
-    const label = txt + '%';
-    const fs = label.length >= 5 ? 8.5 : label.length >= 4 ? 9.5 : 11;
-    const r = 15.5, C = 2 * Math.PI * r, off = C * (1 - p / 100);
-    return `<svg class="pct-ring" viewBox="0 0 36 36" width="${size}" height="${size}" aria-hidden="true">
-      <circle cx="18" cy="18" r="${r}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="3.2"/>
-      <circle cx="18" cy="18" r="${r}" fill="none" stroke="${color}" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 18 18)"/>
-      <text x="18" y="18" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="700" fill="${color}">${label}</text>
-    </svg>`;
-  }
-
   // 重新整理鈕（只用於資產/投資頁；置於 ＋ 的右上方）
   function refreshBtnHtml() {
     return `<button class="ref-btn" id="refresh-btn" aria-label="重新整理"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.7-3.3M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 3.3M20 19v-4h-4"/></svg></button>`;
@@ -180,7 +165,7 @@ App.Views = (function () {
           const chgHtml = chg != null ? ` <span style="color:${UI.pnlColor(chg)}">${chg >= 0 ? '▲' : '▼'}${Math.abs(chg).toFixed(2)}%</span>` : '';
           const pnlPct = p.cost > 1e-9 ? p.unrealizedPnl / p.cost * 100 : 0;
           html += `<div class="as-row pf-row" data-sym="${p.symbol}">
-            ${pctRingBadge(rp, M.color, 38)}
+            <span class="pct-badge sm" style="background:${M.color}">${fmtPctBadge(rp)}</span>
             <div class="as-main">
               <div class="as-title pf-title"><span class="pf-sym">${dispName(p.symbol)}</span><span class="pf-price">${cur}${fp(price)}${chgHtml}</span></div>
               <div class="as-sub">${U.formatShares(p.shares)}${shareUnit(p.market)} · 均 ${cur}${fp(p.avgCost)}</div>
@@ -401,23 +386,39 @@ App.Views = (function () {
       return true;
     });
 
-    // 搜尋 + 漏斗篩選（買賣／市場／時間區間 收在漏斗面板）
+    const rzByKey = {};
+    for (const r of S.getRealized()) rzByKey[r.symbol + '@' + r.time] = r;
+    const toTwd = hist.txFilter === 'all'; // 全部市場 → 金額一律換算台幣
+    const sumCur = (hist.txFilter === 'us' || hist.txFilter === 'crypto') ? '$' : 'NT$';
+    const convOfT = t => (isUsdMk(U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol))) && toTwd) ? rate : 1;
+
+    // 依目前篩選統計：總投入＝買入成本合計、總獲利＝賣出已實現合計、比例＝總獲利／總投入
+    let totalInvest = 0, totalProfit = 0;
+    for (const t of txs) {
+      const conv = convOfT(t);
+      if (t.type === 'BUY') totalInvest += (t.shares * t.price + (t.fee || 0)) * conv;
+      else { const rz = rzByKey[t.symbol + '@' + t.time]; if (rz) totalProfit += rz.realizedPnl * conv; }
+    }
+    const roiPct = totalInvest > 1e-9 ? totalProfit / totalInvest * 100 : null;
+
+    // 搜尋 + 漏斗篩選 + 統計摘要（總投入／總獲利／比例）
     const filterOn = hist.type !== 'all' || hist.txFilter !== 'all' || hist.from || hist.to;
     fixedEl.innerHTML = `<div class="tx-bar">
       <input class="input search" id="tx-search" placeholder="搜尋代碼或名稱" value="${hist.search}">
       <button class="tx-funnel${filterOn ? ' on' : ''}" id="tx-funnel" aria-label="篩選"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg></button>
+    </div>
+    <div class="hist-sum">
+      <div class="hs-cell"><div class="hs-k">總投入</div><div class="hs-v">${sumCur} ${U.fmtKMBB(totalInvest)}</div></div>
+      <div class="hs-cell"><div class="hs-k">總獲利</div><div class="hs-v" style="color:${UI.pnlColor(totalProfit)}">${totalProfit >= 0 ? '+' : '−'}${sumCur} ${U.fmtKMBB(Math.abs(totalProfit))}</div></div>
+      <div class="hs-cell"><div class="hs-k">比例</div><div class="hs-v" style="color:${roiPct == null ? 'var(--sub)' : UI.pnlColor(roiPct)}">${roiPct == null ? '--' : U.fmtPct(roiPct)}</div></div>
     </div>`;
-
-    const rzByKey = {};
-    for (const r of S.getRealized()) rzByKey[r.symbol + '@' + r.time] = r;
-    const toTwd = hist.txFilter === 'all'; // 全部市場 → 金額一律換算台幣
 
     let listHtml = `<div class="card tx-list">`;
     if (!txs.length) listHtml += `<div class="empty">${filterOn || q ? '無符合篩選的交易' : '無交易紀錄'}</div>`;
     for (const t of txs) {
       const name = mmap[t.symbol]?.name || t.symbol;
+      const conv = convOfT(t);
       const isUsd = isUsdMk(U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol)));
-      const conv = (isUsd && toTwd) ? rate : 1;
       const cur = (isUsd && !toTwd) ? '$' : 'NT$';
       let valHtml;
       if (t.type === 'SELL') {
@@ -426,13 +427,13 @@ App.Views = (function () {
           const pnl = rz.realizedPnl * conv;
           const base = rz.avgCost * rz.shares;
           const pct = base > 1e-9 ? rz.realizedPnl / base * 100 : 0;
-          valHtml = `<div class="tx-amt" style="color:${UI.pnlColor(pnl)}">${pnl >= 0 ? '+' : '−'}${cur} ${U.fmtKMBB(Math.abs(pnl))}</div><div class="tx-cap" style="color:${UI.pnlColor(pnl)}">獲利 ${U.fmtPct(pct)}</div>`;
+          valHtml = `<div class="tx-amt" style="color:${UI.pnlColor(pnl)}">${pnl >= 0 ? '+' : '−'}${cur} ${U.fmtKMBB(Math.abs(pnl))}</div><div class="tx-cap" style="color:${UI.pnlColor(pnl)}">${U.fmtPct(pct)}</div>`;
         } else {
-          valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(t.shares * t.price * conv)}</div><div class="tx-cap">賣出</div>`;
+          valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(t.shares * t.price * conv)}</div>`;
         }
       } else {
         const cost = (t.shares * t.price + (t.fee || 0)) * conv;
-        valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(cost)}</div><div class="tx-cap">成本</div>`;
+        valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(cost)}</div>`;
       }
       listHtml += `<div class="tx-row" data-id="${t.id}">
         <span class="tx-type ${t.type === 'BUY' ? 'buy' : 'sell'}">${t.type === 'BUY' ? '買入' : '賣出'}</span>
@@ -857,9 +858,7 @@ App.Views = (function () {
       html += `<div class="as-body">`;
       for (const a of cashAccts) {
         const twd = a.currency === 'USD' ? (a.balance || 0) * rate : (a.balance || 0);
-        const cPct = sum.cashTwd > 1e-9 ? twd / sum.cashTwd * 100 : 0;
         html += `<div class="as-row" data-kind="cash" data-id="${a.id}">
-          ${pctRingBadge(cPct, '#34C759', 38)}
           <div class="as-main"><div class="as-title">${a.name}</div>
             <div class="as-sub">${a.currency === 'USD' ? 'USD ' + U.formatPrice(a.balance || 0) + ' · r' + rate.toFixed(3) : '台幣帳戶'}</div></div>
           <div class="as-val">${U.fmtWhole(twd)}</div>
@@ -885,7 +884,7 @@ App.Views = (function () {
         const gDayPct = Math.abs(gPrev) > 1e-9 ? gDay / Math.abs(gPrev) * 100 : 0;
         const gArrow = gDay > 0 ? '▲' : gDay < 0 ? '▼' : '–';
         html += `<div class="as-grow" data-gid="${g.id}">
-          ${pctRingBadge(gPct, AS_PURPLE, 38)}
+          <span class="pct-badge sm">${fmtPctBadge(gPct)}</span>
           <div class="as-main"><div class="as-title">${g.name}</div>
             <div class="as-sub">${(byGroup[g.id] || []).length} 檔 ›</div></div>
           <div class="as-gv">
@@ -901,7 +900,7 @@ App.Views = (function () {
         const pct = d > 1e-9 ? mv / d * 100 : 0;
         const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
         html += `<div class="as-row member top" data-sym="${p.symbol}">
-          ${pctRingBadge(pct, AS_PURPLE, 38)}
+          <span class="pct-badge sm">${fmtPctBadge(pct)}</span>
           <div class="as-main"><div class="as-title">${p.symbol} <span class="h-name">${p.name}</span></div>
             <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div></div>
           <div class="as-val">${U.fmtWhole(mv)}</div>
@@ -1139,7 +1138,7 @@ App.Views = (function () {
       const pct = denomV > 1e-9 ? mv / denomV * 100 : 0;
       const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
       listHtml += `<div class="card gd-row" data-sym="${p.symbol}">
-        ${pctRingBadge(pct, AS_PURPLE, 40)}
+        <span class="pct-badge">${fmtPctBadge(pct)}</span>
         <div class="as-main">
           <div class="gd-sym">${p.symbol} <span class="h-name">${p.name !== p.symbol ? p.name : ''}</span></div>
           <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div>
