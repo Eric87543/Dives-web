@@ -730,10 +730,20 @@ App.Views = (function () {
     }
 
     // 分類卡標頭（名稱前加佔總資產比例環圈；展開填色、收合顯示摘要+日期）
-    function catHead(cat, name, totalHtml, cc, openCls, summary, dateTs, pct) {
+    // dayChg：有值 → 於數值下方顯示今日漲跌（投資會日內波動；現金/負債不變故不傳）
+    function catHead(cat, name, totalHtml, cc, openCls, summary, dateTs, pct, dayChg) {
       const open = as.openCat === cat;
       const ink = openCls === 'oc-green' ? '#1E8E4E' : openCls === 'oc-purple' ? '#5A4FC0' : '#4A56B5';
       const ring = pct != null ? pctRing(pct, cc, ink) : '';
+      let rightSub;
+      if (dayChg != null) {
+        const prev = sum.investTwd - dayChg;
+        const dpct = Math.abs(prev) > 1e-9 ? dayChg / Math.abs(prev) * 100 : 0;
+        const dArrow = dayChg > 0 ? '▲' : dayChg < 0 ? '▼' : '–';
+        rightSub = `<span class="as-hchg" style="color:${UI.pnlColor(dayChg)}">${dArrow} ${U.fmtWhole(Math.abs(dayChg))} (${Math.abs(dpct).toFixed(2)}%)</span>`;
+      } else {
+        rightSub = !open && dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : '';
+      }
       return `<div class="as-head ${open ? 'open ' + openCls : ''}" data-cat="${cat}" style="--cc:${cc}">
         <div class="as-hleft cat-hleft">
           ${ring}
@@ -744,7 +754,7 @@ App.Views = (function () {
         </div>
         <div class="as-hright">
           <span class="as-total">${totalHtml}</span>
-          ${!open && dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : ''}
+          ${rightSub}
         </div>
       </div>`;
     }
@@ -772,7 +782,7 @@ App.Views = (function () {
 
     // ── 投資 ────────────────────────────────────────────
     html += `<div class="card as-cat">` +
-      catHead('invest', '投資', U.fmtWhole(sum.investTwd), AS_PURPLE, 'oc-purple', investSummary, S.getPricesTs(), pctOfAssets(sum.investTwd));
+      catHead('invest', '投資', U.fmtWhole(sum.investTwd), AS_PURPLE, 'oc-purple', investSummary, S.getPricesTs(), pctOfAssets(sum.investTwd), dayChange);
     if (as.openCat === 'invest') {
       html += `<div class="as-body">`;
       // 群組列（點擊進入詳情頁）
