@@ -31,6 +31,16 @@ App.Charts = (function () {
     return String(Math.round(v));
   }
 
+  // 圖表互動：拖曳掃描即時顯示 tooltip；單擊「釘選」（放開手指仍保留），再次單擊即消失
+  function attachInteractive(container, svgEl, cursor, tip, handle) {
+    let pinned = false, downX = 0, moved = false;
+    const hide = () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; };
+    svgEl.addEventListener('pointerdown', e => { downX = e.clientX; moved = false; handle(e.clientX); });
+    svgEl.addEventListener('pointermove', e => { if (e.buttons) { if (Math.abs(e.clientX - downX) > 6) moved = true; handle(e.clientX); } });
+    svgEl.addEventListener('pointerup', () => { if (!moved) { pinned = !pinned; if (!pinned) hide(); } });
+    container.addEventListener('pointerleave', () => { if (!pinned) hide(); });
+  }
+
   /* ---- 台股/美股 堆疊區域折線圖（對齊 iOS TwUsFillChart）----
    * 台股(橙)在下、美股(藍)疊上，台股+美股 = 總資產（藍線頂端）
    * points: [{date:Date, values:{tw, us}}]
@@ -140,9 +150,7 @@ App.Charts = (function () {
       const left = Math.min(Math.max(cxPx - tipW / 2, 4), Math.max(4, rect.width - tipW - 4));
       tip.style.left = left + 'px'; tip.style.top = '4px';
     }
-    svgEl.addEventListener('pointerdown', e => handle(e.clientX));
-    svgEl.addEventListener('pointermove', e => { if (e.buttons) handle(e.clientX); });
-    container.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+    attachInteractive(container, svgEl, cursor, tip, handle);
   }
 
   /* ---- 長條圖（報表用）----
@@ -273,9 +281,7 @@ App.Charts = (function () {
       const left = Math.min(Math.max(cxPx - tipW / 2, 4), Math.max(4, rect2.width - tipW - 4));
       tip.style.left = left + 'px'; tip.style.top = '4px';
     }
-    svgEl.addEventListener('pointerdown', e => handle(e.clientX));
-    svgEl.addEventListener('pointermove', e => { if (e.buttons) handle(e.clientX); });
-    container.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+    attachInteractive(container, svgEl, cursor, tip, handle);
   }
 
   /* ---- 通用多序列折線圖（淨資產 / 流動資金 / 負債等）----
@@ -345,9 +351,7 @@ App.Charts = (function () {
       const left = Math.min(Math.max(cxPx - tipW / 2, 4), Math.max(4, rect.width - tipW - 4));
       tip.style.left = left + 'px'; tip.style.top = '4px';
     }
-    svgEl.addEventListener('pointerdown', e => handle(e.clientX));
-    svgEl.addEventListener('pointermove', e => { if (e.buttons) handle(e.clientX); });
-    container.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+    attachInteractive(container, svgEl, cursor, tip, handle);
   }
 
   /* ---- 通用長條圖（淨資產 / 漲幅；支援負值基線、依值上色）----
@@ -407,9 +411,7 @@ App.Charts = (function () {
       const left = Math.min(Math.max(cxPx - tipW / 2, 4), Math.max(4, rect2.width - tipW - 4));
       tip.style.left = left + 'px'; tip.style.top = '4px';
     }
-    svgEl.addEventListener('pointerdown', e => handle(e.clientX));
-    svgEl.addEventListener('pointermove', e => { if (e.buttons) handle(e.clientX); });
-    container.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+    attachInteractive(container, svgEl, cursor, tip, handle);
   }
 
   /* ---- 雙序列疊長條（投入 寬/後 + 損益 窄/前，對齊參考「帳戶改變＋持倉盈虧」）----
@@ -476,9 +478,7 @@ App.Charts = (function () {
       const left = Math.min(Math.max(cxPx - tipW / 2, 4), Math.max(4, rect2.width - tipW - 4));
       tip.style.left = left + 'px'; tip.style.top = '4px';
     }
-    svgEl.addEventListener('pointerdown', e => handle(e.clientX));
-    svgEl.addEventListener('pointermove', e => { if (e.buttons) handle(e.clientX); });
-    container.addEventListener('pointerleave', () => { cursor.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+    attachInteractive(container, svgEl, cursor, tip, handle);
   }
 
   return { trend, bars, reportColumn, lineChart, barChart, dualBars, niceTicks };

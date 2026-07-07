@@ -10,6 +10,23 @@ App.Views = (function () {
   // 共用：刷新後重繪目前分頁
   function rerender() { App.renderCurrent(); }
 
+  // ---- 隱藏金額（眼睛）：本機偏好，隱藏時把金額數字換成 ••（僅本機，不上雲）----
+  function eyeBtnHtml(id) {
+    const hidden = S.getPrivacy();
+    const icon = hidden
+      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 5.1A9.8 9.8 0 0 1 12 5c6 0 9.5 6 9.5 6a15.8 15.8 0 0 1-3.2 3.7M6.1 6.1A15.9 15.9 0 0 0 2.5 11s3.5 6 9.5 6a9.6 9.6 0 0 0 4-.9"/><path d="M9.6 9.6a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.6"/></svg>`;
+    return `<button class="nw-eye" id="${id}" aria-label="${hidden ? '顯示金額' : '隱藏金額'}">${icon}</button>`;
+  }
+  // 隱藏模式下把金額元素的數字換成 ••（保留幣別/符號/百分比結構）
+  const MONEY_SEL = '.nw-num, .nw-day, .as-total, .as-val, .as-hchg, .pf-mv, .pf-pnl';
+  function maskAmounts(root) {
+    if (!S.getPrivacy()) return;
+    root.querySelectorAll(MONEY_SEL).forEach(el => {
+      el.textContent = el.textContent.replace(/[0-9][0-9,.]*/g, '••');
+    });
+  }
+
   /* ===================== 投資（市場分類卡，沿用資產頁風格）===================== */
   // pf.open：各市場展開狀態（可同時展開多個）；預設全收合。排序固定依市值（大→小）
   const pf = { open: null, catChart: null };
@@ -106,6 +123,7 @@ App.Views = (function () {
         <div class="nw-num">${U.fmtWhole(totalAll)}</div>
         <div class="nw-day" style="color:${UI.pnlColor(day)}">${arrow} ${U.fmtWhole(Math.abs(day))} (${Math.abs(dayPct).toFixed(2)}%)</div>
       </div>
+      ${eyeBtnHtml('pf-eye')}
       <div class="nw-btns">
         ${addWithRefreshHtml('pf-add-btn', '新增交易')}
       </div>
@@ -176,6 +194,8 @@ App.Views = (function () {
     bindRefresh(root);
     const addBtn = root.querySelector('#pf-add-btn');
     if (addBtn) addBtn.addEventListener('click', () => openTxForm(null));
+    const pfEye = root.querySelector('#pf-eye');
+    if (pfEye) pfEye.addEventListener('click', () => { S.setPrivacy(!S.getPrivacy()); portfolio(root); });
     root.querySelectorAll('.as-head[data-mk]').forEach(h => h.addEventListener('click', () => {
       if (!pf.open) pf.open = {}; // 從「全收合」起手
       const k = h.dataset.mk;
@@ -187,6 +207,7 @@ App.Views = (function () {
     }));
     root.querySelectorAll('.pf-row').forEach(r =>
       r.addEventListener('click', () => openSymbolActions(r.dataset.sym)));
+    maskAmounts(root);
   }
 
   function seg(v, label, cur) {
@@ -840,6 +861,7 @@ App.Views = (function () {
         <div class="nw-num">${U.fmtWhole(sum.netWorth)}</div>
         <div class="nw-day" style="color:${UI.pnlColor(dayChange)}">${dayArrow} ${U.fmtWhole(Math.abs(dayChange))} (${Math.abs(dayPct).toFixed(2)}%)</div>
       </div>
+      ${eyeBtnHtml('as-eye')}
       <div class="nw-btns">
         ${addWithRefreshHtml('as-add-btn', '新增')}
       </div>
@@ -983,6 +1005,7 @@ App.Views = (function () {
     bind('#as-add-btn', () => openAddChooser(() => assets(root)));
     bindRefresh(root);
     bind('#nw-open', () => { as.catChart = 'nw'; assets(root); });
+    bind('#as-eye', () => { S.setPrivacy(!S.getPrivacy()); assets(root); });
     root.querySelectorAll('.as-row[data-kind]').forEach(r => r.addEventListener('click', () => {
       const kind = r.dataset.kind;
       const list = kind === 'cash' ? S.getCashAccounts() : S.getLiabilities();
@@ -993,6 +1016,7 @@ App.Views = (function () {
     }));
     root.querySelectorAll('.as-row.member').forEach(r => r.addEventListener('click', () =>
       openGroupAssign(r.dataset.sym, () => assets(root))));
+    maskAmounts(root);
   }
 
   // 淨資產長條圖頁：淨資產 / 漲幅；X 軸 天(7)／週(5)／月(12)／年(10)

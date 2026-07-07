@@ -24,6 +24,7 @@ App.Store = (function () {
     groupMap: 'dives_group_map',
     pctBasis: 'dives_pct_basis',
     dayMode: 'dives_day_mode',
+    privacy: 'dives_privacy',
   };
 
   function read(key, fallback) {
@@ -134,6 +135,9 @@ App.Store = (function () {
   // 當日漲跌計算方式：native=各市場當日(預設) | twday=以台股開盤起算(美股凌晨算昨天)
   function getDayMode() { return localStorage.getItem(K.dayMode) === 'twday' ? 'twday' : 'native'; }
   function setDayMode(m) { localStorage.setItem(K.dayMode, m === 'twday' ? 'twday' : 'native'); }
+  // ---- 隱藏金額（本機偏好，不上雲同步）----
+  function getPrivacy() { return localStorage.getItem(K.privacy) === '1'; }
+  function setPrivacy(v) { localStorage.setItem(K.privacy, v ? '1' : '0'); }
 
   // ---- 清空所有資料（同步清除快照與資產頁資料）----
   function clearAll() {
@@ -163,6 +167,7 @@ App.Store = (function () {
     getLiabilities, setLiabilities,
     getGroups, setGroups, getGroupMap, setGroupMap,
     getPctBasis, setPctBasis, getDayMode, setDayMode,
+    getPrivacy, setPrivacy,
     clearAll,
   };
 })();
