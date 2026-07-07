@@ -328,10 +328,9 @@ input, select { font-family: inherit; font-size: 15px; }
 .as-head:active { background: var(--soft); }
 .as-hleft { min-width: 0; flex: 1; }
 .as-hright { display: flex; flex-direction: column; align-items: flex-end; white-space: nowrap; }
-.as-htrend { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; padding: 4px 10px; border-radius: 999px; background: rgba(109,95,213,0.12); color: var(--primary); font-size: 12px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
-.as-htrend svg { width: 15px; height: 15px; }
-.as-htrend .aht-chev { color: var(--sub); font-size: 14px; }
-.as-htrend:active { opacity: 0.6; }
+.as-htrend { display: inline-flex; align-items: center; margin-top: 8px; padding: 0; border: none; background: none; color: var(--primary); -webkit-tap-highlight-color: transparent; }
+.as-htrend svg { width: 20px; height: 20px; }
+.as-htrend:active { opacity: 0.5; }
 .as-name { font-size: 16px; font-weight: 700; display: block; }
 .as-hsummary { display: block; font-size: 12px; color: var(--sub); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .as-hdate { display: block; font-size: 11px; color: var(--sub); margin-top: 3px; }

@@ -153,7 +153,7 @@ App.Views = (function () {
           <div class="as-hright">
             <span class="as-total" style="color:${M.color}">${U.fmtWhole(tot)}</span>
             <span class="as-hchg" style="color:${UI.pnlColor(dayChg)}">${dArrow} ${U.fmtWhole(Math.abs(dayChg))} (${Math.abs(dayChgPct).toFixed(2)}%)</span>
-            ${open ? `<button class="as-htrend" data-trend="${M.key}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg>走勢圖<span class="aht-chev">›</span></button>` : ''}
+            ${open ? `<button class="as-htrend" data-trend="${M.key}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></button>` : ''}
           </div>
         </div>`;
       if (open) {
@@ -802,7 +802,7 @@ App.Views = (function () {
         <div class="as-hright">
           <span class="as-total">${totalHtml}</span>
           ${open
-            ? `<button class="as-htrend" data-trend="${cat}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg>走勢圖<span class="aht-chev">›</span></button>`
+            ? `<button class="as-htrend" data-trend="${cat}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></button>`
             : (dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : '')}
         </div>
       </div>`;
