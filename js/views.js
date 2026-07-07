@@ -1402,96 +1402,147 @@ App.Views = (function () {
   }
 
   /* ===================== 設定 ===================== */
+  const SET_ICON = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  const SET_ICONS = {
+    cloud: SET_ICON('<path d="M7 18a4 4 0 1 1 .6-7.96A5.5 5.5 0 0 1 18 10.5a3.5 3.5 0 0 1-.5 7Z"/>'),
+    lock: SET_ICON('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+    pie: SET_ICON('<path d="M12 3a9 9 0 1 0 9 9h-9Z"/>'),
+    cal: SET_ICON('<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>'),
+    down: SET_ICON('<path d="M12 4v11M8 11l4 4 4-4M5 20h14"/>'),
+    up: SET_ICON('<path d="M12 20V9M8 13l4-4 4 4M5 4h14"/>'),
+    refresh: SET_ICON('<path d="M20 11a8 8 0 0 0-14.7-3.3M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 3.3M20 19v-4h-4"/>'),
+    wrench: SET_ICON('<path d="M14.6 6.4a3.5 3.5 0 0 0-4.7 4.3L4 16.6 7.4 20l5.9-5.9a3.5 3.5 0 0 0 4.3-4.7l-2.2 2.2-2.3-.6-.6-2.3Z"/>'),
+    gear: SET_ICON('<circle cx="12" cy="12" r="3"/><path d="M12 3v2m0 14v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M3 12h2m14 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+    info: SET_ICON('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/>'),
+    flask: SET_ICON('<path d="M9 3v6l-4.5 8A2 2 0 0 0 6.3 20h11.4a2 2 0 0 0 1.8-3L15 9V3M8 3h8"/>'),
+    trash: SET_ICON('<path d="M5 7h14M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M7 7l1 13h8l1-13"/>'),
+  };
+  const set = { sub: null }; // 設定頁內導覽：null | 'sync' | 'lock' | 'adv'
+  function resetSettingsNav() { set.sub = null; }
+  function setSubHead(title) { return `<div class="gd-head"><button class="gd-back" aria-label="返回">‹</button><div class="gd-title">${title}</div><div class="gd-actions"></div></div>`; }
+  function setSubBack(root) { const b = root.querySelector('.gd-back'); if (b) b.addEventListener('click', () => { set.sub = null; settings(root); }); }
+  // 單選選擇器（打勾）：供佔比基準／當日漲跌等
+  function openChooser(title, opts, current, onPick) {
+    const rows = opts.map(o => `<button class="chooser-row" data-v="${o.v}">
+      <div class="chooser-txt"><div class="chooser-label">${o.label}</div>${o.hint ? `<div class="chooser-hint">${o.hint}</div>` : ''}</div>
+      <span class="chooser-check">${o.v === current ? '✓' : ''}</span></button>`).join('');
+    const ov = UI.openSheet(title, `<div class="chooser">${rows}</div>`, '');
+    ov.querySelectorAll('.chooser-row').forEach(b => b.addEventListener('click', () => { UI.closeSheet(); onPick(b.dataset.v); }));
+  }
+
   function settings(root) {
-    const lastTs = S.getPricesTs();
-    const rate = S.getFxRate();
+    if (set.sub === 'sync') return settingsSync(root);
+    if (set.sub === 'lock') return settingsLock(root);
+    if (set.sub === 'adv') return settingsAdv(root);
+    const lastTs = S.getPricesTs(), rate = S.getFxRate();
+    const syncOn = !!(App.Sync && App.Sync.enabled());
+    const lockOn = !!(App.Auth && App.Auth.isEnabled());
+    const pbLabel = { group: '組內', invest: '投資', net: '淨資產' }[S.getPctBasis()] || '投資';
+    const dmLabel = { native: '原始', twday: '台股日' }[S.getDayMode()] || '原始';
+    const nav = (k, id, label, val) => `<button class="s-row" id="${id}"><span class="s-ic">${SET_ICONS[k]}</span><span class="s-label">${label}</span>${val ? `<span class="s-val">${val}</span>` : ''}<span class="s-chev">›</span></button>`;
+    const info = (label, val) => `<div class="s-row s-info"><span class="s-label">${label}</span><span class="s-val">${val}</span></div>`;
     let html = `
-    <div class="card setting-card">
-      <div class="set-title">雲端同步（GitHub Gist）</div>
-      <div class="set-row">
-        <input class="input" id="sync-token" type="password" placeholder="貼上 GitHub Token（gist 權限）" value="${App.Sync && App.Sync.enabled() ? '••••••••••••' : ''}">
-        <button class="btn btn-primary" id="sync-save">${App.Sync && App.Sync.enabled() ? '更新' : '啟用'}</button>
-      </div>
-      <div class="set-row" style="margin-top:8px">
-        <button class="btn btn-ghost" id="sync-now" style="flex:1" ${App.Sync && App.Sync.enabled() ? '' : 'disabled'}>立即同步</button>
-        ${App.Sync && App.Sync.enabled() ? '<button class="btn btn-ghost" id="sync-off" style="flex:1">停用同步</button>' : ''}
-      </div>
-      <div class="set-hint" id="sync-status">${App.Sync && App.Sync.enabled() ? '同步已啟用' : '各裝置貼同一組 token 即可自動同步同一份資料'}</div>
-      <div class="set-hint"><a href="https://github.com/settings/tokens/new?scopes=gist&description=dives-sync" target="_blank" style="color:${COL.tw}">→ 點此產生 GitHub Token（已預選 gist 權限）</a></div>
+    <div class="s-topbar">設定</div>
+    <div class="s-head">同步與安全</div>
+    <div class="s-list">
+      ${nav('cloud', 'set-sync', '雲端同步', syncOn ? '已啟用' : '未啟用')}
+      ${nav('lock', 'set-lock', 'App 鎖定', lockOn ? '已啟用' : '未啟用')}
     </div>
-
-    <div class="card setting-card">
-      <div class="set-title">App 鎖定</div>
-      <div id="lock-body"></div>
+    <div class="s-head">顯示</div>
+    <div class="s-list">
+      ${nav('pie', 'set-pb', '投資佔比基準', pbLabel)}
+      ${nav('cal', 'set-dm', '當日漲跌計算', dmLabel)}
     </div>
-
-    <div class="card setting-card">
-      <div class="set-title">顯示設定</div>
-      <div class="set-sub">投資佔比基準</div>
-      <div class="seg seg-wide" id="set-pct-basis">
-        ${seg('group', '組內', S.getPctBasis())}${seg('invest', '投資', S.getPctBasis())}${seg('net', '淨資產', S.getPctBasis())}
-      </div>
-      <div class="set-hint">資產頁投資列的佔比要以「群組內／投資總額／淨資產」為分母</div>
-      <div class="set-sub" style="margin-top:12px">當日漲跌計算</div>
-      <div class="seg seg-wide" id="set-daymode">
-        ${seg('native', '原始', S.getDayMode())}${seg('twday', '台股日', S.getDayMode())}
-      </div>
-      <div class="set-hint">「原始」＝各市場自己的當日漲跌相加。「台股日」＝以台股開盤 09:00 起算；台股盤中時段美股顯示 0，等台北晚上美股開盤才計入今晚漲跌（凌晨那盤歸昨天）。</div>
+    <div class="s-head">資料</div>
+    <div class="s-list">
+      ${nav('down', 'set-export', '匯出備份')}
+      ${nav('up', 'set-import', '匯入備份')}
+      ${nav('refresh', 'set-rebuild', '重建歷史走勢圖')}
+      ${nav('wrench', 'set-fixfee', '修正異常手續費')}
     </div>
-
-    <div class="card setting-card">
-      <div class="set-title">資料備份</div>
-      <button class="btn btn-block btn-primary" id="btn-export">匯出備份（交易 + 快照）</button>
-      <label class="btn btn-block btn-ghost" for="file-import">匯入備份</label>
-      <input type="file" id="file-import" accept=".csv,text/csv" style="display:none">
-      <div class="set-hint">CSV 格式與 iOS app 相容，可互通資料</div>
-      <button class="btn btn-block btn-ghost" id="btn-rebuild" style="margin-top:8px">重建歷史走勢圖</button>
-      <div class="set-hint">用交易紀錄 + 台股／美股歷史收盤，補回過去每日資產曲線</div>
-      <button class="btn btn-block btn-ghost" id="btn-fixfee" style="margin-top:8px">修正異常手續費</button>
-      <div class="set-hint">掃描並還原舊版編輯 bug 造成、超過成交金額的手續費</div>
+    <div class="s-head">進階</div>
+    <div class="s-list">${nav('gear', 'set-adv', '報價來源與代理')}</div>
+    <div class="s-head">關於</div>
+    <div class="s-list">
+      ${info('版本', App.VERSION || '?')}
+      ${info('最後更新報價', lastTs ? new Date(lastTs).toLocaleString('zh-TW') : '尚未更新')}
+      ${info('USD / TWD 匯率', rate ? rate.toFixed(3) : '--')}
+      ${info('交易 / 快照', S.getTransactions().length + ' / ' + S.getSnapshots().length)}
     </div>
-
-    <div class="card setting-card">
-      <div class="set-title">進階設定</div>
-      <div class="set-sub">Finnhub API 金鑰（美股報價）</div>
-      <input class="input" id="set-finnhub" placeholder="使用內建金鑰" value="${localStorage.getItem('dives_finnhub_key') || ''}">
-      <div class="set-sub">FinMind Token（台股報價，可留空；註冊後填入可提高速率上限）</div>
-      <input class="input" id="set-finmind" placeholder="免金鑰可用，額度有限" value="${localStorage.getItem('dives_finmind_token') || ''}">
-      <div class="set-sub">CORS 代理（報價直連失敗時的後備）</div>
-      <input class="input" id="set-proxy" value="${S.getProxy()}">
-      <button class="btn btn-block btn-ghost" id="btn-adv-save">儲存進階設定</button>
+    <div class="s-head">其他</div>
+    <div class="s-list">
+      ${nav('flask', 'set-seed', '載入示範資料')}
+      <button class="s-row s-danger" id="set-clear"><span class="s-ic">${SET_ICONS.trash}</span><span class="s-label">清空所有資料</span></button>
     </div>
-
-    <div class="card setting-card">
-      <div class="set-title">關於</div>
-      <div class="set-hint">版本：<b>${App.VERSION || '?'}</b></div>
-      <div class="set-hint">最後更新報價：${lastTs ? new Date(lastTs).toLocaleString('zh-TW') : '尚未更新'}</div>
-      <div class="set-hint">USD/TWD 匯率：${rate ? rate.toFixed(3) : '--'}</div>
-      <div class="set-hint">交易筆數：${S.getTransactions().length}　快照：${S.getSnapshots().length}</div>
-    </div>
-
-    <div class="card setting-card">
-      <div class="set-title">測試</div>
-      <button class="btn btn-block btn-ghost" id="btn-seed">載入示範資料</button>
-      <div class="set-hint">一鍵填入現金／負債／台美股＋加密／群組／120 天歷史（會覆蓋現有資料）</div>
-    </div>
-
-    <div class="card setting-card danger-zone">
-      <div class="set-title" style="color:${UI.LOSS}">危險區域</div>
-      <button class="btn btn-block btn-danger" id="btn-clear">清空所有資料</button>
-    </div>`;
+    <input type="file" id="file-import" accept=".csv,text/csv" style="display:none">
+    <div style="height:16px"></div>`;
     root.innerHTML = `<div class="page-full">${html}</div>`;
 
-    // ── 雲端同步 ──
+    const on = (id, fn) => { const el = root.querySelector('#' + id); if (el) el.addEventListener('click', fn); };
+    on('set-sync', () => { set.sub = 'sync'; settings(root); });
+    on('set-lock', () => { set.sub = 'lock'; settings(root); });
+    on('set-adv', () => { set.sub = 'adv'; settings(root); });
+    on('set-pb', () => openChooser('投資佔比基準', [
+      { v: 'group', label: '組內', hint: '以所屬群組總額為分母' },
+      { v: 'invest', label: '投資', hint: '以投資總市值為分母' },
+      { v: 'net', label: '淨資產', hint: '以淨資產為分母' },
+    ], S.getPctBasis(), v => { S.setPctBasis(v); if (App.Sync) App.Sync.markDirty(); settings(root); }));
+    on('set-dm', () => openChooser('當日漲跌計算', [
+      { v: 'native', label: '原始', hint: '各市場自己的當日漲跌相加' },
+      { v: 'twday', label: '台股日', hint: '以台股 09:00 起算；美股未開盤顯示 0，晚上開盤才計入（凌晨那盤歸昨天）' },
+    ], S.getDayMode(), v => { S.setDayMode(v); settings(root); }));
+    on('set-export', doExport);
+    on('set-import', () => root.querySelector('#file-import').click());
+    root.querySelector('#file-import').addEventListener('change', e => {
+      const f = e.target.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const res = App.Csv.importCsv(String(reader.result));
+        if (res.ok) {
+          UI.toast(`匯入成功：${res.txCount} 筆交易${res.snapCount ? '、' + res.snapCount + ' 筆快照' : ''}`, 'success');
+          if (res.feeWarnSymbols && res.feeWarnSymbols.length)
+            UI.toast(`⚠️ ${res.feeWarnSymbols.join('、')} 手續費異常偏高，請檢查交易紀錄`, 'error');
+          App.afterDataChange();
+          if (!res.snapCount) { UI.toast('重建歷史走勢中…', 'info'); await App.rebuildHistory(); UI.toast('已重建歷史走勢', 'success'); }
+        } else UI.toast(res.msg || '匯入失敗', 'error');
+      };
+      reader.readAsText(f);
+      e.target.value = '';
+    });
+    on('set-rebuild', async () => { UI.toast('重建歷史走勢中…', 'info'); const n = await App.rebuildHistory(); if (n) UI.toast(`已重建 ${n} 天歷史走勢`, 'success'); });
+    on('set-fixfee', () => {
+      const rep = C.repairFees();
+      if (!rep.fixed.length) { UI.toast('沒有發現異常手續費', 'info'); return; }
+      C.saveTodaySnapshot(); if (App.Sync) App.Sync.markDirty();
+      const syms = [...new Set(rep.fixed.map(f => f.symbol))].join('、');
+      UI.toast(`已修正 ${rep.fixed.length} 筆（${syms}）`, 'success'); settings(root);
+    });
+    on('set-seed', () => UI.confirmDialog('載入示範資料？會覆蓋你目前所有資料（可先匯出備份）。', () => { App.seedDemo(); UI.toast('已載入示範資料', 'success'); }, '載入'));
+    on('set-clear', () => UI.confirmDialog('確定清空所有交易、損益與快照？此動作無法復原。', () => { S.clearAll(); UI.toast('已清空所有資料', 'info'); App.afterDataChange([]); }, '清空'));
+  }
+
+  // ── 設定子頁：雲端同步 ──
+  function settingsSync(root) {
+    const onEnabled = !!(App.Sync && App.Sync.enabled());
+    root.innerHTML = `<div class="page-full">${setSubHead('雲端同步')}
+      <div class="card setting-card">
+        <div class="set-row">
+          <input class="input" id="sync-token" type="password" placeholder="貼上 GitHub Token（gist 權限）" value="${onEnabled ? '••••••••••••' : ''}">
+          <button class="btn btn-primary" id="sync-save">${onEnabled ? '更新' : '啟用'}</button>
+        </div>
+        <div class="set-row" style="margin-top:8px">
+          <button class="btn btn-ghost" id="sync-now" style="flex:1" ${onEnabled ? '' : 'disabled'}>立即同步</button>
+          ${onEnabled ? '<button class="btn btn-ghost" id="sync-off" style="flex:1">停用同步</button>' : ''}
+        </div>
+        <div class="set-hint" id="sync-status">${onEnabled ? '同步已啟用' : '各裝置貼同一組 token 即可自動同步同一份資料'}</div>
+        <div class="set-hint"><a href="https://github.com/settings/tokens/new?scopes=gist&description=dives-sync" target="_blank" style="color:${COL.tw}">→ 點此產生 GitHub Token（已預選 gist 權限）</a></div>
+      </div></div>`;
+    setSubBack(root);
     const syncStatusEl = root.querySelector('#sync-status');
     function fmtSyncStatus(s) {
-      if (!s) return;
+      if (!s || !syncStatusEl) return;
       if (s === 'syncing') { syncStatusEl.textContent = '同步中…'; return; }
-      if (s.startsWith('synced:')) {
-        const ts = +s.slice(7);
-        syncStatusEl.textContent = ts ? ('已同步 · ' + new Date(ts).toLocaleString('zh-TW')) : '已同步';
-        return;
-      }
+      if (s.startsWith('synced:')) { const ts = +s.slice(7); syncStatusEl.textContent = ts ? ('已同步 · ' + new Date(ts).toLocaleString('zh-TW')) : '已同步'; return; }
       if (s.startsWith('error:')) { syncStatusEl.textContent = '同步失敗：' + s.slice(6); return; }
     }
     if (App.Sync) App.Sync.onStatus(fmtSyncStatus);
@@ -1502,62 +1553,34 @@ App.Views = (function () {
       const r = await App.Sync.enable(t);
       if (r.error) { UI.toast('啟用失敗：' + r.error, 'error'); return; }
       UI.toast(r.changed ? '已從雲端載入資料' : '同步已啟用', 'success');
-      App.renderCurrent();
-    });
-    const nowBtn = root.querySelector('#sync-now');
-    if (nowBtn) nowBtn.addEventListener('click', async () => {
-      const r = await App.Sync.pull();
-      if (r.error) UI.toast('同步失敗：' + r.error, 'error');
-      else { UI.toast('同步完成', 'success'); if (r.changed) App.renderCurrent(); }
-    });
-    const offBtn = root.querySelector('#sync-off');
-    if (offBtn) offBtn.addEventListener('click', () =>
-      UI.confirmDialog('停用同步？(本機資料會保留，雲端 Gist 不刪除)', () => {
-        App.Sync.disable(); UI.toast('已停用同步', 'info'); settings(root);
-      }, '停用'));
-    root.querySelectorAll('#set-pct-basis .seg-btn').forEach(b => b.addEventListener('click', () => {
-      S.setPctBasis(b.dataset.v);
-      root.querySelectorAll('#set-pct-basis .seg-btn').forEach(x => x.classList.toggle('active', x.dataset.v === b.dataset.v));
-      if (App.Sync) App.Sync.markDirty();
-    }));
-    root.querySelectorAll('#set-daymode .seg-btn').forEach(b => b.addEventListener('click', () => {
-      S.setDayMode(b.dataset.v);
-      root.querySelectorAll('#set-daymode .seg-btn').forEach(x => x.classList.toggle('active', x.dataset.v === b.dataset.v));
-    }));
-    root.querySelector('#btn-export').addEventListener('click', doExport);
-    root.querySelector('#file-import').addEventListener('change', e => {
-      const f = e.target.files[0]; if (!f) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const res = App.Csv.importCsv(String(reader.result));
-        if (res.ok) {
-          UI.toast(`匯入成功：${res.txCount} 筆交易${res.snapCount ? '、' + res.snapCount + ' 筆快照' : ''}`, 'success');
-          // 手續費防呆（SPEC I7）：異常手續費會毒掉成本與報表，匯入當下就警告
-          if (res.feeWarnSymbols && res.feeWarnSymbols.length)
-            UI.toast(`⚠️ ${res.feeWarnSymbols.join('、')} 手續費異常偏高，請檢查交易紀錄`, 'error');
-          App.afterDataChange();
-          // 無快照時自動重建歷史走勢
-          if (!res.snapCount) { UI.toast('重建歷史走勢中…', 'info'); await App.rebuildHistory(); UI.toast('已重建歷史走勢', 'success'); }
-        } else UI.toast(res.msg || '匯入失敗', 'error');
-      };
-      reader.readAsText(f);
-      e.target.value = '';
-    });
-    root.querySelector('#btn-rebuild').addEventListener('click', async () => {
-      const btn = root.querySelector('#btn-rebuild');
-      btn.textContent = '重建中…'; btn.disabled = true;
-      const n = await App.rebuildHistory();
-      btn.textContent = '重建歷史走勢圖'; btn.disabled = false;
-      if (n) UI.toast(`已重建 ${n} 天歷史走勢`, 'success');
-    });
-    root.querySelector('#btn-fixfee').addEventListener('click', () => {
-      const rep = C.repairFees();
-      if (!rep.fixed.length) { UI.toast('沒有發現異常手續費', 'info'); return; }
-      C.saveTodaySnapshot(); if (App.Sync) App.Sync.markDirty();
-      const syms = [...new Set(rep.fixed.map(f => f.symbol))].join('、');
-      UI.toast(`已修正 ${rep.fixed.length} 筆（${syms}）`, 'success');
       settings(root);
     });
+    const nowBtn = root.querySelector('#sync-now');
+    if (nowBtn) nowBtn.addEventListener('click', async () => { const r = await App.Sync.pull(); if (r.error) UI.toast('同步失敗：' + r.error, 'error'); else { UI.toast('同步完成', 'success'); if (r.changed) App.renderCurrent(); } });
+    const offBtn = root.querySelector('#sync-off');
+    if (offBtn) offBtn.addEventListener('click', () => UI.confirmDialog('停用同步？(本機資料會保留，雲端 Gist 不刪除)', () => { App.Sync.disable(); UI.toast('已停用同步', 'info'); settings(root); }, '停用'));
+  }
+
+  // ── 設定子頁：App 鎖定 ──
+  function settingsLock(root) {
+    root.innerHTML = `<div class="page-full">${setSubHead('App 鎖定')}<div class="card setting-card"><div id="lock-body"></div></div></div>`;
+    setSubBack(root);
+    renderLockBody(root.querySelector('#lock-body'), root);
+  }
+
+  // ── 設定子頁：報價來源與代理 ──
+  function settingsAdv(root) {
+    root.innerHTML = `<div class="page-full">${setSubHead('報價來源與代理')}
+      <div class="card setting-card">
+        <div class="set-sub">Finnhub API 金鑰（美股報價）</div>
+        <input class="input" id="set-finnhub" placeholder="使用內建金鑰" value="${localStorage.getItem('dives_finnhub_key') || ''}">
+        <div class="set-sub">FinMind Token（台股報價，可留空；註冊後填入可提高速率上限）</div>
+        <input class="input" id="set-finmind" placeholder="免金鑰可用，額度有限" value="${localStorage.getItem('dives_finmind_token') || ''}">
+        <div class="set-sub">CORS 代理（報價直連失敗時的後備）</div>
+        <input class="input" id="set-proxy" value="${S.getProxy()}">
+        <button class="btn btn-block btn-ghost" id="btn-adv-save" style="margin-top:10px">儲存進階設定</button>
+      </div></div>`;
+    setSubBack(root);
     root.querySelector('#btn-adv-save').addEventListener('click', () => {
       const fk = root.querySelector('#set-finnhub').value.trim();
       const fm = root.querySelector('#set-finmind').value.trim();
@@ -1567,17 +1590,6 @@ App.Views = (function () {
       S.setProxy(px);
       UI.toast('已儲存進階設定', 'success');
     });
-    root.querySelector('#btn-clear').addEventListener('click', () =>
-      UI.confirmDialog('確定清空所有交易、損益與快照？此動作無法復原。', () => {
-        S.clearAll(); UI.toast('已清空所有資料', 'info'); App.afterDataChange([]);
-      }, '清空'));
-    root.querySelector('#btn-seed').addEventListener('click', () =>
-      UI.confirmDialog('載入示範資料？會覆蓋你目前所有資料（可先匯出備份）。', () => {
-        App.seedDemo(); UI.toast('已載入示範資料', 'success');
-      }, '載入'));
-
-    // ── App 鎖定 ──
-    renderLockBody(root.querySelector('#lock-body'), root);
   }
 
   async function renderLockBody(el, root) {
@@ -1847,5 +1859,5 @@ App.Views = (function () {
   }
   function isUsSym(s) { return U.guessMarketBySymbol(U.sanitizeSymbol(s)) === U.Market.us; }
 
-  return { portfolio, history, report, assets, settings, openTxForm, resetAssetsNav, resetReportNav, resetPortfolioNav };
+  return { portfolio, history, report, assets, settings, openTxForm, resetAssetsNav, resetReportNav, resetPortfolioNav, resetSettingsNav };
 })();

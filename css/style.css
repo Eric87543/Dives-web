@@ -237,6 +237,26 @@ input, select { font-family: inherit; font-size: 15px; }
 .btn-ghost { background: var(--soft); color: var(--text); }
 .btn-danger { background: var(--gain); color: #fff; }
 .danger-zone { border: 1px solid rgba(229,57,53,0.2); }
+/* 設定：iOS 分組列表 */
+.s-topbar { font-size: 26px; font-weight: 800; letter-spacing: -0.3px; padding: 4px 4px 8px; }
+.s-head { font-size: 12px; color: var(--sub); margin: 18px 8px 7px; }
+.s-list { background: var(--card); border-radius: var(--radius); box-shadow: 0 2px 4px rgba(0,0,0,0.04); overflow: hidden; margin-bottom: 4px; }
+.s-row { display: flex; align-items: center; gap: 13px; width: 100%; padding: 13px 14px; border-top: 1px solid var(--divider); font-size: 15px; color: var(--text); text-align: left; background: none; -webkit-tap-highlight-color: transparent; }
+.s-row:first-child { border-top: none; }
+.s-row:active { background: var(--soft); }
+.s-info:active { background: none; }
+.s-ic { flex: none; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--accent); }
+.s-ic svg { width: 21px; height: 21px; }
+.s-label { flex: 1; }
+.s-val { color: var(--sub); font-size: 14px; white-space: nowrap; }
+.s-chev { color: #C4C0BC; font-size: 19px; margin-left: 1px; }
+.s-danger, .s-danger .s-ic { color: var(--gain); }
+.chooser-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 2px; border-top: 1px solid var(--divider); text-align: left; background: none; }
+.chooser-row:first-child { border-top: none; }
+.chooser-txt { flex: 1; }
+.chooser-label { font-size: 15px; color: var(--text); }
+.chooser-hint { font-size: 12px; color: var(--sub); margin-top: 3px; line-height: 1.45; }
+.chooser-check { color: var(--accent); font-size: 18px; font-weight: 700; width: 18px; text-align: center; }
 
 /* ---- FAB ---- */
 .fab {
