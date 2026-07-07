@@ -739,7 +739,8 @@ App.Views = (function () {
     const prevNet = sum.netWorth - dayChange;
     const dayPct = Math.abs(prevNet) > 1e-9 ? dayChange / Math.abs(prevNet) * 100 : 0;
     const dayArrow = dayChange > 0 ? '▲' : dayChange < 0 ? '▼' : '–';
-    let html = `<div class="nw-hero">
+    // 固定頂部：淨資產 Hero（捲動時不動）
+    const topHtml = `<div class="nw-hero">
       <div class="nw-open" id="nw-open">
         <div class="nw-cap">我的淨資產 (TWD) ›</div>
         <div class="nw-num">${U.fmtWhole(sum.netWorth)}</div>
@@ -750,6 +751,7 @@ App.Views = (function () {
         ${addWithRefreshHtml('as-add-btn', '新增')}
       </div>
     </div>`;
+    let html = ''; // 捲動內容：分類卡
 
     // 收合摘要文字 + 更新日期
     const cashAccts = S.getCashAccounts();
@@ -880,8 +882,8 @@ App.Views = (function () {
     }
     html += `</div>`;
 
-    root.innerHTML = `<div class="page-full">${html}</div>`;
-    attachPullRefresh(root.querySelector('.page-full'));
+    root.innerHTML = `<div class="page"><div class="page-top">${topHtml}</div><div class="page-list">${html}</div></div>`;
+    attachPullRefresh(root.querySelector('.page-list'));
 
     // ── 事件 ─────────────────────────────────────────────
     root.querySelectorAll('.as-head').forEach(h => h.addEventListener('click', () => {
