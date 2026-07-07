@@ -18,13 +18,10 @@ App.Views = (function () {
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.6"/></svg>`;
     return `<button class="nw-eye" id="${id}" aria-label="${hidden ? '顯示金額' : '隱藏金額'}">${icon}</button>`;
   }
-  // 隱藏模式下把金額元素的數字換成 ••（保留幣別/符號/百分比結構）
-  const MONEY_SEL = '.nw-num, .nw-day, .as-total, .as-val, .as-hchg, .pf-mv, .pf-pnl';
+  // 隱藏模式下只遮住淨資產／總倉位（Hero 大數字），換成四個米字號；其餘金額不隱藏
   function maskAmounts(root) {
     if (!S.getPrivacy()) return;
-    root.querySelectorAll(MONEY_SEL).forEach(el => {
-      el.textContent = el.textContent.replace(/[0-9][0-9,.]*/g, '••');
-    });
+    root.querySelectorAll('.nw-num').forEach(el => { el.textContent = '＊＊＊＊'; });
   }
 
   /* ===================== 投資（市場分類卡，沿用資產頁風格）===================== */
