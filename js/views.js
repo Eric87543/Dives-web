@@ -794,7 +794,7 @@ App.Views = (function () {
   function rangeControlHtml(spec, id) {
     const RG = [['all', '全部'], ['ytd', '年初至今'], ['custom', '選擇日期']];
     let h = `<div class="seg seg-wide" id="${id}-range">${RG.map(([v, l]) => `<button class="seg-btn ${spec.range === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
-    if (spec.range === 'custom') h += `<div class="range-dates"><input type="date" class="input" id="${id}-from" value="${spec.from || ''}"><span>至</span><input type="date" class="input" id="${id}-to" value="${spec.to || ''}"><button class="range-apply" id="${id}-apply">確認</button></div>`;
+    if (spec.range === 'custom') h += `<div class="range-dates"><input type="date" class="input" id="${id}-from" value="${spec.from || ''}"><span>至</span><input type="date" class="input" id="${id}-to" value="${spec.to || ''}"></div>`;
     return h;
   }
   // 年份選擇（供漲幅圖：選年份、月刻度）
@@ -805,21 +805,23 @@ App.Views = (function () {
   function bindYearControl(root, spec, id, rerender) {
     root.querySelectorAll(`#${id}-year .chip`).forEach(b => b.addEventListener('click', () => { spec.year = +b.dataset.v; rerender(); }));
   }
-  function bindRangeControl(root, spec, id, dates, rerender) {
+  function bindRangeControl(root, spec, id, dates, rerender, onDate) {
     root.querySelectorAll(`#${id}-range .seg-btn`).forEach(b => b.addEventListener('click', () => {
       spec.range = b.dataset.v;
       if (spec.range === 'custom' && dates.length) { if (!spec.from) spec.from = dates[0]; if (!spec.to) spec.to = dates[dates.length - 1]; }
       rerender();
     }));
-    // 只在按「確認」後才套用日期並重繪；避免選擇年/月過程中重繪把日期選擇器關掉
+    // 選日期即時套用，但只「局部重繪圖表」（onDate），不重建輸入框 → 原生日期選擇器不會被關掉；
+    // 未提供 onDate 時退回整頁重繪。
     const f = root.querySelector(`#${id}-from`), t = root.querySelector(`#${id}-to`);
-    const apply = root.querySelector(`#${id}-apply`);
-    if (apply && f && t) apply.addEventListener('click', () => {
+    const apply = () => {
       let a = f.value || spec.from, b = t.value || spec.to;
-      if (a && b && a > b) { const tmp = a; a = b; b = tmp; } // 起訖顛倒自動對調
+      if (a && b && a > b) { const tmp = a; a = b; b = tmp; f.value = a; t.value = b; } // 起訖顛倒自動對調
       spec.from = a; spec.to = b;
-      rerender();
-    });
+      (onDate || rerender)();
+    };
+    if (f) f.addEventListener('change', apply);
+    if (t) t.addEventListener('change', apply);
   }
   // 點「資產」tab 時回到資產首頁（退出群組/走勢/淨資產詳情）
   function resetAssetsNav() { as.detailGroup = null; as.groupTrend = null; as.catChart = null; }
@@ -1073,7 +1075,30 @@ App.Views = (function () {
     const dates = allSnaps.map(s => s.date);
     const years = [...new Set(allSnaps.map(s => +s.date.slice(0, 4)))].sort((a, b) => a - b);
 
-    let summary = '', chartBlocks = '', inflowRows = null, inflowN = 0, netB = null, netXL = null;
+    // net（走勢）局部重繪：只更新摘要 + 圖，不重建控制列 → 選日期時原生選擇器不會被關掉
+    function paintNet() {
+      const fS = applyRange(allSnaps, st);
+      const gran = autoGran(fS.length ? fS[0].date : null, fS.length ? fS[fS.length - 1].date : null);
+      const B = C.netWorthBuckets(fS, gran, cl, true);
+      const XL = chartLabels(B, gran);
+      let sHtml = '';
+      if (B.length) {
+        const p = iso => ({ y: +iso.slice(0, 4), m: +iso.slice(5, 7) });
+        const a = p(B[0].date), b = p(B[B.length - 1].date);
+        const periodTxt = a.y === b.y ? `${a.y}年${a.m}月至${b.m}月` : `${a.y}年${a.m}月至${b.y}年${b.m}月`;
+        const chg = B[B.length - 1].nw - B[0].nw, base = B[0].nw;
+        const pctTxt = Math.abs(base) > 1e-9 ? '，較期初 ' + (chg >= 0 ? '+' : '−') + Math.abs(chg / base * 100).toFixed(0) + '%' : '';
+        sHtml = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div><div>${meta.title} ${chg >= 0 ? '增加了' : '減少了'} <b>${money(Math.abs(chg))}</b>${pctTxt}</div></div>`;
+      }
+      const sumEl = root.querySelector('#nw-summary'); if (sumEl) sumEl.innerHTML = sHtml;
+      const host = root.querySelector('#nw-chart');
+      if (!host) return;
+      if (!B.length) { host.innerHTML = `<div class="chart-empty" style="padding:50px 0">此區間尚無資料</div>`; return; }
+      const pts = B.map(bb => ({ date: new Date(bb.date + 'T00:00:00+08:00'), values: { v: bb.nw } }));
+      App.Charts.lineChart(host, pts, { height: 260, series: [{ key: 'v', label: meta.title, color: meta.color, fill: true }], xLabels: XL.xLabels, valueFmt: v => 'NT$ ' + U.fmtKMBB(v) });
+    }
+
+    let summary = '', chartBlocks = '', inflowRows = null, inflowN = 0, netB = null;
     if (mode === 'inflow') {
       // 以年底快照計算每年組成分量（年尺度）
       const byYear = {};
@@ -1091,30 +1116,17 @@ App.Views = (function () {
         for (let ci = 0; ci < inflowN; ci++)
           chartBlocks += `<div class="gt-subtitle"${ci ? ' style="margin-top:16px"' : ''}>${inflowRows[0].comps[ci].label}</div><div class="chart-host" id="nw-comp-${ci}"></div>`;
       } else chartBlocks = `<div class="chart-empty" style="padding:50px 0">尚無資料</div>`;
-    } else {
-      let periodTxt = '';
-      if (mode === 'change') {
-        if (!years.includes(st.year)) st.year = years.length ? years[years.length - 1] : new Date().getFullYear();
-        netB = C.netWorthBuckets(allSnaps.filter(s => s.date.slice(0, 4) === String(st.year)), 'month', cl, true);
-        periodTxt = st.year + '年';
-      } else {
-        const fS = applyRange(allSnaps, st);
-        const gran = autoGran(fS.length ? fS[0].date : null, fS.length ? fS[fS.length - 1].date : null);
-        netB = C.netWorthBuckets(fS, gran, cl, true);
-        netXL = chartLabels(netB, gran);
-        if (netB.length) { const p = iso => ({ y: +iso.slice(0, 4), m: +iso.slice(5, 7) }); const a = p(netB[0].date), b = p(netB[netB.length - 1].date); periodTxt = a.y === b.y ? `${a.y}年${a.m}月至${b.m}月` : `${a.y}年${a.m}月至${b.y}年${b.m}月`; }
-      }
+    } else if (mode === 'change') {
+      if (!years.includes(st.year)) st.year = years.length ? years[years.length - 1] : new Date().getFullYear();
+      netB = C.netWorthBuckets(allSnaps.filter(s => s.date.slice(0, 4) === String(st.year)), 'month', cl, true);
       if (netB.length) {
-        if (mode === 'change') {
-          const vals = netB.map(x => x.change), sum = vals.reduce((s, v) => s + v, 0), up = Math.max(0, ...vals), down = Math.min(0, ...vals);
-          summary = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div><div>合計 <b style="color:${UI.pnlColor(sum)}">${sfMoney(sum)}</b></div><div>最大漲 <b style="color:${UI.pnlColor(up)}">${sfMoney(up)}</b> · 最大跌 <b style="color:${UI.pnlColor(down)}">${sfMoney(down)}</b></div></div>`;
-        } else {
-          const chg = netB[netB.length - 1].nw - netB[0].nw, base = netB[0].nw;
-          const pctTxt = Math.abs(base) > 1e-9 ? '，較期初 ' + (chg >= 0 ? '+' : '−') + Math.abs(chg / base * 100).toFixed(0) + '%' : '';
-          summary = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div><div>${meta.title} ${chg >= 0 ? '增加了' : '減少了'} <b>${money(Math.abs(chg))}</b>${pctTxt}</div></div>`;
-        }
+        const vals = netB.map(x => x.change), sum = vals.reduce((s, v) => s + v, 0), up = Math.max(0, ...vals), down = Math.min(0, ...vals);
+        summary = `<div class="gt-sum"><div class="gt-period">${st.year}年</div><div>合計 <b style="color:${UI.pnlColor(sum)}">${sfMoney(sum)}</b></div><div>最大漲 <b style="color:${UI.pnlColor(up)}">${sfMoney(up)}</b> · 最大跌 <b style="color:${UI.pnlColor(down)}">${sfMoney(down)}</b></div></div>`;
       }
       chartBlocks = `<div class="chart-host" id="nw-chart" style="margin-top:12px"></div>`;
+    } else {
+      // net：摘要 + 圖由 paintNet 填入（占位）
+      chartBlocks = `<div id="nw-summary"></div><div class="chart-host" id="nw-chart" style="margin-top:12px"></div>`;
     }
 
     const modeTitle = mode === 'inflow' ? ' 投入' : mode === 'change' ? ' 漲幅' : ' 走勢';
@@ -1132,8 +1144,9 @@ App.Views = (function () {
     root.querySelector('.gd-back').addEventListener('click', backFn);
     root.querySelectorAll('#nw-metric .seg-btn').forEach(b => b.addEventListener('click', () => { st.metric = b.dataset.v; rerender(); }));
     if (mode === 'change') bindYearControl(root, st, 'nw', rerender);
-    else if (mode === 'net') bindRangeControl(root, st, 'nw', dates, rerender);
+    else if (mode === 'net') bindRangeControl(root, st, 'nw', dates, rerender, paintNet);
 
+    if (mode === 'net') { paintNet(); return; }
     if (mode === 'inflow') {
       if (!inflowRows || !inflowRows.length) return;
       for (let ci = 0; ci < inflowN; ci++) {
@@ -1147,14 +1160,10 @@ App.Views = (function () {
       }
       return;
     }
+    // change（漲幅）
     const host = root.querySelector('#nw-chart');
     if (!netB.length) { host.innerHTML = `<div class="chart-empty" style="padding:50px 0">此區間尚無資料</div>`; return; }
-    if (mode === 'change') {
-      App.Charts.barChart(host, netB.map(b => ({ label: b.label, fullLabel: b.full, value: b.change })), { height: 260, colorOf: v => UI.pnlColor(v), valueFmt: sfMoney });
-    } else {
-      const pts = netB.map(b => ({ date: new Date(b.date + 'T00:00:00+08:00'), values: { v: b.nw } }));
-      App.Charts.lineChart(host, pts, { height: 260, series: [{ key: 'v', label: meta.title, color: meta.color, fill: true }], xLabels: netXL.xLabels, valueFmt: v => 'NT$ ' + U.fmtKMBB(v) });
-    }
+    App.Charts.barChart(host, netB.map(b => ({ label: b.label, fullLabel: b.full, value: b.change })), { height: 260, colorOf: v => UI.pnlColor(v), valueFmt: sfMoney });
   }
 
   // 群組詳情頁（返回 / 標題 / ⋯ / ＋ / 合計排序 / 成員卡片）
@@ -1278,72 +1287,30 @@ App.Views = (function () {
     const sfMoney = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
     const money = v => 'NT$ ' + U.fmtKMBB(v);
 
-    let mvB, coB, XL = null, periodTxt = '';
-    if (isBar) {
-      // 漲幅：選年份、月刻度
-      if (!years.includes(st.year)) st.year = years.length ? years[years.length - 1] : new Date().getFullYear();
-      const ySeries = series.filter(s => s.date.slice(0, 4) === String(st.year));
-      mvB = C.netWorthBuckets(ySeries.map(s => ({ date: s.date, netWorth: s.mv })), 'month', CL, true);
-      coB = C.netWorthBuckets(ySeries.map(s => ({ date: s.date, netWorth: s.cost })), 'month', CL, true);
-      periodTxt = st.year + '年';
-    } else {
+    // net（走勢）局部重繪：只更新摘要 + 圖，不重建控制列 → 選日期時原生選擇器不會被關掉
+    function paintGt() {
       const fSeries = applyRange(series, st);
       const gran = autoGran(fSeries.length ? fSeries[0].date : null, fSeries.length ? fSeries[fSeries.length - 1].date : null);
-      mvB = C.netWorthBuckets(fSeries.map(s => ({ date: s.date, netWorth: s.mv })), gran, CL, true);
-      coB = C.netWorthBuckets(fSeries.map(s => ({ date: s.date, netWorth: s.cost })), gran, CL, true);
-      XL = chartLabels(mvB, gran);
+      const mvB = C.netWorthBuckets(fSeries.map(s => ({ date: s.date, netWorth: s.mv })), gran, CL, true);
+      const coB = C.netWorthBuckets(fSeries.map(s => ({ date: s.date, netWorth: s.cost })), gran, CL, true);
+      const XL = chartLabels(mvB, gran);
+      let sHtml = '';
       if (mvB.length) {
         const p = iso => ({ y: +iso.slice(0, 4), m: +iso.slice(5, 7) });
         const a = p(mvB[0].date), b = p(mvB[mvB.length - 1].date);
-        periodTxt = a.y === b.y ? `${a.y}年${a.m}月至${b.m}月` : `${a.y}年${a.m}月至${b.y}年${b.m}月`;
-      }
-    }
-    // 摘要文字（對齊參考圖）
-    let summary = '';
-    if (mvB.length) {
-      if (isBar) {
-        const invTot = coB.reduce((s, b) => s + b.change, 0);                       // 投入合計
-        const plTot = mvB.reduce((s, b, i) => s + (b.change - coB[i].change), 0);     // 損益合計
-        summary = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div>
-          <div>投入合計 <b>${sfMoney(invTot)}</b></div>
-          <div>持倉盈虧 <b style="color:${UI.pnlColor(plTot)}">${sfMoney(plTot)}</b></div></div>`;
-      } else {
+        const periodTxt = a.y === b.y ? `${a.y}年${a.m}月至${b.m}月` : `${a.y}年${a.m}月至${b.y}年${b.m}月`;
         const mvChg = mvB[mvB.length - 1].nw - mvB[0].nw, mvBase = mvB[0].nw;
         const coChg = coB[coB.length - 1].nw - coB[0].nw, coBase = coB[0].nw;
         const pctTxt = (chg, base) => Math.abs(base) > 1e-9 ? '，較期初 ' + (chg >= 0 ? '+' : '−') + Math.abs(chg / base * 100).toFixed(0) + '%' : '';
-        summary = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div>
+        sHtml = `<div class="gt-sum"><div class="gt-period">${periodTxt}</div>
           <div>市值 ${mvChg >= 0 ? '增加了' : '減少了'} <b>${money(Math.abs(mvChg))}</b>${pctTxt(mvChg, mvBase)}</div>
           <div>成本 ${coChg >= 0 ? '增加了' : '減少了'} <b>${money(Math.abs(coChg))}</b>${pctTxt(coChg, coBase)}</div></div>`;
       }
-    }
-
-    let html = gtHead(g.name) + `<div class="card">
-      <div class="seg seg-wide" id="gt-metric">${seg('line', '走勢', st.metric)}${seg('change', '漲幅', st.metric)}</div>
-      ${isBar ? yearControlHtml(st, 'gt', years) : rangeControlHtml(st, 'gt')}
-      ${summary}
-      ${isBar
-        ? `<div class="gt-subtitle">投入</div><div class="chart-host" id="gt-chart-a"></div>
-           <div class="gt-subtitle" style="margin-top:16px">持倉盈虧</div><div class="chart-host" id="gt-chart-b"></div>`
-        : `<div class="chart-host" id="gt-chart" style="margin-top:10px"></div>`}
-    </div>`;
-    root.innerHTML = `<div class="page-full">${html}</div>`;
-
-    root.querySelector('.gd-back').addEventListener('click', () => { as.groupTrend = null; assets(root); });
-    root.querySelectorAll('#gt-metric .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.metric = b.dataset.v; groupTrendPage(root, gid); }));
-    if (isBar) bindYearControl(root, st, 'gt', () => groupTrendPage(root, gid));
-    else bindRangeControl(root, st, 'gt', dates, () => groupTrendPage(root, gid));
-
-    if (!mvB.length) { (root.querySelector('#gt-chart') || root.querySelector('#gt-chart-a')).innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }
-    const sfBar = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
-    if (isBar) {
-      // 投入(帳戶改變)＝成本變化；持倉盈虧＝市值變化 − 成本變化 → 拆成兩張圖
-      const invItems = mvB.map((b, i) => ({ label: b.label, fullLabel: b.full, value: coB[i].change }));
-      const plItems = mvB.map((b, i) => ({ label: b.label, fullLabel: b.full, value: b.change - coB[i].change }));
-      App.Charts.barChart(root.querySelector('#gt-chart-a'), invItems, { height: 190, colorOf: () => BAR_IN, valueFmt: sfBar });
-      App.Charts.barChart(root.querySelector('#gt-chart-b'), plItems, { height: 190, colorOf: v => UI.pnlColor(v), valueFmt: sfBar });
-    } else {
+      const sumEl = root.querySelector('#gt-summary'); if (sumEl) sumEl.innerHTML = sHtml;
       const host = root.querySelector('#gt-chart');
-      const pts = mvB.map((b, i) => ({ date: new Date(b.date + 'T00:00:00+08:00'), values: { mv: b.nw, cost: coB[i].nw } }));
+      if (!host) return;
+      if (!mvB.length) { host.innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }
+      const pts = mvB.map((bb, i) => ({ date: new Date(bb.date + 'T00:00:00+08:00'), values: { mv: bb.nw, cost: coB[i].nw } }));
       App.Charts.lineChart(host, pts, {
         height: 260,
         series: [{ key: 'mv', label: '市值', color: GC_MV, fill: true }, { key: 'cost', label: '成本', color: GC_COST, dash: true }],
@@ -1351,6 +1318,46 @@ App.Views = (function () {
         valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
       });
     }
+
+    // 漲幅（isBar）：選年份、月刻度；net 由 paintGt 局部填入
+    let summary = '', mvB = null, coB = null;
+    if (isBar) {
+      if (!years.includes(st.year)) st.year = years.length ? years[years.length - 1] : new Date().getFullYear();
+      const ySeries = series.filter(s => s.date.slice(0, 4) === String(st.year));
+      mvB = C.netWorthBuckets(ySeries.map(s => ({ date: s.date, netWorth: s.mv })), 'month', CL, true);
+      coB = C.netWorthBuckets(ySeries.map(s => ({ date: s.date, netWorth: s.cost })), 'month', CL, true);
+      if (mvB.length) {
+        const invTot = coB.reduce((s, b) => s + b.change, 0);                       // 投入合計
+        const plTot = mvB.reduce((s, b, i) => s + (b.change - coB[i].change), 0);     // 損益合計
+        summary = `<div class="gt-sum"><div class="gt-period">${st.year}年</div>
+          <div>投入合計 <b>${sfMoney(invTot)}</b></div>
+          <div>持倉盈虧 <b style="color:${UI.pnlColor(plTot)}">${sfMoney(plTot)}</b></div></div>`;
+      }
+    }
+
+    let html = gtHead(g.name) + `<div class="card">
+      <div class="seg seg-wide" id="gt-metric">${seg('line', '走勢', st.metric)}${seg('change', '漲幅', st.metric)}</div>
+      ${isBar ? yearControlHtml(st, 'gt', years) : rangeControlHtml(st, 'gt')}
+      ${isBar
+        ? `${summary}<div class="gt-subtitle">投入</div><div class="chart-host" id="gt-chart-a"></div>
+           <div class="gt-subtitle" style="margin-top:16px">持倉盈虧</div><div class="chart-host" id="gt-chart-b"></div>`
+        : `<div id="gt-summary"></div><div class="chart-host" id="gt-chart" style="margin-top:10px"></div>`}
+    </div>`;
+    root.innerHTML = `<div class="page-full">${html}</div>`;
+
+    root.querySelector('.gd-back').addEventListener('click', () => { as.groupTrend = null; assets(root); });
+    root.querySelectorAll('#gt-metric .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.metric = b.dataset.v; groupTrendPage(root, gid); }));
+    if (isBar) bindYearControl(root, st, 'gt', () => groupTrendPage(root, gid));
+    else bindRangeControl(root, st, 'gt', dates, () => groupTrendPage(root, gid), paintGt);
+
+    if (!isBar) { paintGt(); return; }
+    if (!mvB.length) { root.querySelector('#gt-chart-a').innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }
+    // 投入(帳戶改變)＝成本變化；持倉盈虧＝市值變化 − 成本變化 → 拆成兩張圖
+    const sfBar = v => (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
+    const invItems = mvB.map((b, i) => ({ label: b.label, fullLabel: b.full, value: coB[i].change }));
+    const plItems = mvB.map((b, i) => ({ label: b.label, fullLabel: b.full, value: b.change - coB[i].change }));
+    App.Charts.barChart(root.querySelector('#gt-chart-a'), invItems, { height: 190, colorOf: () => BAR_IN, valueFmt: sfBar });
+    App.Charts.barChart(root.querySelector('#gt-chart-b'), plItems, { height: 190, colorOf: v => UI.pnlColor(v), valueFmt: sfBar });
   }
 
   // 統一新增選單：現金 / 投資 / 負債 / 群組
