@@ -588,10 +588,63 @@ App.Calc = (function () {
     };
   }
 
+  // 指定時間範圍的統計（報表鑽取用）：區間損益 + 區間獲利之最（各粒度）+ 該區間單筆交易之最
+  //   from/to：ISO 日期含頭尾；grans：要計算的期間粒度。以區間前一筆快照為基準算首期變化。
+  function scopedStats(from, to, grans) {
+    const allSnaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
+    const weekKey = iso => { const p = iso.split('-').map(Number); const d = new Date(Date.UTC(p[0], p[1] - 1, p[2], 12)); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+    const keyOf = (iso, g) => g === 'day' ? iso : g === 'week' ? weekKey(iso) : g === 'month' ? iso.slice(0, 7) : iso.slice(0, 4);
+
+    const inRange = allSnaps.filter(s => (!from || s.date >= from) && (!to || s.date <= to));
+    const base = from ? (allSnaps.filter(s => s.date < from).pop() || null) : null;
+    const subset = base ? [base, ...inRange] : inRange;
+
+    const periodExtremes = g => {
+      const map = new Map();
+      for (const s of subset) map.set(keyOf(s.date, g), s); // 同桶取最後
+      const arr = [...map.values()];
+      let start;
+      if (base) start = 1; // arr[0] 為區間前基準桶，從第一個區間內桶起算
+      else { let fr = arr.findIndex(s => (s.totalPnl || 0) !== 0); if (fr < 0) fr = arr.length; start = Math.max(2, fr + 1); }
+      let best = null, worst = null;
+      for (let i = start; i < arr.length; i++) {
+        const chg = (arr[i].totalPnl || 0) - (arr[i - 1].totalPnl || 0);
+        if (chg > 0 && (!best || chg > best.amount)) best = { date: arr[i].date, amount: chg };
+        if (chg < 0 && (!worst || chg < worst.amount)) worst = { date: arr[i].date, amount: chg };
+      }
+      return { best, worst };
+    };
+    const period = {};
+    for (const g of (grans || ['day', 'week', 'month'])) period[g] = periodExtremes(g);
+
+    // 區間損益 = 區間最後一筆 totalPnl − 基準 totalPnl
+    let periodPnl = null, periodReturnPct = null;
+    if (inRange.length) {
+      const last = inRange[inRange.length - 1];
+      periodPnl = (last.totalPnl || 0) - (base ? (base.totalPnl || 0) : 0);
+      const cost = last.totalCostBasisTwd || 0;
+      periodReturnPct = cost > 1e-9 ? periodPnl / cost * 100 : 0;
+    }
+
+    // 該區間單筆交易之最（已實現，依成交日過濾）
+    const mmap = S.metaMap();
+    let bestTrade = null, worstTrade = null;
+    for (const r of S.getRealized()) {
+      const d = U.isoDate(new Date(r.time));
+      if ((from && d < from) || (to && d > to)) continue;
+      const rec = { symbol: r.symbol, amount: r.realizedPnl, date: d, shares: r.shares, price: r.sellPrice,
+        market: U.normalizeMarketKey((mmap[r.symbol] && mmap[r.symbol].market) || U.guessMarketBySymbol(r.symbol)) };
+      if (r.realizedPnl > 0 && (!bestTrade || r.realizedPnl > bestTrade.amount)) bestTrade = rec;
+      if (r.realizedPnl < 0 && (!worstTrade || r.realizedPnl < worstTrade.amount)) worstTrade = rec;
+    }
+
+    return { period, periodPnl, periodReturnPct, bestTrade, worstTrade };
+  }
+
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
-    netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats,
+    netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats,
   };
 })();

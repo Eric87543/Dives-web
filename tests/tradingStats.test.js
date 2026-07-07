@@ -106,3 +106,41 @@ test('目前持倉之最：未實現獲利/虧損/報酬率（無資料回 null�
   assert.equal(st.topPct.symbol, '2330');            // +60%
   assert.equal(Math.round(st.topPct.pct), 60);
 });
+
+/* scopedStats — 報表鑽取的區間統計 */
+test('scopedStats：區間損益 = 區間末 − 區間前基準；報酬率以區間末成本計', () => {
+  S.setSnapshots([
+    { date: '2024-12-31', totalPnl: 10000, totalCostBasisTwd: 100000 },
+    { date: '2025-06-30', totalPnl: 35000, totalCostBasisTwd: 175000 },
+    { date: '2025-12-31', totalPnl: 50000, totalCostBasisTwd: 200000 },
+    { date: '2026-06-30', totalPnl: 80000, totalCostBasisTwd: 260000 },
+  ]);
+  const y = C.scopedStats('2025-01-01', '2025-12-31', ['day', 'week', 'month']);
+  assert.equal(y.periodPnl, 40000);                 // 50000 − 10000(2024末)
+  assert.equal(Math.round(y.periodReturnPct), 20);  // 40000 / 200000
+});
+
+test('scopedStats：區間獲利之最只計區間內、以區間前為基準', () => {
+  S.setSnapshots([
+    { date: '2024-12-31', totalPnl: 10000, totalCostBasisTwd: 100000 }, // 基準
+    { date: '2025-03-31', totalPnl: 30000, totalCostBasisTwd: 150000 }, // +20000
+    { date: '2025-06-30', totalPnl: 25000, totalCostBasisTwd: 150000 }, // −5000
+    { date: '2025-09-30', totalPnl: 60000, totalCostBasisTwd: 180000 }, // +35000
+  ]);
+  const y = C.scopedStats('2025-01-01', '2025-12-31', ['month']);
+  assert.equal(y.period.month.best.amount, 35000);
+  assert.equal(y.period.month.best.date, '2025-09-30');
+  assert.equal(y.period.month.worst.amount, -5000);
+  assert.equal(y.period.month.worst.date, '2025-06-30');
+});
+
+test('scopedStats：單筆交易之最依成交日過濾（只含區間內）', () => {
+  S.setRealized([
+    { symbol: 'AAA', realizedPnl: 5000, time: T('2025-05-01'), shares: 10, sellPrice: 100, avgCost: 50 },
+    { symbol: 'BBB', realizedPnl: 9000, time: T('2026-02-01'), shares: 10, sellPrice: 200, avgCost: 100 },
+  ]);
+  const y = C.scopedStats('2025-01-01', '2025-12-31', ['day']);
+  assert.equal(y.bestTrade.symbol, 'AAA');   // 2026 的 BBB 不計入
+  assert.equal(y.bestTrade.amount, 5000);
+  assert.equal(y.worstTrade, null);
+});

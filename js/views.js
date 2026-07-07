@@ -269,7 +269,7 @@ App.Views = (function () {
 
   /* ===================== 歷史 ===================== */
   // txFilter/search：交易紀錄篩選；statScope：報表統計卡的「今年/歷史」切換
-  const hist = { txFilter: 'all', search: '', statScope: 'thisYear' };
+  const hist = { txFilter: 'all', search: '' };
 
   // 歷史頁：僅交易紀錄（統計已移至報表；趨勢已由各類別走勢圖取代）
   function history(root) {
@@ -280,10 +280,12 @@ App.Views = (function () {
     histTx(root.querySelector('#hist-fixed'), root.querySelector('#hist-scroll'));
   }
 
-  // 統計卡片（自投入本金以來 / 區間獲利之最 / 單筆交易之最 / 目前持倉之最）— 供報表頁使用
-  function statsCardsHtml() {
-    const st = C.tradingStats();
-    const sm = C.buildSummary(C.buildPositions()); // 累計報酬（vs 投入本金）
+  // 統計卡片（供報表頁使用）；scope.level: 'all'（全部歷史）| 'year' | 'month'
+  //   all：自投入本金以來 + 區間獲利之最(含年度) + 單筆交易之最 + 目前持倉之最
+  //   year/month：本期損益 + 該區間獲利之最 + 該區間單筆交易之最（依 from~to 過濾）
+  const GRAN_LABEL = { day: '單日', week: '單週', month: '單月', year: '年度' };
+  function statsCardsHtml(scope) {
+    const level = (scope && scope.level) || 'all';
     const sf = v => v == null ? '—' : (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
     const col = v => UI.pnlColor(v || 0);
     const pctTxt = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
@@ -293,18 +295,16 @@ App.Views = (function () {
       const p = iso.split('-');
       return g === 'month' ? `${p[0]}/${+p[1]}` : g === 'year' ? p[0] : `${+p[1]}/${+p[2]}`;
     };
-
-    // 區間表（今年/歷史切換；今年只到單月，歷史含年度）
-    const scope = hist.statScope;
-    const pdata = st.period[scope];
-    const PERIODS = scope === 'all'
-      ? [['day', '單日'], ['week', '單週'], ['month', '單月'], ['year', '年度']]
-      : [['day', '單日'], ['week', '單週'], ['month', '單月']];
     const pcell = (g, e) => e ? `<div class="pg-amt" style="color:${col(e.amount)}">${sf(e.amount)}</div><div class="pg-date">${pdate(g, e.date)}</div>` : '<span class="pg-none">—</span>';
-    const periodGrid = PERIODS.map(([g, label]) =>
-      `<div class="pg-lbl">${label}</div><div class="pg-cell">${pcell(g, pdata[g].best)}</div><div class="pg-cell">${pcell(g, pdata[g].worst)}</div>`
-    ).join('');
-
+    const perfCard = (period, grans) => {
+      const grid = grans.map(g =>
+        `<div class="pg-lbl">${GRAN_LABEL[g]}</div><div class="pg-cell">${pcell(g, period[g].best)}</div><div class="pg-cell">${pcell(g, period[g].worst)}</div>`
+      ).join('');
+      return `<div class="card stats-card">
+        <div class="stats-title">區間獲利之最</div>
+        <div class="perf-grid"><div class="pg-head"></div><div class="pg-head">最大獲利</div><div class="pg-head">最大虧損</div>${grid}</div>
+      </div>`;
+    };
     // 單筆交易 / 持倉 之最：一列（左標籤、右金額+副標）
     const row = (label, e, opts) => {
       opts = opts || {};
@@ -320,46 +320,50 @@ App.Views = (function () {
       return `<div class="stat-row"><div class="stat-lbl">${label}</div>
         <div class="stat-val"><div class="stat-amt" style="color:${col(opts.pctMain ? e.pct : e.amount)}">${amt}</div><div class="stat-sub">${sub}</div></div></div>`;
     };
+    const tradeCard = (best, worst) => `<div class="card stats-card">
+      <div class="stats-title">單筆交易之最</div>
+      ${row('最賺一筆', best, { trade: true })}
+      ${row('最賠一筆', worst, { trade: true })}
+    </div>`;
 
+    if (level === 'all') {
+      const st = C.tradingStats();
+      const sm = C.buildSummary(C.buildPositions()); // 累計報酬（vs 投入本金）
+      return `
+        <div class="card stats-card">
+          <div class="stats-title">自投入本金以來</div>
+          <div class="tr-row">
+            <div class="tr-amt" style="color:${col(sm.totalPnl)}">${sf(sm.totalPnl)}</div>
+            <div class="tr-pct" style="color:${col(sm.totalReturnPct || 0)}">${pctTxt(sm.totalReturnPct || 0)}</div>
+          </div>
+          <div class="tr-grid">
+            <div class="trg"><span class="trg-k">投入本金</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalCostBasisTwd)}</span></div>
+            <div class="trg"><span class="trg-k">目前市值</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalMarketValueTwd)}</span></div>
+            <div class="trg"><span class="trg-k">未實現</span><span class="trg-v" style="color:${col(sm.totalUnrealizedPnl)}">${sf(sm.totalUnrealizedPnl)}</span></div>
+            <div class="trg"><span class="trg-k">已實現</span><span class="trg-v" style="color:${col(sm.totalRealizedPnl)}">${sf(sm.totalRealizedPnl)}</span></div>
+          </div>
+        </div>
+        ${perfCard(st.period.all, ['day', 'week', 'month', 'year'])}
+        ${tradeCard(st.bestTrade, st.worstTrade)}
+        <div class="card stats-card">
+          <div class="stats-title">目前持倉之最</div>
+          ${row('未實現獲利王', st.topGain)}
+          ${row('未實現虧損王', st.topLoss)}
+          ${row('報酬率最高', st.topPct, { pctMain: true })}
+        </div>`;
+    }
+    const grans = level === 'year' ? ['day', 'week', 'month'] : ['day', 'week'];
+    const st = C.scopedStats(scope.from, scope.to, grans);
     return `
       <div class="card stats-card">
-        <div class="stats-title">自投入本金以來</div>
+        <div class="stats-title">本期損益</div>
         <div class="tr-row">
-          <div class="tr-amt" style="color:${col(sm.totalPnl)}">${sf(sm.totalPnl)}</div>
-          <div class="tr-pct" style="color:${col(sm.totalReturnPct || 0)}">${pctTxt(sm.totalReturnPct || 0)}</div>
-        </div>
-        <div class="tr-grid">
-          <div class="trg"><span class="trg-k">投入本金</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalCostBasisTwd)}</span></div>
-          <div class="trg"><span class="trg-k">目前市值</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalMarketValueTwd)}</span></div>
-          <div class="trg"><span class="trg-k">未實現</span><span class="trg-v" style="color:${col(sm.totalUnrealizedPnl)}">${sf(sm.totalUnrealizedPnl)}</span></div>
-          <div class="trg"><span class="trg-k">已實現</span><span class="trg-v" style="color:${col(sm.totalRealizedPnl)}">${sf(sm.totalRealizedPnl)}</span></div>
+          <div class="tr-amt" style="color:${col(st.periodPnl)}">${sf(st.periodPnl)}</div>
+          <div class="tr-pct" style="color:${col(st.periodReturnPct || 0)}">${pctTxt(st.periodReturnPct || 0)}</div>
         </div>
       </div>
-      <div class="card stats-card">
-        <div class="stats-head">
-          <div class="stats-title">區間獲利之最</div>
-          <div class="seg" id="stat-scope">${seg('thisYear', '今年', scope)}${seg('all', '歷史', scope)}</div>
-        </div>
-        <div class="perf-grid">
-          <div class="pg-head"></div><div class="pg-head">最大獲利</div><div class="pg-head">最大虧損</div>
-          ${periodGrid}
-        </div>
-      </div>
-      <div class="card stats-card">
-        <div class="stats-title">單筆交易之最</div>
-        ${row('最賺一筆', st.bestTrade, { trade: true })}
-        ${row('最賠一筆', st.worstTrade, { trade: true })}
-      </div>
-      <div class="card stats-card">
-        <div class="stats-title">目前持倉之最</div>
-        ${row('未實現獲利王', st.topGain)}
-        ${row('未實現虧損王', st.topLoss)}
-        ${row('報酬率最高', st.topPct, { pctMain: true })}
-      </div>`;
-  }
-  function bindStatsScope(root, rerender) {
-    root.querySelectorAll('#stat-scope .seg-btn').forEach(b =>
-      b.addEventListener('click', () => { hist.statScope = b.dataset.v; rerender(); }));
+      ${perfCard(st.period, grans)}
+      ${tradeCard(st.bestTrade, st.worstTrade)}`;
   }
 
 
@@ -436,8 +440,8 @@ App.Views = (function () {
   }
 
   /* ===================== 報表 ===================== */
-  const rep = { mode: 'yearly', year: new Date().getFullYear(), month: null, asc: false }; // 鑽取：年→月→日；列表預設倒序（新→舊）
-  function resetReportNav() { rep.mode = 'yearly'; rep.month = null; } // 進報表一律回年報表
+  const rep = { mode: 'yearly', year: new Date().getFullYear(), month: null, asc: false, statsPage: false }; // 鑽取：年→月→日；列表預設倒序（新→舊）
+  function resetReportNav() { rep.mode = 'yearly'; rep.month = null; rep.statsPage = false; } // 進報表一律回年報表
   // 欄位 → 圖表標題 / 表頭底線色（藍：淨資產/投入；綠：損益/已未實現）
   const REP_COLS = {
     netAsset: { title: '總倉位', underline: '#4A82C8' },
@@ -504,6 +508,7 @@ App.Views = (function () {
   }
 
   function report(root) {
+    if (rep.statsPage) return reportStatsPage(root);
     const cl = C.cashLiabTwd();
     const allSnaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
     const reports = periodReports();
@@ -538,8 +543,13 @@ App.Views = (function () {
     if (!reports.length) {
       listHtml = `<div class="empty">${rep.mode === 'yearly' ? '暫無報表資料，使用一段時間後每日快照將彙整於此' : '此期間暫無資料'}</div>`;
     } else {
-      // 年報表：以「歷史統計」取代原本的走勢圖
-      if (rep.mode === 'yearly') listHtml += statsCardsHtml();
+      // 統計入口（點擊開新頁；年報表→全部歷史、某年→該年度、某月→該月度）
+      const statsLabel = rep.mode === 'yearly' ? '統計（全部歷史）' : rep.mode === 'monthly' ? rep.year + '年 統計' : rep.year + '年' + rep.month + '月 統計';
+      listHtml += `<button class="rep-chart-btn" id="rep-stats-open">
+        <span class="rcb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10M12 21V4M19 21v-7"/></svg></span>
+        <span class="rcb-label">${statsLabel}</span>
+        <span class="rcb-chevron">›</span>
+      </button>`;
       if (rep.mode === 'daily') listHtml += `<div class="set-hint" style="margin:0 2px 8px">每日損益以台股日為界；美股當晚整盤計入同一天，凌晨已收的盤歸前一天</div>`;
 
       // 期間列表：年→月、月→日 可鑽入（日為葉層）；預設倒序（新→舊）
@@ -569,13 +579,25 @@ App.Views = (function () {
 
     const sortBtn = root.querySelector('#rep-sort');
     if (sortBtn) sortBtn.addEventListener('click', () => { rep.asc = !rep.asc; report(root); });
-    if (rep.mode === 'yearly') bindStatsScope(root, () => report(root));
+    const statsBtn = root.querySelector('#rep-stats-open');
+    if (statsBtn) statsBtn.addEventListener('click', () => { rep.statsPage = true; report(root); });
     root.querySelectorAll('.rep-prow-drill').forEach(rw => rw.addEventListener('click', () => {
       const key = +rw.dataset.key;
       if (rep.mode === 'yearly') { rep.year = key; rep.mode = 'monthly'; }
       else { rep.month = key; rep.mode = 'daily'; }
       report(root);
     }));
+  }
+  // 統計頁（點統計入口後開啟）：依目前報表層級決定範圍
+  //   年報表→全部歷史；某年→該年度；某月→該月度。返回回到同層列表。
+  function reportStatsPage(root) {
+    let scope, title;
+    if (rep.mode === 'yearly') { scope = { level: 'all' }; title = '全部歷史 統計'; }
+    else if (rep.mode === 'monthly') { scope = { level: 'year', from: rep.year + '-01-01', to: rep.year + '-12-31' }; title = rep.year + '年 統計'; }
+    else { const ym = String(rep.year) + '-' + String(rep.month).padStart(2, '0'); scope = { level: 'month', from: ym + '-01', to: ym + '-31' }; title = rep.year + '年' + rep.month + '月 統計'; }
+    const topHtml = `<div class="gd-head"><button class="gd-back" aria-label="返回">‹</button><div class="gd-title">${title}</div><div class="gd-actions"></div></div>`;
+    root.innerHTML = `<div class="page"><div class="page-top">${topHtml}</div><div class="page-list">${statsCardsHtml(scope)}</div></div>`;
+    root.querySelector('.gd-back').addEventListener('click', () => { rep.statsPage = false; report(root); });
   }
   function bindReportHead(root) {
     const back = root.querySelector('.gd-back');
