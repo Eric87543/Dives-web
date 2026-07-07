@@ -147,13 +147,12 @@ App.Views = (function () {
       html += `<div class="card as-cat">
         <div class="as-head ${open ? 'open ' + M.oc : ''}" data-mk="${M.key}" style="--cc:${M.color}">
           <div class="as-hleft">
-            <div class="mk-nameline"><span class="as-name">${M.name}</span><span class="mk-count">${list.length} 檔 · ${pct.toFixed(0)}%</span></div>
+            <div class="mk-nameline"><span class="as-name">${M.name}</span>${open ? `<button class="as-htrend" data-trend="${M.key}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></button>` : ''}<span class="mk-count">${list.length} 檔 · ${pct.toFixed(0)}%</span></div>
             ${!open ? `<span class="as-hsummary">${names}</span>` : ''}
           </div>
           <div class="as-hright">
             <span class="as-total" style="color:${M.color}">${U.fmtWhole(tot)}</span>
             <span class="as-hchg" style="color:${UI.pnlColor(dayChg)}">${dArrow} ${U.fmtWhole(Math.abs(dayChg))} (${Math.abs(dayChgPct).toFixed(2)}%)</span>
-            ${open ? `<button class="as-htrend" data-trend="${M.key}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></button>` : ''}
           </div>
         </div>`;
       if (open) {
@@ -791,19 +790,18 @@ App.Views = (function () {
       const open = as.openCat === cat;
       const ink = openCls === 'oc-green' ? '#1E8E4E' : openCls === 'oc-purple' ? '#5A4FC0' : '#4A56B5';
       const ring = pct != null ? pctRing(pct, cc, ink) : '';
+      const trendBtn = `<button class="as-htrend" data-trend="${cat}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></button>`;
       return `<div class="as-head ${open ? 'open ' + openCls : ''}" data-cat="${cat}" style="--cc:${cc}">
         <div class="as-hleft cat-hleft">
           ${ring}
           <div class="cat-txt">
-            <span class="as-name">${name}</span>
+            <div class="nm-line"><span class="as-name">${name}</span>${open ? trendBtn : ''}</div>
             ${!open ? `<span class="as-hsummary">${summary}</span>` : ''}
           </div>
         </div>
         <div class="as-hright">
           <span class="as-total">${totalHtml}</span>
-          ${open
-            ? `<button class="as-htrend" data-trend="${cat}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></button>`
-            : (dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : '')}
+          ${!open && dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : ''}
         </div>
       </div>`;
     }
