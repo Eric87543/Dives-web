@@ -268,36 +268,20 @@ App.Views = (function () {
   }
 
   /* ===================== 歷史 ===================== */
-  const hist = { tab: 'tx', range: 'ytd', txFilter: 'all', search: '', chart: 'alloc', statScope: 'thisYear' };
-  const RANGES = [['1m', '1M'], ['3m', '3M'], ['6m', '6M'], ['ytd', 'YTD'], ['1y', '1Y'], ['all', '全部']];
-  // 趨勢圖表種類
-  const HIST_CHARTS = [['alloc', '倉位'], ['net', '淨資產'], ['cash', '流動資金'], ['liab', '負債']];
-  const HIST_LINE_CONF = {
-    net: { label: '淨資產', color: '#2F80ED' },
-    cash: { label: '流動資金', color: '#34A853' },
-    liab: { label: '負債', color: '#D95555' },
-  };
+  // txFilter/search：交易紀錄篩選；statScope：報表統計卡的「今年/歷史」切換
+  const hist = { txFilter: 'all', search: '', statScope: 'thisYear' };
 
+  // 歷史頁：僅交易紀錄（統計已移至報表；趨勢已由各類別走勢圖取代）
   function history(root) {
     root.innerHTML = `<div class="page">
-      <div class="page-top">
-        <div class="seg seg-wide" id="hist-tab">${seg2('tx', '交易紀錄', hist.tab)}${seg2('stats', '統計', hist.tab)}</div>
-        <div id="hist-fixed"></div>
-      </div>
+      <div class="page-top" id="hist-fixed"></div>
       <div class="page-list" id="hist-scroll"></div>
     </div>`;
-    root.querySelectorAll('#hist-tab .seg-btn').forEach(b =>
-      b.addEventListener('click', () => { hist.tab = b.dataset.v; history(root); }));
-    const fixedEl = root.querySelector('#hist-fixed');
-    const scrollEl = root.querySelector('#hist-scroll');
-    if (hist.tab === 'trend') histTrend(fixedEl, scrollEl);
-    else if (hist.tab === 'stats') histStats(fixedEl, scrollEl);
-    else histTx(fixedEl, scrollEl);
+    histTx(root.querySelector('#hist-fixed'), root.querySelector('#hist-scroll'));
   }
 
-  // 統計頁：區間 / 單筆交易 / 目前持倉 之最
-  function histStats(fixedEl, scrollEl) {
-    fixedEl.innerHTML = '';
+  // 統計卡片（自投入本金以來 / 區間獲利之最 / 單筆交易之最 / 目前持倉之最）— 供報表頁使用
+  function statsCardsHtml() {
     const st = C.tradingStats();
     const sm = C.buildSummary(C.buildPositions()); // 累計報酬（vs 投入本金）
     const sf = v => v == null ? '—' : (v >= 0 ? '+' : '−') + 'NT$ ' + U.fmtKMBB(Math.abs(v));
@@ -337,7 +321,7 @@ App.Views = (function () {
         <div class="stat-val"><div class="stat-amt" style="color:${col(opts.pctMain ? e.pct : e.amount)}">${amt}</div><div class="stat-sub">${sub}</div></div></div>`;
     };
 
-    scrollEl.innerHTML = `
+    return `
       <div class="card stats-card">
         <div class="stats-title">自投入本金以來</div>
         <div class="tr-row">
@@ -371,81 +355,13 @@ App.Views = (function () {
         ${row('未實現獲利王', st.topGain)}
         ${row('未實現虧損王', st.topLoss)}
         ${row('報酬率最高', st.topPct, { pctMain: true })}
-      </div>
-    `;
-    scrollEl.querySelectorAll('#stat-scope .seg-btn').forEach(b =>
-      b.addEventListener('click', () => { hist.statScope = b.dataset.v; histStats(fixedEl, scrollEl); }));
+      </div>`;
   }
-  function seg2(v, label, cur) { return `<button class="seg-btn ${cur === v ? 'active' : ''}" data-v="${v}">${label}</button>`; }
-
-  function filterByRange(snaps) {
-    if (hist.range === 'all') return snaps;
-    const now = new Date();
-    let from;
-    if (hist.range === 'ytd') from = new Date(now.getFullYear(), 0, 1);
-    else {
-      const map = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 };
-      from = new Date(now); from.setMonth(from.getMonth() - (map[hist.range] || 12));
-    }
-    const fromStr = U.isoDate(from);
-    return snaps.filter(s => s.date >= fromStr);
+  function bindStatsScope(root, rerender) {
+    root.querySelectorAll('#stat-scope .seg-btn').forEach(b =>
+      b.addEventListener('click', () => { hist.statScope = b.dataset.v; rerender(); }));
   }
 
-  function histTrend(fixedEl, scrollEl) {
-    fixedEl.innerHTML = `<div class="chips" id="range-chips">` +
-      RANGES.map(([v, l]) => `<button class="chip ${hist.range === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('') + `</div>
-      <div class="chips" id="chart-chips">` +
-      HIST_CHARTS.map(([v, l]) => `<button class="chip ${hist.chart === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('') + `</div>`;
-    fixedEl.querySelectorAll('#range-chips .chip').forEach(b =>
-      b.addEventListener('click', () => { hist.range = b.dataset.v; histTrend(fixedEl, scrollEl); }));
-    fixedEl.querySelectorAll('#chart-chips .chip').forEach(b =>
-      b.addEventListener('click', () => { hist.chart = b.dataset.v; histTrend(fixedEl, scrollEl); }));
-
-    scrollEl.innerHTML = `<div class="card"><div class="chart-host" id="trend-chart"></div></div>`;
-    const host = scrollEl.querySelector('#trend-chart');
-    const snaps = filterByRange(S.getSnapshots());
-
-    if (hist.chart === 'alloc') {
-      // 資產配置：台股/美股/加密堆疊
-      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0 } }));
-      App.Charts.trend(host, points, {
-        twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
-        xLabels: monthLabels(points), height: 250,
-        valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
-      });
-      return;
-    }
-    // 淨資產 / 流動資金 / 負債 單線圖（舊快照無欄位時以目前現金/負債回填，避免斷崖）
-    const cl = C.cashLiabTwd();
-    const valOf = s =>
-      hist.chart === 'net' ? nwOf(s, cl)
-        : hist.chart === 'cash' ? (s.cashAccountsTwd != null ? s.cashAccountsTwd : cl.cashTwd)
-          : (s.liabilitiesTwd != null ? s.liabilitiesTwd : cl.liabTwd);
-    const conf = HIST_LINE_CONF[hist.chart];
-    const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: valOf(s) } }));
-    App.Charts.lineChart(host, points, {
-      series: [{ key: 'v', label: conf.label, color: conf.color, fill: true }],
-      xLabels: monthLabels(points), height: 250,
-      valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
-    });
-  }
-
-  function monthLabels(points) {
-    if (!points.length) return [];
-    const out = []; const seen = new Set();
-    const multiYear = new Set(points.map(p => p.date.getFullYear())).size > 1;
-    points.forEach((p, i) => {
-      const key = p.date.getFullYear() + '-' + p.date.getMonth();
-      if (!seen.has(key)) {
-        seen.add(key);
-        const lbl = multiYear ? `${String(p.date.getFullYear()).slice(2)}/${p.date.getMonth() + 1}月` : `${p.date.getMonth() + 1}月`;
-        out.push({ idx: i, label: lbl });
-      }
-    });
-    if (out.length <= 6) return out;
-    const step = Math.ceil(out.length / 6);
-    return out.filter((_, i) => i % step === 0);
-  }
 
   function histTx(fixedEl, scrollEl) {
     const mmap = S.metaMap();
@@ -520,8 +436,8 @@ App.Views = (function () {
   }
 
   /* ===================== 報表 ===================== */
-  const rep = { mode: 'yearly', year: new Date().getFullYear(), month: null, asc: true, trendMode: 'pos', chartPage: false }; // 鑽取：年→月→日
-  function resetReportNav() { rep.chartPage = false; rep.mode = 'yearly'; rep.month = null; } // 進報表一律回年報表
+  const rep = { mode: 'yearly', year: new Date().getFullYear(), month: null, asc: false }; // 鑽取：年→月→日；列表預設倒序（新→舊）
+  function resetReportNav() { rep.mode = 'yearly'; rep.month = null; } // 進報表一律回年報表
   // 欄位 → 圖表標題 / 表頭底線色（藍：淨資產/投入；綠：損益/已未實現）
   const REP_COLS = {
     netAsset: { title: '總倉位', underline: '#4A82C8' },
@@ -588,90 +504,72 @@ App.Views = (function () {
   }
 
   function report(root) {
-    if (rep.chartPage) return reportChartPage(root);
     const cl = C.cashLiabTwd();
     const allSnaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
     const reports = periodReports();
 
-    // 表頭：年報表無返回；月/日報表有返回鈕 + 標題
-    let html;
-    if (rep.mode === 'yearly') html = `<div class="rep-head"><div class="rep-head-title">年報表</div></div>`;
-    else html = `<div class="gd-head"><button class="gd-back" aria-label="返回">‹</button><div class="gd-title">${rep.mode === 'monthly' ? rep.year + ' 年' : rep.year + '年 ' + rep.month + '月'}</div><div class="gd-actions"></div></div>`;
+    // 固定頂部：年報表無返回；月/日報表有返回鈕 + 標題（月/日再加本期損益 Hero）
+    let topHtml;
+    if (rep.mode === 'yearly') topHtml = `<div class="rep-head"><div class="rep-head-title">年報表</div></div>`;
+    else {
+      topHtml = `<div class="gd-head"><button class="gd-back" aria-label="返回">‹</button><div class="gd-title">${rep.mode === 'monthly' ? rep.year + ' 年' : rep.year + '年 ' + rep.month + '月'}</div><div class="gd-actions"></div></div>`;
+      let hSnaps, hPrev, hLabel;
+      if (rep.mode === 'monthly') {
+        const ys = String(rep.year);
+        hSnaps = allSnaps.filter(s => s.date.slice(0, 4) === ys);
+        hPrev = allSnaps.filter(s => s.date < ys + '-01-01').pop() || null;
+        hLabel = rep.year + '年 本期損益';
+      } else {
+        const ym = String(rep.year) + '-' + String(rep.month).padStart(2, '0');
+        hSnaps = allSnaps.filter(s => s.date.slice(0, 7) === ym);
+        hPrev = allSnaps.filter(s => s.date < ym + '-01').pop() || null;
+        hLabel = rep.year + '年' + rep.month + '月 本期損益';
+      }
+      const hero = hSnaps.length ? mkReport('', hSnaps[hSnaps.length - 1], hPrev, cl) : null;
+      if (hero) topHtml += `<div class="rep-hero">
+        <div class="nw-cap">${hLabel}</div>
+        <div class="nw-num" style="color:${UI.pnlColor(hero.periodPnl)}">${U.fmtBannerSigned(hero.periodPnl)}</div>
+        <div class="nw-day" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">報酬率 ${U.fmtPct(hero.periodReturnPct)}</div>
+      </div>`;
+    }
 
+    // 捲動內容
+    let listHtml = '';
     if (!reports.length) {
-      html += `<div class="empty">${rep.mode === 'yearly' ? '暫無報表資料，使用一段時間後每日快照將彙整於此' : '此期間暫無資料'}</div>`;
-      root.innerHTML = `<div class="page-full">${html}</div>`;
-      bindReportHead(root);
-      return;
-    }
-
-    // Hero：依層級顯示 累計 / 該年 / 該月 的損益（用該範圍的最後一筆 − 範圍前一筆）
-    let hSnaps, hPrev, hLabel;
-    if (rep.mode === 'yearly') { hSnaps = allSnaps; hPrev = null; hLabel = '累計損益'; }
-    else if (rep.mode === 'monthly') {
-      const ys = String(rep.year);
-      hSnaps = allSnaps.filter(s => s.date.slice(0, 4) === ys);
-      hPrev = allSnaps.filter(s => s.date < ys + '-01-01').pop() || null;
-      hLabel = rep.year + '年 本期損益';
+      listHtml = `<div class="empty">${rep.mode === 'yearly' ? '暫無報表資料，使用一段時間後每日快照將彙整於此' : '此期間暫無資料'}</div>`;
     } else {
-      const ym = String(rep.year) + '-' + String(rep.month).padStart(2, '0');
-      hSnaps = allSnaps.filter(s => s.date.slice(0, 7) === ym);
-      hPrev = allSnaps.filter(s => s.date < ym + '-01').pop() || null;
-      hLabel = rep.year + '年' + rep.month + '月 本期損益';
-    }
-    const hero = hSnaps.length ? mkReport('', hSnaps[hSnaps.length - 1], hPrev, cl) : null;
-    if (hero) html += `<div class="rep-hero">
-      <div class="nw-cap">${hLabel}</div>
-      <div class="nw-num" style="color:${UI.pnlColor(hero.periodPnl)}">${U.fmtBannerSigned(hero.periodPnl)}</div>
-      <div class="nw-day" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">報酬率 ${U.fmtPct(hero.periodReturnPct)}</div>
-    </div>`;
+      // 年報表：以「歷史統計」取代原本的走勢圖
+      if (rep.mode === 'yearly') listHtml += statsCardsHtml();
+      if (rep.mode === 'daily') listHtml += `<div class="set-hint" style="margin:0 2px 8px">每日損益以台股日為界；美股當晚整盤計入同一天，凌晨已收的盤歸前一天</div>`;
 
-    // 2×2 資訊卡：只在年報表（最上層）顯示全期概況
-    if (rep.mode === 'yearly' && hSnaps.length) {
-      const last = hSnaps[hSnaps.length - 1];
-      const mc = (k, v, color) => `<div class="rep-mc"><div class="rep-mc-k">${k}</div><div class="rep-mc-v"${color ? ` style="color:${color}"` : ''}>${v}</div></div>`;
-      html += `<div class="rep-mc-grid">
-        ${mc('累計損益', U.fmtBannerSigned(last.totalPnl), UI.pnlColor(last.totalPnl))}
-        ${mc('目前市值', 'NT$ ' + U.fmtKMBB(last.totalMarketValueTwd || 0))}
-        ${mc('未實現', U.fmtBannerSigned(last.unrealizedPnl), UI.pnlColor(last.unrealizedPnl))}
-        ${mc('已實現', U.fmtBannerSigned(last.realizedPnl), UI.pnlColor(last.realizedPnl))}
-      </div>`;
+      // 期間列表：年→月、月→日 可鑽入（日為葉層）；預設倒序（新→舊）
+      const drill = rep.mode !== 'daily';
+      const head = rep.mode === 'yearly' ? '各年度' : rep.mode === 'monthly' ? '各月' : '各日';
+      listHtml += `<div class="card rep-periods">
+        <div class="rep-periods-head"><span>${head}</span><button class="rep-sort" id="rep-sort">排序 ${rep.asc ? '▲' : '▼'}</button></div>`;
+      const rowsOrder = rep.asc ? reports : [...reports].reverse();
+      for (const r of rowsOrder) {
+        listHtml += `<div class="rep-prow${drill ? ' rep-prow-drill' : ''}"${drill ? ` data-key="${r.key}"` : ''}>
+          <div class="rep-prow-main">
+            <div class="rep-prow-lbl">${r.label}</div>
+            <div class="rep-prow-sub">總倉位 ${U.fmtKMBB(r.netAsset)} · 投入 ${U.fmtBannerSigned(r.newInvestment)}</div>
+          </div>
+          <div class="rep-prow-val">
+            <div class="rep-prow-pnl" style="color:${UI.pnlColor(r.periodPnl)}">${U.fmtBannerSigned(r.periodPnl)}</div>
+            <div class="rep-prow-pct" style="color:${UI.pnlColor(r.periodReturnPct)}">${U.fmtPct(r.periodReturnPct)}</div>
+          </div>
+          ${drill ? '<span class="rep-prow-chev">›</span>' : ''}
+        </div>`;
+      }
+      listHtml += `</div>`;
     }
 
-    // 走勢圖 icon
-    html += `<button class="rep-chart-btn" id="rep-chart-open">
-      <span class="rcb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v16a2 2 0 0 0 2 2h15"/><path d="M7 14l3.5-3.5 3 2.5L18 7"/><path d="M14.5 7H18v3.5"/></svg></span>
-      <span class="rcb-label">走勢圖</span>
-      <span class="rcb-chevron">›</span>
-    </button>`;
-    if (rep.mode === 'daily') html += `<div class="set-hint" style="margin:0 2px 8px">每日損益以台股日為界；美股當晚整盤計入同一天，凌晨已收的盤歸前一天</div>`;
-
-    // 期間列表：年→月、月→日 可鑽入（日為葉層）
-    const drill = rep.mode !== 'daily';
-    const head = rep.mode === 'yearly' ? '各年度' : rep.mode === 'monthly' ? '各月' : '各日';
-    html += `<div class="card rep-periods">
-      <div class="rep-periods-head"><span>${head}</span><button class="rep-sort" id="rep-sort">排序 ${rep.asc ? '▲' : '▼'}</button></div>`;
-    const rowsOrder = rep.asc ? reports : [...reports].reverse();
-    for (const r of rowsOrder) {
-      html += `<div class="rep-prow${drill ? ' rep-prow-drill' : ''}"${drill ? ` data-key="${r.key}"` : ''}>
-        <div class="rep-prow-main">
-          <div class="rep-prow-lbl">${r.label}</div>
-          <div class="rep-prow-sub">總倉位 ${U.fmtKMBB(r.netAsset)} · 投入 ${U.fmtBannerSigned(r.newInvestment)}</div>
-        </div>
-        <div class="rep-prow-val">
-          <div class="rep-prow-pnl" style="color:${UI.pnlColor(r.periodPnl)}">${U.fmtBannerSigned(r.periodPnl)}</div>
-          <div class="rep-prow-pct" style="color:${UI.pnlColor(r.periodReturnPct)}">${U.fmtPct(r.periodReturnPct)}</div>
-        </div>
-        ${drill ? '<span class="rep-prow-chev">›</span>' : ''}
-      </div>`;
-    }
-    html += `</div>`;
-    root.innerHTML = `<div class="page-full">${html}</div>`;
+    root.innerHTML = `<div class="page"><div class="page-top">${topHtml}</div><div class="page-list">${listHtml}</div></div>`;
     bindReportHead(root);
 
     const sortBtn = root.querySelector('#rep-sort');
     if (sortBtn) sortBtn.addEventListener('click', () => { rep.asc = !rep.asc; report(root); });
-    root.querySelector('#rep-chart-open').addEventListener('click', () => { rep.chartPage = true; report(root); });
+    if (rep.mode === 'yearly') bindStatsScope(root, () => report(root));
     root.querySelectorAll('.rep-prow-drill').forEach(rw => rw.addEventListener('click', () => {
       const key = +rw.dataset.key;
       if (rep.mode === 'yearly') { rep.year = key; rep.mode = 'monthly'; }
@@ -686,73 +584,6 @@ App.Views = (function () {
       else if (rep.mode === 'monthly') rep.mode = 'yearly';
       report(root);
     });
-  }
-
-  // 走勢圖獨立頁（返回 / 標題 / 倉位·淨資產切換 / 全幅圖）
-  function reportChartPage(root) {
-    const html = `<div class="gd-head">
-      <button class="gd-back" aria-label="返回">‹</button>
-      <div class="gd-title">${rep.trendMode === 'net' ? '淨資產走勢' : '倉位走勢'}</div>
-      <div class="gd-actions"></div>
-    </div>
-    <div class="card">
-      <div class="seg seg-wide" id="rep-trend-mode">${seg('pos', '倉位', rep.trendMode)}${seg('net', '淨資產', rep.trendMode)}</div>
-      <div class="chart-host" id="rep-chart" style="margin-top:12px"></div>
-    </div>`;
-    root.innerHTML = `<div class="page-full">${html}</div>`;
-    root.querySelector('.gd-back').addEventListener('click', () => { rep.chartPage = false; report(root); });
-    root.querySelectorAll('#rep-trend-mode .seg-btn').forEach(b =>
-      b.addEventListener('click', () => { rep.trendMode = b.dataset.v; reportChartPage(root); }));
-    drawReportChart(root);
-  }
-  function drawReportChart(root) {
-    const host = root.querySelector('#rep-chart');
-    if (!host) return;
-    let snaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
-    if (rep.mode === 'monthly') snaps = snaps.filter(s => s.date.slice(0, 4) === String(rep.year));
-    if (rep.mode === 'daily') { const ym = String(rep.year) + '-' + String(rep.month).padStart(2, '0'); snaps = snaps.filter(s => s.date.slice(0, 7) === ym); }
-    const xLab = rep.mode === 'daily' ? monthLabels : repXLabels;
-    if (rep.trendMode === 'net') {
-      // 淨資產走勢（= 倉位 + 流動資金 − 負債；舊快照回填見 nwOf）
-      const cl = C.cashLiabTwd();
-      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: { v: nwOf(s, cl) } }));
-      App.Charts.lineChart(host, points, {
-        series: [{ key: 'v', label: '淨資產', color: '#2F80ED', fill: true }],
-        xLabels: xLab(points),
-        valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
-      });
-    } else {
-      const points = snaps.map(s => ({ date: new Date(s.date + 'T00:00:00+08:00'), values: {
-        tw: s.twMarketValue, us: s.usMarketValueTwd, crypto: s.cryptoMarketValueTwd || 0,
-      } }));
-      App.Charts.trend(host, points, {
-        twKey: 'tw', usKey: 'us', cryptoKey: 'crypto', twLabel: '台股', usLabel: '美股', cryptoLabel: '加密',
-        xLabels: xLab(points),
-        valueFmt: v => 'NT$ ' + U.fmtKMBB(v),
-      });
-    }
-  }
-  function seg3(v, label, cur) { return `<button class="seg-btn ${cur === v ? 'active' : ''}" data-v="${v}">${label}</button>`; }
-  function bcol(k, v, color) { return `<div class="bc"><div class="k">${k}</div><div class="v" style="color:${color}">${v}</div></div>`; }
-
-  function repXLabels(points) {
-    if (!points.length) return [];
-    const out = []; const seen = new Set();
-    points.forEach((p, i) => {
-      const v = rep.mode === 'yearly' ? p.date.getFullYear() : p.date.getMonth() + 1;
-      if (!seen.has(v)) { seen.add(v); out.push({ idx: i, label: rep.mode === 'yearly' ? String(v) : v + '月' }); }
-    });
-    const minGap = Math.max(5, Math.floor(points.length / 8));
-    const filtered = [];
-    for (const e of out) { if (filtered.length && e.idx - filtered[filtered.length - 1].idx < minGap) continue; filtered.push(e); }
-    return filtered;
-  }
-
-  function bindReportTop(root, years) {
-    root.querySelectorAll('#rep-mode .seg-btn').forEach(b =>
-      b.addEventListener('click', () => { rep.mode = b.dataset.v; report(root); }));
-    root.querySelectorAll('#year-chips .chip').forEach(b =>
-      b.addEventListener('click', () => { rep.year = +b.dataset.v; report(root); }));
   }
 
   /* ===================== 資產（淨資產）===================== */
