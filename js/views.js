@@ -116,11 +116,10 @@ App.Views = (function () {
     const arrow = day > 0 ? '▲' : day < 0 ? '▼' : '–';
     let topHtml = `<div class="nw-hero">
       <div>
-        <div class="nw-cap">總倉位 (TWD)</div>
+        <div class="nw-cap">總倉位 (TWD)${eyeBtnHtml('pf-eye')}</div>
         <div class="nw-num">${U.fmtWhole(totalAll)}</div>
         <div class="nw-day" style="color:${UI.pnlColor(day)}">${arrow} ${U.fmtWhole(Math.abs(day))} (${Math.abs(dayPct).toFixed(2)}%)</div>
       </div>
-      ${eyeBtnHtml('pf-eye')}
       <div class="nw-btns">
         ${addWithRefreshHtml('pf-add-btn', '新增交易')}
       </div>
@@ -748,11 +747,10 @@ App.Views = (function () {
     // 固定頂部：淨資產 Hero（捲動時不動）
     const topHtml = `<div class="nw-hero">
       <div class="nw-open" id="nw-open">
-        <div class="nw-cap">我的淨資產 (TWD) ›</div>
+        <div class="nw-cap">我的淨資產 (TWD)${eyeBtnHtml('as-eye')}</div>
         <div class="nw-num">${U.fmtWhole(sum.netWorth)}</div>
         <div class="nw-day" style="color:${UI.pnlColor(dayChange)}">${dayArrow} ${U.fmtWhole(Math.abs(dayChange))} (${Math.abs(dayPct).toFixed(2)}%)</div>
       </div>
-      ${eyeBtnHtml('as-eye')}
       <div class="nw-btns">
         ${addWithRefreshHtml('as-add-btn', '新增')}
       </div>
@@ -901,7 +899,7 @@ App.Views = (function () {
     bind('#as-add-btn', () => openAddChooser(() => assets(root)));
     bindRefresh(root);
     bind('#nw-open', () => { as.catChart = 'nw'; assets(root); });
-    bind('#as-eye', () => { S.setPrivacy(!S.getPrivacy()); assets(root); });
+    { const eye = root.querySelector('#as-eye'); if (eye) eye.addEventListener('click', e => { e.stopPropagation(); S.setPrivacy(!S.getPrivacy()); assets(root); }); }
     root.querySelectorAll('.as-row[data-kind]').forEach(r => r.addEventListener('click', () => {
       const kind = r.dataset.kind;
       const list = kind === 'cash' ? S.getCashAccounts() : S.getLiabilities();

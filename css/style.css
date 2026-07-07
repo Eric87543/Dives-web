@@ -326,8 +326,8 @@ input, select { font-family: inherit; font-size: 15px; }
 
 /* ---- 資產（淨資產）頁 ---- */
 .nw-hero { padding: 8px 4px 16px; display: flex; align-items: center; justify-content: flex-start; }
-.nw-eye { flex: none; width: 38px; height: 38px; margin: 0 2px 0 6px; border-radius: 50%; color: var(--sub); display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
-.nw-eye svg { width: 22px; height: 22px; }
+.nw-eye { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 7px; padding: 0; border: none; background: none; color: var(--sub); -webkit-tap-highlight-color: transparent; }
+.nw-eye svg { width: 17px; height: 17px; }
 .nw-eye:active { opacity: 0.5; }
 .nw-add { flex: none; width: 46px; height: 46px; border-radius: 50%; background: #6D5FD5; color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(109,95,213,0.35); }
 .nw-add svg { width: 24px; height: 24px; }
