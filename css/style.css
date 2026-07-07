@@ -418,6 +418,7 @@ input, select { font-family: inherit; font-size: 15px; }
 .as-grow:active { background: var(--soft); }
 .pct-badge { flex: none; width: 40px; height: 40px; border-radius: 50%; background: #6D5FD5; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .pct-badge.sm { width: 34px; height: 34px; font-size: 11px; background: #8B7FE0; }
+.pct-ring { flex: none; display: block; }
 .g-menu { flex: none; width: 34px; height: 34px; border-radius: 50%; color: var(--sub); font-size: 17px; }
 .g-menu:active { background: var(--soft); }
 .basis-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px 6px; }

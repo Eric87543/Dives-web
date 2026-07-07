@@ -29,6 +29,21 @@ App.Views = (function () {
   const pf = { open: null, catChart: null };
   function resetPortfolioNav() { pf.catChart = null; }
 
+  // 比例圓圈（環形進度）：群組／持倉／現金帳戶用；arc + 中央百分比，顏色隨類別/市場
+  function pctRingBadge(pct, color, size) {
+    size = size || 40;
+    const p = Math.max(0, Math.min(100, pct || 0));
+    const txt = p >= 9.95 ? String(Math.round(p)) : (p > 0 ? p.toFixed(1) : '0');
+    const label = txt + '%';
+    const fs = label.length >= 5 ? 8.5 : label.length >= 4 ? 9.5 : 11;
+    const r = 15.5, C = 2 * Math.PI * r, off = C * (1 - p / 100);
+    return `<svg class="pct-ring" viewBox="0 0 36 36" width="${size}" height="${size}" aria-hidden="true">
+      <circle cx="18" cy="18" r="${r}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="3.2"/>
+      <circle cx="18" cy="18" r="${r}" fill="none" stroke="${color}" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 18 18)"/>
+      <text x="18" y="18" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="700" fill="${color}">${label}</text>
+    </svg>`;
+  }
+
   // 重新整理鈕（只用於資產/投資頁；置於 ＋ 的右上方）
   function refreshBtnHtml() {
     return `<button class="ref-btn" id="refresh-btn" aria-label="重新整理"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.7-3.3M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 3.3M20 19v-4h-4"/></svg></button>`;
@@ -165,7 +180,7 @@ App.Views = (function () {
           const chgHtml = chg != null ? ` <span style="color:${UI.pnlColor(chg)}">${chg >= 0 ? '▲' : '▼'}${Math.abs(chg).toFixed(2)}%</span>` : '';
           const pnlPct = p.cost > 1e-9 ? p.unrealizedPnl / p.cost * 100 : 0;
           html += `<div class="as-row pf-row" data-sym="${p.symbol}">
-            <span class="pct-badge sm" style="background:${M.color}">${fmtPctBadge(rp)}</span>
+            ${pctRingBadge(rp, M.color, 38)}
             <div class="as-main">
               <div class="as-title pf-title"><span class="pf-sym">${dispName(p.symbol)}</span><span class="pf-price">${cur}${fp(price)}${chgHtml}</span></div>
               <div class="as-sub">${U.formatShares(p.shares)}${shareUnit(p.market)} · 均 ${cur}${fp(p.avgCost)}</div>
@@ -842,7 +857,9 @@ App.Views = (function () {
       html += `<div class="as-body">`;
       for (const a of cashAccts) {
         const twd = a.currency === 'USD' ? (a.balance || 0) * rate : (a.balance || 0);
+        const cPct = sum.cashTwd > 1e-9 ? twd / sum.cashTwd * 100 : 0;
         html += `<div class="as-row" data-kind="cash" data-id="${a.id}">
+          ${pctRingBadge(cPct, '#34C759', 38)}
           <div class="as-main"><div class="as-title">${a.name}</div>
             <div class="as-sub">${a.currency === 'USD' ? 'USD ' + U.formatPrice(a.balance || 0) + ' · r' + rate.toFixed(3) : '台幣帳戶'}</div></div>
           <div class="as-val">${U.fmtWhole(twd)}</div>
@@ -868,7 +885,7 @@ App.Views = (function () {
         const gDayPct = Math.abs(gPrev) > 1e-9 ? gDay / Math.abs(gPrev) * 100 : 0;
         const gArrow = gDay > 0 ? '▲' : gDay < 0 ? '▼' : '–';
         html += `<div class="as-grow" data-gid="${g.id}">
-          <span class="pct-badge sm">${fmtPctBadge(gPct)}</span>
+          ${pctRingBadge(gPct, AS_PURPLE, 38)}
           <div class="as-main"><div class="as-title">${g.name}</div>
             <div class="as-sub">${(byGroup[g.id] || []).length} 檔 ›</div></div>
           <div class="as-gv">
@@ -884,7 +901,7 @@ App.Views = (function () {
         const pct = d > 1e-9 ? mv / d * 100 : 0;
         const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
         html += `<div class="as-row member top" data-sym="${p.symbol}">
-          <span class="pct-badge sm">${fmtPctBadge(pct)}</span>
+          ${pctRingBadge(pct, AS_PURPLE, 38)}
           <div class="as-main"><div class="as-title">${p.symbol} <span class="h-name">${p.name}</span></div>
             <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div></div>
           <div class="as-val">${U.fmtWhole(mv)}</div>
@@ -1122,7 +1139,7 @@ App.Views = (function () {
       const pct = denomV > 1e-9 ? mv / denomV * 100 : 0;
       const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
       listHtml += `<div class="card gd-row" data-sym="${p.symbol}">
-        <span class="pct-badge">${fmtPctBadge(pct)}</span>
+        ${pctRingBadge(pct, AS_PURPLE, 40)}
         <div class="as-main">
           <div class="gd-sym">${p.symbol} <span class="h-name">${p.name !== p.symbol ? p.name : ''}</span></div>
           <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div>
