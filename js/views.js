@@ -153,6 +153,7 @@ App.Views = (function () {
           <div class="as-hright">
             <span class="as-total" style="color:${M.color}">${U.fmtWhole(tot)}</span>
             <span class="as-hchg" style="color:${UI.pnlColor(dayChg)}">${dArrow} ${U.fmtWhole(Math.abs(dayChg))} (${Math.abs(dayChgPct).toFixed(2)}%)</span>
+            ${open ? `<button class="as-htrend" data-trend="${M.key}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg>走勢圖<span class="aht-chev">›</span></button>` : ''}
           </div>
         </div>`;
       if (open) {
@@ -177,7 +178,6 @@ App.Views = (function () {
             </div>
           </div>`;
         }
-        html += `<div class="cat-trend-row" data-trend="${M.key}"><span class="ctr-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></span>走勢圖<span class="ctr-chev">›</span></div>`;
         html += `</div>`;
       }
       html += `</div>`;
@@ -199,7 +199,8 @@ App.Views = (function () {
       pf.open[k] = !pf.open[k];
       portfolio(root);
     }));
-    root.querySelectorAll('.cat-trend-row[data-trend]').forEach(t => t.addEventListener('click', () => {
+    root.querySelectorAll('.as-htrend[data-trend]').forEach(t => t.addEventListener('click', e => {
+      e.stopPropagation(); // 不觸發標頭收合
       pf.catChart = t.dataset.trend; portfolio(root);
     }));
     root.querySelectorAll('.pf-row').forEach(r =>
@@ -800,12 +801,12 @@ App.Views = (function () {
         </div>
         <div class="as-hright">
           <span class="as-total">${totalHtml}</span>
-          ${!open && dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : ''}
+          ${open
+            ? `<button class="as-htrend" data-trend="${cat}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg>走勢圖<span class="aht-chev">›</span></button>`
+            : (dateTs ? `<span class="as-hdate">${dateFrom(dateTs)}</span>` : '')}
         </div>
       </div>`;
     }
-    // 展開後放在內容底部的「走勢圖」列
-    const trendRow = key => `<div class="cat-trend-row" data-trend="${key}"><span class="ctr-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3.5-3.5 3 2.5L19 8"/></svg></span>走勢圖<span class="ctr-chev">›</span></div>`;
 
     // ── 流動資金 ─────────────────────────────────────────
     html += `<div class="card as-cat">` +
@@ -821,7 +822,6 @@ App.Views = (function () {
         </div>`;
       }
       if (!cashAccts.length) html += `<div class="empty" style="padding:14px">尚無現金帳戶，點右上角 ＋ 新增</div>`;
-      html += trendRow('cash');
       html += `</div>`;
     }
     html += `</div>`;
@@ -864,7 +864,6 @@ App.Views = (function () {
         </div>`;
       }
       if (!positions.length) html += `<div class="empty" style="padding:16px">尚無持倉，點右上角 ＋ 新增投資</div>`;
-      html += trendRow('invest');
       html += `</div>`;
     }
     html += `</div>`;
@@ -883,7 +882,6 @@ App.Views = (function () {
         </div>`;
       }
       if (!liabs.length) html += `<div class="empty" style="padding:14px">尚無負債，點右上角 ＋ 新增</div>`;
-      html += trendRow('liab');
       html += `</div>`;
     }
     html += `</div>`;
@@ -897,7 +895,8 @@ App.Views = (function () {
       as.openCat = (as.openCat === k) ? null : k; // 再點一次收合；否則只展開被點的
       assets(root);
     }));
-    root.querySelectorAll('.cat-trend-row[data-trend]').forEach(t => t.addEventListener('click', () => {
+    root.querySelectorAll('.as-htrend[data-trend]').forEach(t => t.addEventListener('click', e => {
+      e.stopPropagation(); // 不觸發標頭收合
       as.catChart = t.dataset.trend; assets(root);
     }));
     const bind = (sel, fn) => { const el = root.querySelector(sel); if (el) el.addEventListener('click', fn); };
