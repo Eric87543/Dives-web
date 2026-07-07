@@ -794,7 +794,7 @@ App.Views = (function () {
   function rangeControlHtml(spec, id) {
     const RG = [['all', '全部'], ['ytd', '年初至今'], ['custom', '選擇日期']];
     let h = `<div class="seg seg-wide" id="${id}-range">${RG.map(([v, l]) => `<button class="seg-btn ${spec.range === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
-    if (spec.range === 'custom') h += `<div class="range-dates"><input type="date" class="input" id="${id}-from" value="${spec.from || ''}"><span>至</span><input type="date" class="input" id="${id}-to" value="${spec.to || ''}"></div>`;
+    if (spec.range === 'custom') h += `<div class="range-dates"><input type="date" class="input" id="${id}-from" value="${spec.from || ''}"><span>至</span><input type="date" class="input" id="${id}-to" value="${spec.to || ''}"><button class="range-apply" id="${id}-apply">確認</button></div>`;
     return h;
   }
   // 年份選擇（供漲幅圖：選年份、月刻度）
@@ -811,9 +811,15 @@ App.Views = (function () {
       if (spec.range === 'custom' && dates.length) { if (!spec.from) spec.from = dates[0]; if (!spec.to) spec.to = dates[dates.length - 1]; }
       rerender();
     }));
+    // 只在按「確認」後才套用日期並重繪；避免選擇年/月過程中重繪把日期選擇器關掉
     const f = root.querySelector(`#${id}-from`), t = root.querySelector(`#${id}-to`);
-    if (f) f.addEventListener('change', () => { spec.from = f.value; rerender(); });
-    if (t) t.addEventListener('change', () => { spec.to = t.value; rerender(); });
+    const apply = root.querySelector(`#${id}-apply`);
+    if (apply && f && t) apply.addEventListener('click', () => {
+      let a = f.value || spec.from, b = t.value || spec.to;
+      if (a && b && a > b) { const tmp = a; a = b; b = tmp; } // 起訖顛倒自動對調
+      spec.from = a; spec.to = b;
+      rerender();
+    });
   }
   // 點「資產」tab 時回到資產首頁（退出群組/走勢/淨資產詳情）
   function resetAssetsNav() { as.detailGroup = null; as.groupTrend = null; as.catChart = null; }
