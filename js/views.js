@@ -627,8 +627,11 @@ App.Views = (function () {
 
   /* ===================== 資產（淨資產）===================== */
   // 手風琴：一次只展開一類（cash|invest|liab）；detailGroup = 群組詳情頁
-  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, catChart: null, nw: { metric: 'net', range: 'all', from: null, to: null, year: new Date().getFullYear() },
-    groupTrend: null, gt: { metric: 'line', range: 'all', from: null, to: null, year: new Date().getFullYear() }, gtCache: null };
+  //   nw/gt 僅保留各自的 metric（走勢/漲幅/投入）與 year（漲幅選年）；時間區間改用共用的 chartRange
+  const as = { openCat: 'invest', detailGroup: null, detailAsc: false, catChart: null, nw: { metric: 'net', year: new Date().getFullYear() },
+    groupTrend: null, gt: { metric: 'line', year: new Date().getFullYear() }, gtCache: null };
+  // 所有走勢圖共用的「選擇日期」區間（持久化：關閉程式後重開仍保留同一起始/結束日）
+  const chartRange = S.getChartRange();
 
   // 時間區間過濾（供淨資產圖 / 群組圖）：spec = {range:'all'|'ytd'|'custom', from, to}；items 皆有 .date
   function applyRange(items, spec) {
@@ -675,10 +678,12 @@ App.Views = (function () {
   function bindYearControl(root, spec, id, rerender) {
     root.querySelectorAll(`#${id}-year .chip`).forEach(b => b.addEventListener('click', () => { spec.year = +b.dataset.v; rerender(); }));
   }
+  // spec 為共用的 chartRange；任何變更都持久化 → 關閉重開仍保留、所有走勢圖共用同一區間
   function bindRangeControl(root, spec, id, dates, rerender, onDate) {
     root.querySelectorAll(`#${id}-range .seg-btn`).forEach(b => b.addEventListener('click', () => {
       spec.range = b.dataset.v;
       if (spec.range === 'custom' && dates.length) { if (!spec.from) spec.from = dates[0]; if (!spec.to) spec.to = dates[dates.length - 1]; }
+      S.setChartRange(spec);
       rerender();
     }));
     // 選日期即時套用，但只「局部重繪圖表」（onDate），不重建輸入框 → 原生日期選擇器不會被關掉；
@@ -688,6 +693,7 @@ App.Views = (function () {
       let a = f.value || spec.from, b = t.value || spec.to;
       if (a && b && a > b) { const tmp = a; a = b; b = tmp; f.value = a; t.value = b; } // 起訖顛倒自動對調
       spec.from = a; spec.to = b;
+      S.setChartRange(spec);
       (onDate || rerender)();
     };
     if (f) f.addEventListener('change', apply);
@@ -965,7 +971,7 @@ App.Views = (function () {
 
     // net（走勢）局部重繪：只更新摘要 + 圖，不重建控制列 → 選日期時原生選擇器不會被關掉
     function paintNet() {
-      const fS = applyRange(allSnaps, st);
+      const fS = applyRange(allSnaps, chartRange);
       const gran = autoGran(fS.length ? fS[0].date : null, fS.length ? fS[fS.length - 1].date : null);
       const B = C.netWorthBuckets(fS, gran, cl, true);
       const XL = chartLabels(B, gran);
@@ -1018,7 +1024,7 @@ App.Views = (function () {
     }
 
     const modeTitle = mode === 'inflow' ? ' 投入' : mode === 'change' ? ' 漲幅' : ' 走勢';
-    const controlHtml = mode === 'change' ? yearControlHtml(st, 'nw', years) : mode === 'net' ? rangeControlHtml(st, 'nw') : '';
+    const controlHtml = mode === 'change' ? yearControlHtml(st, 'nw', years) : mode === 'net' ? rangeControlHtml(chartRange, 'nw') : '';
     root.innerHTML = `<div class="page-full">
       <div class="gd-head"><button class="gd-back" aria-label="返回">‹</button><div class="gd-title">${meta.title}${modeTitle}</div><div class="gd-actions"></div></div>
       <div class="card">
@@ -1032,7 +1038,7 @@ App.Views = (function () {
     root.querySelector('.gd-back').addEventListener('click', backFn);
     root.querySelectorAll('#nw-metric .seg-btn').forEach(b => b.addEventListener('click', () => { st.metric = b.dataset.v; rerender(); }));
     if (mode === 'change') bindYearControl(root, st, 'nw', rerender);
-    else if (mode === 'net') bindRangeControl(root, st, 'nw', dates, rerender, paintNet);
+    else if (mode === 'net') bindRangeControl(root, chartRange, 'nw', dates, rerender, paintNet);
 
     if (mode === 'net') { paintNet(); return; }
     if (mode === 'inflow') {
@@ -1178,7 +1184,7 @@ App.Views = (function () {
 
     // net（走勢）局部重繪：只更新摘要 + 圖，不重建控制列 → 選日期時原生選擇器不會被關掉
     function paintGt() {
-      const fSeries = applyRange(series, st);
+      const fSeries = applyRange(series, chartRange);
       const gran = autoGran(fSeries.length ? fSeries[0].date : null, fSeries.length ? fSeries[fSeries.length - 1].date : null);
       const mvB = C.netWorthBuckets(fSeries.map(s => ({ date: s.date, netWorth: s.mv })), gran, CL, true);
       const coB = C.netWorthBuckets(fSeries.map(s => ({ date: s.date, netWorth: s.cost })), gran, CL, true);
@@ -1226,7 +1232,7 @@ App.Views = (function () {
 
     let html = gtHead(g.name) + `<div class="card">
       <div class="seg seg-wide" id="gt-metric">${seg('line', '走勢', st.metric)}${seg('change', '漲幅', st.metric)}</div>
-      ${isBar ? yearControlHtml(st, 'gt', years) : rangeControlHtml(st, 'gt')}
+      ${isBar ? yearControlHtml(st, 'gt', years) : rangeControlHtml(chartRange, 'gt')}
       ${isBar
         ? `${summary}<div class="gt-subtitle">投入</div><div class="chart-host" id="gt-chart-a"></div>
            <div class="gt-subtitle" style="margin-top:16px">持倉盈虧</div><div class="chart-host" id="gt-chart-b"></div>`
@@ -1237,7 +1243,7 @@ App.Views = (function () {
     root.querySelector('.gd-back').addEventListener('click', () => { as.groupTrend = null; assets(root); });
     root.querySelectorAll('#gt-metric .seg-btn').forEach(b => b.addEventListener('click', () => { as.gt.metric = b.dataset.v; groupTrendPage(root, gid); }));
     if (isBar) bindYearControl(root, st, 'gt', () => groupTrendPage(root, gid));
-    else bindRangeControl(root, st, 'gt', dates, () => groupTrendPage(root, gid), paintGt);
+    else bindRangeControl(root, chartRange, 'gt', dates, () => groupTrendPage(root, gid), paintGt);
 
     if (!isBar) { paintGt(); return; }
     if (!mvB.length) { root.querySelector('#gt-chart-a').innerHTML = `<div class="chart-empty" style="padding:50px 0">此群組尚無走勢資料</div>`; return; }

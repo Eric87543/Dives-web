@@ -25,6 +25,7 @@ App.Store = (function () {
     pctBasis: 'dives_pct_basis',
     dayMode: 'dives_day_mode',
     privacy: 'dives_privacy',
+    chartRange: 'dives_chart_range',
   };
 
   function read(key, fallback) {
@@ -138,6 +139,9 @@ App.Store = (function () {
   // ---- 隱藏金額（本機偏好，不上雲同步）----
   function getPrivacy() { return localStorage.getItem(K.privacy) === '1'; }
   function setPrivacy(v) { localStorage.setItem(K.privacy, v ? '1' : '0'); }
+  // ---- 走勢圖時間區間（所有走勢圖共用、持久化；本機偏好，不上雲）----
+  function getChartRange() { const r = read(K.chartRange, null); return { range: (r && r.range) || 'all', from: (r && r.from) || null, to: (r && r.to) || null }; }
+  function setChartRange(r) { write(K.chartRange, { range: (r && r.range) || 'all', from: (r && r.from) || null, to: (r && r.to) || null }); }
 
   // ---- 清空所有資料（同步清除快照與資產頁資料）----
   function clearAll() {
@@ -167,7 +171,7 @@ App.Store = (function () {
     getLiabilities, setLiabilities,
     getGroups, setGroups, getGroupMap, setGroupMap,
     getPctBasis, setPctBasis, getDayMode, setDayMode,
-    getPrivacy, setPrivacy,
+    getPrivacy, setPrivacy, getChartRange, setChartRange,
     clearAll,
   };
 })();
