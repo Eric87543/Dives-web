@@ -188,8 +188,12 @@ input, select { font-family: inherit; font-size: 15px; }
 .rep-mc { background: var(--soft); border-radius: 12px; padding: 11px 13px; }
 .rep-mc-k { font-size: 12px; color: var(--sub); }
 .rep-mc-v { font-size: 17px; font-weight: 700; margin-top: 2px; letter-spacing: -0.2px; }
-.rep-head { padding: 2px 2px 12px; }
+.rep-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 12px; }
 .rep-head-title { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; }
+.rep-stats-btn { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--soft); color: var(--primary); display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
+.rep-stats-btn:active { background: var(--divider); }
+.rep-stats-btn svg { width: 21px; height: 21px; }
+.gd-stats svg { width: 20px; height: 20px; }
 .rep-periods { padding: 0; overflow: hidden; }
 .rep-prow-drill { cursor: pointer; }
 .rep-prow-drill:active { background: var(--soft); }

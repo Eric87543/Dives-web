@@ -579,10 +579,12 @@ App.Views = (function () {
     const allSnaps = S.getSnapshots().slice().sort((a, b) => a.date < b.date ? -1 : 1);
     const reports = periodReports();
 
+    // 統計入口圖示（右上角）
+    const statsIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10M12 21V4M19 21v-7"/></svg>`;
     // 固定頂部：年報表無返回；月/日報表有返回鈕 + 標題（月/日再加本期損益 Hero）
     let topHtml;
     if (rep.mode === 'yearly') {
-      topHtml = `<div class="rep-head"><div class="rep-head-title">年報表</div></div>`;
+      topHtml = `<div class="rep-head"><div class="rep-head-title">年報表</div><button class="rep-stats-btn" id="rep-stats-open" aria-label="統計">${statsIcon}</button></div>`;
       // 累計概況：Hero 累計損益 + 2×2 資訊卡（累計損益 / 目前市值 / 未實現 / 已實現）
       if (allSnaps.length) {
         const last = allSnaps[allSnaps.length - 1];
@@ -601,7 +603,7 @@ App.Views = (function () {
         </div>`;
       }
     } else {
-      topHtml = `<div class="gd-head"><button class="gd-back" aria-label="返回">‹</button><div class="gd-title">${rep.mode === 'monthly' ? rep.year + ' 年' : rep.year + '年 ' + rep.month + '月'}</div><div class="gd-actions"></div></div>`;
+      topHtml = `<div class="gd-head"><button class="gd-back" aria-label="返回">‹</button><div class="gd-title">${rep.mode === 'monthly' ? rep.year + ' 年' : rep.year + '年 ' + rep.month + '月'}</div><div class="gd-actions"><button class="gd-stats" id="rep-stats-open" aria-label="統計">${statsIcon}</button></div></div>`;
       let hSnaps, hPrev, hLabel;
       if (rep.mode === 'monthly') {
         const ys = String(rep.year);
@@ -630,14 +632,6 @@ App.Views = (function () {
     if (!reports.length) {
       listHtml = `<div class="empty">${rep.mode === 'yearly' ? '暫無報表資料，使用一段時間後每日快照將彙整於此' : '此期間暫無資料'}</div>`;
     } else {
-      // 統計入口（點擊開新頁；年報表→全部歷史、某年→該年度、某月→該月度）
-      const statsLabel = rep.mode === 'yearly' ? '統計（全部歷史）' : rep.mode === 'monthly' ? rep.year + '年 統計' : rep.year + '年' + rep.month + '月 統計';
-      listHtml += `<button class="rep-chart-btn" id="rep-stats-open">
-        <span class="rcb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V10M12 21V4M19 21v-7"/></svg></span>
-        <span class="rcb-label">${statsLabel}</span>
-        <span class="rcb-chevron">›</span>
-      </button>`;
-
       // 期間列表：年→月、月→日 可鑽入（日為葉層）；預設倒序（新→舊）
       const drill = rep.mode !== 'daily';
       const head = rep.mode === 'yearly' ? '各年度' : rep.mode === 'monthly' ? '各月' : '各日';
