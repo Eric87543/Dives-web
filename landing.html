@@ -141,6 +141,23 @@
   footer a:hover{color:var(--violet)}
   .dot-up{color:var(--up)} .dot-dn{color:var(--down)}
 
+  /* install */
+  .inst-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:42px}
+  .inst-card{background:var(--ink-2);border:1px solid var(--line);border-radius:22px;padding:30px 28px;position:relative;overflow:hidden}
+  .inst-card::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--violet),transparent)}
+  .inst-head{display:flex;align-items:center;gap:13px;margin-bottom:24px}
+  .inst-head .ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:rgba(169,156,255,.13);color:var(--violet);flex:none}
+  .inst-head .ic svg{width:23px;height:23px}
+  .inst-head .pl{font-family:var(--serif);font-weight:700;font-size:21px;line-height:1.2}
+  .inst-head .pl small{display:block;font-family:var(--sans);font-weight:300;font-size:12.5px;color:var(--faint);letter-spacing:.02em;margin-top:3px}
+  .steps{list-style:none;display:flex;flex-direction:column;gap:17px}
+  .step{display:flex;gap:14px;align-items:flex-start}
+  .step-n{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-family:var(--serif);font-weight:700;font-size:14px;color:#0b0c10;background:linear-gradient(140deg,var(--violet),var(--violet-deep));box-shadow:0 6px 16px -6px rgba(109,95,213,.7)}
+  .step p{font-size:15px;color:var(--dim);line-height:1.55}
+  .step b{color:var(--paper);font-weight:500}
+  .sq-up{display:inline-block;width:15px;height:15px;vertical-align:-3px;color:var(--violet)}
+  .inst-note{margin-top:24px;padding:16px 18px;border-radius:16px;background:rgba(231,181,103,.07);border:1px solid rgba(231,181,103,.22);font-size:14px;color:var(--dim);display:flex;gap:12px;line-height:1.6}
+  .inst-note .warn{color:var(--gold);flex:none;font-size:15px;margin-top:2px}
   /* reveal */
   .rv{opacity:0;transform:translateY(26px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1)}
   .rv.in{opacity:1;transform:none}
@@ -152,6 +169,7 @@
     .feat{grid-template-columns:1fr;gap:30px;padding:48px 0}
     .feat.rev .fx-text{order:0}
     .fx-shot .phone{width:240px}
+    .inst-grid{grid-template-columns:1fr}
     .nums{grid-template-columns:1fr;gap:36px;text-align:center}
     .lead{margin-inline:0}
   }
@@ -298,6 +316,43 @@
   </div>
 </section>
 
+<section class="sec" id="install" style="padding-top:24px">
+  <div class="wrap">
+    <div class="rv">
+      <div class="kicker">Install</div>
+      <h2>三步，把 Dives 變成<em>你的 App。</em></h2>
+      <p class="lead" style="margin-bottom:0">不用上架商店、不用下載安裝檔。用瀏覽器「加入主畫面」，就有一個全螢幕、離線可用、會自動更新的原生體驗圖示。</p>
+    </div>
+    <div class="inst-grid rv">
+      <div class="inst-card">
+        <div class="inst-head">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8.5 7.5 12 4l3.5 3.5"/><path d="M6 11H5.5A1.5 1.5 0 0 0 4 12.5v6A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 18.5 11H18"/></svg></span>
+          <span class="pl">iPhone / iPad<small>用 Safari 開啟</small></span>
+        </div>
+        <ol class="steps">
+          <li class="step"><span class="step-n">1</span><p>用 <b>Safari</b> 開啟 Dives 網址(iPhone 必須用 Safari)</p></li>
+          <li class="step"><span class="step-n">2</span><p>點畫面最下方中間的<b>「分享」</b>按鈕<svg class="sq-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14V4M9 7l3-3 3 3"/><path d="M7 11H6v9h12v-9h-1"/></svg>(方框加向上箭頭)</p></li>
+          <li class="step"><span class="step-n">3</span><p>往下滑，點<b>「加入主畫面」</b>，再按右上角<b>「新增」</b></p></li>
+          <li class="step"><span class="step-n">4</span><p>主畫面出現 <b>Dives</b> 圖示 —— 點開就是全螢幕 App</p></li>
+        </ol>
+      </div>
+      <div class="inst-card">
+        <div class="inst-head">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2.5"/><path d="M12 8v4M10 10h4"/><path d="M11 17.5h2"/></svg></span>
+          <span class="pl">Android<small>Chrome 或 Samsung Internet</small></span>
+        </div>
+        <ol class="steps">
+          <li class="step"><span class="step-n">1</span><p>用 <b>Chrome</b> 或 <b>Samsung Internet</b> 開啟網址</p></li>
+          <li class="step"><span class="step-n">2</span><p>點右上角<b>選單(⋮)</b>，或網址列出現的<b>「安裝 ⤓」</b>圖示</p></li>
+          <li class="step"><span class="step-n">3</span><p>點<b>「安裝應用程式」</b>或<b>「加到主畫面」</b> → 確認</p></li>
+          <li class="step"><span class="step-n">4</span><p>主螢幕(或 App 抽屜)出現 <b>Dives</b> 圖示</p></li>
+        </ol>
+      </div>
+    </div>
+    <div class="inst-note rv"><span class="warn">◆</span><span><b style="color:var(--paper);font-weight:500">iOS 小提醒:</b>「Safari 分頁」與「主畫面 App」的儲存空間是<b style="color:var(--paper);font-weight:500">分開的</b>。請務必先加入主畫面，再從圖示打開 App 來輸入資料 / 設定同步，資料才會存進圖示版。</span></div>
+  </div>
+</section>
+
 <section class="final">
   <div class="wrap rv">
     <h2>現在，就開始追蹤<em>屬於你的淨資產。</em></h2>
@@ -311,6 +366,7 @@
     <div class="brand" style="font-size:19px"><span class="mk" style="width:22px;height:22px;font-size:13px">◈</span>Dives</div>
     <div>
       <a href="https://weihao0107.github.io/Dives-web/">開啟 App</a>
+      <a href="#install">加入主畫面教學</a>
       <a href="https://github.com/WeiHao0107/Dives-web" target="_blank" rel="noopener">GitHub · 原始碼</a>
       <a href="https://github.com/WeiHao0107/Dives-web#13-自行建置與部署開發者" target="_blank" rel="noopener">自行部署</a>
     </div>
