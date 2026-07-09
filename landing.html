@@ -155,6 +155,7 @@
     .nums{grid-template-columns:1fr;gap:36px;text-align:center}
     .lead{margin-inline:0}
   }
+  @media(max-width:480px){.nav-gh{display:none}}
   @media(prefers-reduced-motion:reduce){*{animation:none!important}.rv{transition:none;opacity:1;transform:none}}
 </style>
 </head>
@@ -164,7 +165,10 @@
 <nav id="nav">
   <div class="nav-in">
     <div class="brand"><span class="mk">◈</span>Dives</div>
-    <a class="btn btn-primary" href="https://weihao0107.github.io/Dives-web/">開啟 App</a>
+    <div style="display:flex;align-items:center;gap:12px">
+      <a class="btn btn-ghost nav-gh" href="https://github.com/WeiHao0107/Dives-web" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="btn btn-primary" href="https://weihao0107.github.io/Dives-web/">開啟 App</a>
+    </div>
   </div>
 </nav>
 
@@ -307,7 +311,8 @@
     <div class="brand" style="font-size:19px"><span class="mk" style="width:22px;height:22px;font-size:13px">◈</span>Dives</div>
     <div>
       <a href="https://weihao0107.github.io/Dives-web/">開啟 App</a>
-      <a href="https://github.com/WeiHao0107/Dives-web">使用手冊 · 原始碼</a>
+      <a href="https://github.com/WeiHao0107/Dives-web" target="_blank" rel="noopener">GitHub · 原始碼</a>
+      <a href="https://github.com/WeiHao0107/Dives-web#13-自行建置與部署開發者" target="_blank" rel="noopener">自行部署</a>
     </div>
     <div style="width:100%;margin-top:8px;color:var(--faint)">
       顏色慣例：<span class="dot-up">漲紅</span> · <span class="dot-dn">跌綠</span>（台股慣例）。資料存於你的裝置本機。© Dives — 個人投資與淨資產追蹤 PWA。

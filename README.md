@@ -6,6 +6,8 @@
 
 ### 🔗 立即使用(免安裝)→ **https://weihao0107.github.io/Dives-web/**
 
+⭐ 開源專案 · GitHub → **https://github.com/WeiHao0107/Dives-web** ｜ ✨ 介紹頁 → [landing.html](https://weihao0107.github.io/Dives-web/landing.html)
+
 <p align="center">
   <img src="screenshots/assets.png" width="31%" alt="資產（淨資產）" />
   <img src="screenshots/portfolio.png" width="31%" alt="投資（持倉）" />
@@ -60,6 +62,7 @@
 10. [資料備份與還原](#10-資料備份與還原)
 11. [報價與資料來源](#11-報價與資料來源)
 12. [常見問題](#12-常見問題)
+13. [自行建置與部署(開發者)](#13-自行建置與部署開發者)
 
 ---
 
@@ -326,3 +329,54 @@
 
 **Q. 資料安全嗎?**
 資料只存你的裝置本機;啟用同步時存到你**自己 GitHub 帳號的私人 Gist**。開發者與他人都看不到你的資料。
+
+---
+
+## 13. 自行建置與部署(開發者)
+
+原始碼:**https://github.com/WeiHao0107/Dives-web**
+
+Dives 是**純靜態的前端 PWA**(原生 HTML / CSS / JavaScript,無框架)——**不需要任何編譯 / build 步驟**,把 `docs/` 這個資料夾用任何靜態伺服器服務出去就是完整的 App。
+
+### 方式一:自己「加入主畫面」變成 App(最簡單,不用寫程式)
+
+不用建置。直接用手機瀏覽器開 `https://weihao0107.github.io/Dives-web/`,依 [第 1 節](#1-安裝到手機啟用) 加入主畫面 → 圖示點開就是全螢幕 App。
+
+### 方式二:本機執行
+
+```bash
+git clone https://github.com/WeiHao0107/Dives-web.git
+cd Dives-web
+python3 -m http.server 8080      # 或任何靜態伺服器,例:npx serve
+# 瀏覽器開 http://localhost:8080/
+```
+
+> 若 clone 的是含 `docs/` 的來源,請改在 `docs/` 目錄下起 server(`cd docs`)。
+
+### 方式三:部署成你自己的線上版(GitHub Pages,免費)
+
+1. 在 GitHub 建一個 repo(例:`my-dives`),把這些檔案(`index.html`、`css/`、`js/`、`sw.js`、`manifest.webmanifest`、`icons/`…)放到 repo **根目錄**
+2. 加一個空檔 **`.nojekyll`**(避免 GitHub 略過某些檔案)
+3. repo → **Settings → Pages** → Source 選 **Deploy from a branch** → `main` / `root` → Save
+4. 幾分鐘後即可用 `https://<你的帳號>.github.io/my-dives/` 開啟;可再依第 1 節加入主畫面
+
+> 改版後記得同步更新 `sw.js` 的 `CACHE`(版本字串)與 `js/app.js` 的 `App.VERSION`,Service Worker 採「網路優先」會自動載入新版。
+
+### 方式四:打包成可上架的原生 App(進階,選用)
+
+想要能放進 App Store / Play Store 的原生殼,可用現成工具把這個 PWA 包起來,**不必改動程式**:
+
+- **[PWABuilder](https://www.pwabuilder.com/)** — 輸入你的網址,一鍵產生 iOS / Android / Windows 專案
+- **[Capacitor](https://capacitorjs.com/)** — 把 `docs/` 當 web 資產包進原生 iOS / Android 專案
+- **TWA(Trusted Web Activity)** — Android 直接以你的 PWA 網址上架
+
+> 本專案的**原生 iOS 版**以 Swift / SwiftUI 另行開發(非本 repo);此 web 版即可獨立當作完整 App 使用。
+
+### 測試
+
+核心運算(損益、成本、報表分桶、統計…)有 node 自動化測試:
+
+```bash
+cd docs        # 若在來源 repo;Dives-web 則在根目錄
+npm test       # 或 node --test tests/*.test.js
+```
