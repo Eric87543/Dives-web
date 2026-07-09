@@ -69,6 +69,35 @@ App.Api = (function () {
     return map || {};
   }
 
+  // ---- 美股代碼表（FinMind USStockInfo，免金鑰）→ {TICKER: name}；本機每日快取，供無金鑰時的美股搜尋 ----
+  const US_UNI = 'dives_us_universe', US_UNI_TS = 'dives_us_universe_ts';
+  function usShortName(n) {
+    return String(n || '').replace(/\s+(Common Stock|Common Shares|Ordinary Shares|American Depositary Shares).*$/i, '').trim().slice(0, 44);
+  }
+  async function loadUsUniverse(force) {
+    try {
+      if (!force && localStorage.getItem(US_UNI_TS) === U.isoDate()) {
+        const c = JSON.parse(localStorage.getItem(US_UNI) || 'null');
+        if (c) return c;
+      }
+    } catch (e) {}
+    const map = {};
+    try {
+      const j = await fetchJson(fmUrl({ dataset: 'USStockInfo' }));
+      const best = {}; // 依 stock_id 去重、留市值最大者
+      for (const r of (j.data || [])) {
+        const id = (r.stock_id || '').trim().toUpperCase();
+        if (!/^[A-Z]{1,5}$/.test(id)) continue; // 僅純字母 1–5 碼常見股（排除權證/特殊代碼）
+        if (r.Country && r.Country !== 'United States') continue;
+        const cap = +r.MarketCap || 0;
+        if (!best[id] || cap > best[id].cap) best[id] = { cap, name: usShortName(r.stock_name) || id };
+      }
+      for (const id in best) map[id] = best[id].name;
+    } catch (e) { console.warn('FinMind USStockInfo failed', e); }
+    try { if (Object.keys(map).length) { localStorage.setItem(US_UNI, JSON.stringify(map)); localStorage.setItem(US_UNI_TS, U.isoDate()); } } catch (e) {}
+    return map;
+  }
+
   // ---- 台股單檔日收盤（FinMind TaiwanStockPrice）----
   async function fetchTwPrice(code) {
     const start = U.isoDate(new Date(Date.now() - 12 * 86400000)); // 近 12 天，取最後一筆
@@ -362,9 +391,9 @@ App.Api = (function () {
       }
     } catch (e) {}
 
-    // 美股（Finnhub search，僅代碼前綴）——需自填 Finnhub 金鑰;未填則略過搜尋(可直接輸入代碼新增,收盤價由 FinMind 提供)
-    if (finnhubKey()) {
-      try {
+    // 美股搜尋:有 Finnhub 金鑰 → Finnhub /search(即時);否則 → FinMind 美股清單(免金鑰、本機每日快取)
+    try {
+      if (finnhubKey()) {
         const j = await fetchJson('https://finnhub.io/api/v1/search?q=' +
           encodeURIComponent(q) + '&token=' + encodeURIComponent(finnhubKey()));
         for (const it of (j.result || [])) {
@@ -374,8 +403,14 @@ App.Api = (function () {
           results.push({ code: sym, name: it.description || sym, market: U.Market.us });
           if (results.length >= 40) break;
         }
-      } catch (e) {}
-    }
+      } else if (/^[A-Z]/.test(q)) { // 純數字(台股)不查美股
+        const uni = await loadUsUniverse(false);
+        const hits = [];
+        for (const code in uni) if (code.startsWith(q)) hits.push(code);
+        hits.sort((a, b) => a.length - b.length || (a < b ? -1 : 1)); // 短代碼(較常見)優先
+        for (const code of hits.slice(0, 12)) results.push({ code, name: uni[code], market: U.Market.us });
+      }
+    } catch (e) {}
 
     // 虛擬貨幣（CoinGecko search，代號前綴，取市值前幾名）
     try {
