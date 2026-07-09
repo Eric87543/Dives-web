@@ -9,14 +9,14 @@
 ⭐ 開源專案 · GitHub → **https://github.com/WeiHao0107/Dives-web** ｜ ✨ 介紹頁 → [landing.html](https://weihao0107.github.io/Dives-web/landing.html)
 
 <p align="center">
-  <img src="screenshots/assets.png" width="31%" alt="資產（淨資產）" />
-  <img src="screenshots/portfolio.png" width="31%" alt="投資（持倉）" />
-  <img src="screenshots/chart.png" width="31%" alt="淨資產走勢圖" />
+  <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/assets.png" width="31%" alt="資產（淨資產）" />
+  <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/portfolio.png" width="31%" alt="投資（持倉）" />
+  <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/chart.png" width="31%" alt="淨資產走勢圖" />
 </p>
 <p align="center">
-  <img src="screenshots/report.png" width="31%" alt="年度報表" />
-  <img src="screenshots/history.png" width="31%" alt="交易紀錄" />
-  <img src="screenshots/settings.png" width="31%" alt="設定" />
+  <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/report.png" width="31%" alt="年度報表" />
+  <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/history.png" width="31%" alt="交易紀錄" />
+  <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/settings.png" width="31%" alt="設定" />
 </p>
 
 ---
@@ -35,12 +35,12 @@
 
 | 畫面 | 功能重點 |
 |---|---|
-| <img src="screenshots/assets.png" width="180" /> | **資產** — 淨資產與今日漲跌、流動資金／投資／負債分類、每檔佔比環圈。點淨資產進走勢圖。 |
-| <img src="screenshots/portfolio.png" width="180" /> | **投資** — 依市場(台股／美股／加密)分組的持倉,市值、今日與未實現損益、佔比。 |
-| <img src="screenshots/chart.png" width="180" /> | **走勢圖** — 淨資產／各類別走勢、漲幅、投入分解;全部／年初至今／自選日期,點擊釘選數值。 |
-| <img src="screenshots/report.png" width="180" /> | **報表** — 累計損益＋迷你走勢與投入／市值／未實現／已實現;年→月→日鑽取,右上角進統計。 |
-| <img src="screenshots/history.png" width="180" /> | **歷史** — 交易紀錄,買入成本／賣出獲利與比例、搜尋與漏斗篩選、頂部即時統計。 |
-| <img src="screenshots/settings.png" width="180" /> | **設定** — 雲端同步、App 鎖定、顯示偏好、資料備份還原、報價來源設定。 |
+| <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/assets.png" width="180" /> | **資產** — 淨資產與今日漲跌、流動資金／投資／負債分類、每檔佔比環圈。點淨資產進走勢圖。 |
+| <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/portfolio.png" width="180" /> | **投資** — 依市場(台股／美股／加密)分組的持倉,市值、今日與未實現損益、佔比。 |
+| <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/chart.png" width="180" /> | **走勢圖** — 淨資產／各類別走勢、漲幅、投入分解;全部／年初至今／自選日期,點擊釘選數值。 |
+| <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/report.png" width="180" /> | **報表** — 累計損益＋迷你走勢與投入／市值／未實現／已實現;年→月→日鑽取,右上角進統計。 |
+| <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/history.png" width="180" /> | **歷史** — 交易紀錄,買入成本／賣出獲利與比例、搜尋與漏斗篩選、頂部即時統計。 |
+| <img src="https://raw.githubusercontent.com/WeiHao0107/Dives-web/main/screenshots/settings.png" width="180" /> | **設定** — 雲端同步、App 鎖定、顯示偏好、資料備份還原、報價來源設定。 |
 
 > 想先體驗完整功能?打開後到「**設定 → 載入示範資料**」一鍵填入示範資料(上方畫面即為示範資料)。
 > 開發者文件:資料模型與行為規格見 [SPEC.md](SPEC.md);核心運算的自動化測試見 [`tests/`](tests/)(`npm test`)。
