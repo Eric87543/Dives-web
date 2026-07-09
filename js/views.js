@@ -1634,9 +1634,10 @@ App.Views = (function () {
   function settingsAdv(root) {
     root.innerHTML = `<div class="page-full">${setSubHead('報價來源與代理')}
       <div class="card setting-card">
-        <div class="set-sub">Finnhub API 金鑰（美股報價）</div>
-        <input class="input" id="set-finnhub" placeholder="使用內建金鑰" value="${localStorage.getItem('dives_finnhub_key') || ''}">
-        <div class="set-sub">FinMind Token（台股報價，可留空；註冊後填入可提高速率上限）</div>
+        <div class="set-sub">Finnhub API 金鑰（美股即時報價，選填）</div>
+        <input class="input" id="set-finnhub" placeholder="留空 = 美股用收盤價（免金鑰）" value="${localStorage.getItem('dives_finnhub_key') || ''}">
+        <div class="set-hint">留空時美股改用 FinMind 收盤價（近日、非即時）。想要即時報價與美股搜尋，可到 <a href="https://finnhub.io/register" target="_blank" style="color:${COL.tw}">finnhub.io</a> 免費註冊取得金鑰後填入。</div>
+        <div class="set-sub" style="margin-top:12px">FinMind Token（台股／美股收盤，可留空；註冊後填入可提高速率上限）</div>
         <input class="input" id="set-finmind" placeholder="免金鑰可用，額度有限" value="${localStorage.getItem('dives_finmind_token') || ''}">
         <div class="set-sub">CORS 代理（報價直連失敗時的後備）</div>
         <input class="input" id="set-proxy" value="${S.getProxy()}">

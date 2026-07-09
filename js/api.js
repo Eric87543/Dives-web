@@ -3,7 +3,7 @@
  *
  * 瀏覽器 CORS 對策（皆原生支援 CORS，無需代理）：
  *   台股：FinMind API — TaiwanStockInfo（代碼/名稱/市場）+ TaiwanStockPrice（日收盤+漲跌）。
- *   美股：Finnhub /quote（報價）、/search（搜尋）。
+ *   美股：有自填 Finnhub 金鑰 → /quote 即時報價、/search 搜尋；無金鑰 → FinMind USStockPrice 收盤價(免金鑰)。
  *   匯率：open.er-api.com（免金鑰）。
  *   後備：任一請求失敗時，自動改走可設定的 CORS proxy。
  *
@@ -15,8 +15,9 @@ App.Api = (function () {
   const U = App.Util;
   const S = App.Store;
 
-  const FINNHUB_KEY_DEFAULT = 'd663kahr01qssgeccncgd663kahr01qssgeccnd0';
-  function finnhubKey() { return localStorage.getItem('dives_finnhub_key') || FINNHUB_KEY_DEFAULT; }
+  // 無內建共用金鑰:使用者可於「設定 → 進階」自填免費 Finnhub 金鑰以取得即時報價;
+  // 留空時美股改用 FinMind 收盤價(免金鑰,見 fetchUsQuote)。
+  function finnhubKey() { return (localStorage.getItem('dives_finnhub_key') || '').trim(); }
 
   // FinMind（台股）— 免金鑰可用，設定 token 可提高速率上限
   const FINMIND = 'https://api.finmindtrade.com/api/v4/data';
@@ -150,16 +151,35 @@ App.Api = (function () {
     return out;
   }
 
-  // ---- 美股單檔報價（Finnhub）----
+  // ---- 美股單檔報價 ----
+  // 有自填 Finnhub 金鑰 → 用 Finnhub 即時報價;否則(或失敗)→ FinMind 收盤價(免金鑰,近日資料、非即時)
   async function fetchUsQuote(symbol) {
+    if (finnhubKey()) {
+      try {
+        const j = await fetchJson('https://finnhub.io/api/v1/quote?symbol=' +
+          encodeURIComponent(symbol) + '&token=' + encodeURIComponent(finnhubKey()));
+        const c = j.c;
+        if (c > 0) {
+          const pc = (typeof j.pc === 'number') ? j.pc : null;
+          const d = (typeof j.d === 'number') ? j.d : (pc != null ? c - pc : 0);
+          return { price: c, dailyChange: d, prevClose: pc };
+        }
+      } catch (e) { /* 落到 FinMind 後備 */ }
+    }
+    return fetchUsQuoteFinMind(symbol);
+  }
+  // 免金鑰後備:FinMind USStockPrice 取最近兩個收盤,回傳 {price=最新收盤, dailyChange, prevClose}
+  async function fetchUsQuoteFinMind(symbol) {
     try {
-      const j = await fetchJson('https://finnhub.io/api/v1/quote?symbol=' +
-        encodeURIComponent(symbol) + '&token=' + encodeURIComponent(finnhubKey()));
-      const c = j.c;
+      const start = U.isoDate(new Date(Date.now() - 12 * 864e5)); // 近 ~12 天,涵蓋連假
+      const j = await fetchJson(fmUrl({ dataset: 'USStockPrice', data_id: symbol, start_date: start }));
+      const rows = (j.data || []).map(r => ({ date: r.date, close: U.parseNum(r.Close) }))
+        .filter(r => r.close != null).sort((a, b) => a.date < b.date ? -1 : 1);
+      if (!rows.length) return null;
+      const c = rows[rows.length - 1].close;
       if (!(c > 0)) return null;
-      const pc = (typeof j.pc === 'number') ? j.pc : null;
-      const d = (typeof j.d === 'number') ? j.d : (pc != null ? c - pc : 0);
-      return { price: c, dailyChange: d, prevClose: pc };
+      const pc = rows.length > 1 ? rows[rows.length - 2].close : null;
+      return { price: c, dailyChange: pc != null ? c - pc : 0, prevClose: pc };
     } catch (e) { return null; }
   }
 
@@ -342,18 +362,20 @@ App.Api = (function () {
       }
     } catch (e) {}
 
-    // 美股（Finnhub search，僅代碼前綴）
-    try {
-      const j = await fetchJson('https://finnhub.io/api/v1/search?q=' +
-        encodeURIComponent(q) + '&token=' + encodeURIComponent(finnhubKey()));
-      for (const it of (j.result || [])) {
-        const sym = (it.symbol || '').toUpperCase();
-        if (!sym || sym.includes('.') || sym.length > 5) continue;
-        if (!sym.startsWith(q)) continue;
-        results.push({ code: sym, name: it.description || sym, market: U.Market.us });
-        if (results.length >= 40) break;
-      }
-    } catch (e) {}
+    // 美股（Finnhub search，僅代碼前綴）——需自填 Finnhub 金鑰;未填則略過搜尋(可直接輸入代碼新增,收盤價由 FinMind 提供)
+    if (finnhubKey()) {
+      try {
+        const j = await fetchJson('https://finnhub.io/api/v1/search?q=' +
+          encodeURIComponent(q) + '&token=' + encodeURIComponent(finnhubKey()));
+        for (const it of (j.result || [])) {
+          const sym = (it.symbol || '').toUpperCase();
+          if (!sym || sym.includes('.') || sym.length > 5) continue;
+          if (!sym.startsWith(q)) continue;
+          results.push({ code: sym, name: it.description || sym, market: U.Market.us });
+          if (results.length >= 40) break;
+        }
+      } catch (e) {}
+    }
 
     // 虛擬貨幣（CoinGecko search，代號前綴，取市值前幾名）
     try {
