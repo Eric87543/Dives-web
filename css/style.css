@@ -274,6 +274,17 @@ input, select { font-family: inherit; font-size: 15px; }
 .s-info:active { background: none; }
 .s-ic { flex: none; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--accent); }
 .s-ic svg { width: 21px; height: 21px; }
+/* 定期定額 / 定期繳款 */
+.rp-list { background: var(--card); border-radius: var(--radius); box-shadow: 0 2px 4px rgba(0,0,0,0.04); overflow: hidden; margin-bottom: 4px; }
+.rp-card { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 14px; border-top: 1px solid var(--divider); background: none; text-align: left; color: var(--text); -webkit-tap-highlight-color: transparent; }
+.rp-list .rp-card:first-child { border-top: none; }
+.rp-card:active { background: var(--soft); }
+.rp-main { flex: 1; min-width: 0; }
+.rp-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.rp-badge { flex: none; font-size: 11px; font-weight: 600; color: var(--sub); background: var(--soft); border-radius: 6px; padding: 1px 6px; }
+.rp-sub { font-size: 12.5px; color: var(--sub); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-next { display: flex; align-items: center; gap: 3px; flex: none; font-size: 12.5px; color: var(--sub); white-space: nowrap; }
+.rp-paused { opacity: 0.5; }
 .s-label { flex: 1; }
 .s-val { color: var(--sub); font-size: 14px; white-space: nowrap; }
 .s-chev { color: #C4C0BC; font-size: 19px; margin-left: 1px; }

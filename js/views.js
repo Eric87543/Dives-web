@@ -1478,6 +1478,7 @@ App.Views = (function () {
     info: SET_ICON('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/>'),
     flask: SET_ICON('<path d="M9 3v6l-4.5 8A2 2 0 0 0 6.3 20h11.4a2 2 0 0 0 1.8-3L15 9V3M8 3h8"/>'),
     trash: SET_ICON('<path d="M5 7h14M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M7 7l1 13h8l1-13"/>'),
+    repeat: SET_ICON('<path d="M17 3l3 3-3 3"/><path d="M20 6H8a4 4 0 0 0-4 4v1"/><path d="M7 21l-3-3 3-3"/><path d="M4 18h12a4 4 0 0 0 4-4v-1"/>'),
   };
   const set = { sub: null }; // 設定頁內導覽：null | 'sync' | 'lock' | 'adv'
   function resetSettingsNav() { set.sub = null; }
@@ -1496,6 +1497,7 @@ App.Views = (function () {
     if (set.sub === 'sync') return settingsSync(root);
     if (set.sub === 'lock') return settingsLock(root);
     if (set.sub === 'adv') return settingsAdv(root);
+    if (set.sub === 'recurring') return settingsRecurring(root);
     const lastTs = S.getPricesTs(), rate = S.getFxRate();
     const syncOn = !!(App.Sync && App.Sync.enabled());
     const lockOn = !!(App.Auth && App.Auth.isEnabled());
@@ -1514,6 +1516,10 @@ App.Views = (function () {
     <div class="s-list">
       ${nav('pie', 'set-pb', '投資佔比基準', pbLabel)}
       ${nav('cal', 'set-dm', '當日漲跌計算', dmLabel)}
+    </div>
+    <div class="s-head">自動化</div>
+    <div class="s-list">
+      ${nav('repeat', 'set-recurring', '定期定額・定期繳款', (() => { const n = S.getRecurringPlans().filter(p => p && p.enabled !== false).length; return n ? n + ' 個' : ''; })())}
     </div>
     <div class="s-head">資料</div>
     <div class="s-list">
@@ -1544,6 +1550,7 @@ App.Views = (function () {
     on('set-sync', () => { set.sub = 'sync'; settings(root); });
     on('set-lock', () => { set.sub = 'lock'; settings(root); });
     on('set-adv', () => { set.sub = 'adv'; settings(root); });
+    on('set-recurring', () => { set.sub = 'recurring'; settings(root); });
     on('set-pb', () => openChooser('投資佔比基準', [
       { v: 'group', label: '組內', hint: '以所屬群組總額為分母' },
       { v: 'invest', label: '投資', hint: '以投資總市值為分母' },
@@ -1654,6 +1661,267 @@ App.Views = (function () {
       UI.toast('已儲存進階設定', 'success');
     });
   }
+
+  // ── 設定子頁：定期定額 / 定期繳款 ──
+  function settingsRecurring(root) {
+    const esc = s => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const plans = S.getRecurringPlans();
+    const today = U.isoDate();
+    const liabMap = {}; for (const l of S.getLiabilities()) liabMap[l.id] = l;
+    const acctMap = {}; for (const a of S.getCashAccounts()) acctMap[a.id] = a;
+    const WD = ['日', '一', '二', '三', '四', '五', '六'];
+    const freqLabel = f => f === 'weekly' ? '每週' : f === 'biweekly' ? '每兩週' : '每月';
+    const whenLabel = p => p.freq === 'monthly' ? ('每月 ' + (p.day || 6) + ' 日') : (freqLabel(p.freq) + '・星期' + WD[p.day != null ? p.day : 1]);
+    const nextLabel = p => {
+      if (p.enabled === false) return '已暫停';
+      const nx = C.recurringDueDates(p, C.isoAddDays(today, 400)).find(d => d > today);
+      return nx ? ('下次 ' + nx.slice(5)) : (p.endDate && p.endDate < today ? '已結束' : '—');
+    };
+    const curOf = p => {
+      if (p.kind === 'dca') { const mk = U.normalizeMarketKey(p.market); return (mk === U.Market.us || mk === U.Market.crypto) ? '$' : 'NT$'; }
+      const l = liabMap[p.liabilityId]; return l && l.currency === 'USD' ? '$' : 'NT$';
+    };
+    const card = p => {
+      const title = p.kind === 'dca'
+        ? ((p.name && p.name !== p.symbol) ? (p.symbol + ' ' + p.name) : p.symbol)
+        : ((liabMap[p.liabilityId] && liabMap[p.liabilityId].name) || '（負債已刪除）');
+      const badge = p.kind === 'dca' ? U.marketLabel(p.market) : '繳款';
+      const acct = p.accountId && acctMap[p.accountId] ? ('・' + acctMap[p.accountId].name) : '';
+      return `<button class="rp-card${p.enabled === false ? ' rp-paused' : ''}" data-id="${p.id}">
+        <div class="rp-main">
+          <div class="rp-title">${esc(title)} <span class="rp-badge">${badge}</span></div>
+          <div class="rp-sub">${curOf(p) + U.fmtWhole(p.amount || 0)}／期・${whenLabel(p)}${esc(acct)}</div>
+        </div>
+        <div class="rp-next">${nextLabel(p)}<span class="s-chev">›</span></div>
+      </button>`;
+    };
+    const dca = plans.filter(p => p.kind === 'dca');
+    const liab = plans.filter(p => p.kind === 'liability');
+    let html = setSubHead('定期定額・定期繳款');
+    html += `<div style="padding:2px 14px 20px">
+      <button class="btn btn-block btn-primary" id="rp-add">＋ 新增計畫</button>`;
+    if (!plans.length) html += `<div class="empty" style="padding:28px 8px">尚無計畫。<br>可設定股票／加密「定期定額」自動買入，<br>或負債「定期繳款」自動扣減餘額。</div>`;
+    else {
+      if (dca.length) html += `<div class="s-head">定期定額</div><div class="rp-list">${dca.map(card).join('')}</div>`;
+      if (liab.length) html += `<div class="s-head">定期繳款</div><div class="rp-list">${liab.map(card).join('')}</div>`;
+    }
+    html += `<div class="set-hint" style="margin-top:14px">定期定額依排程日的歷史價自動建立買入（非即時成交價，可事後編輯校正）；沒開 App 期間到期的會在下次開啟時一次補齊。</div></div>`;
+    root.innerHTML = `<div class="page-full">${html}</div>`;
+    setSubBack(root);
+    root.querySelector('#rp-add').addEventListener('click', () => openRecurringChooser(() => settings(root)));
+    root.querySelectorAll('.rp-card').forEach(c => c.addEventListener('click', () => {
+      const p = S.getRecurringPlans().find(x => x.id === c.dataset.id);
+      if (p) openRecurringForm(p.kind, p, () => settings(root));
+    }));
+  }
+
+  // 新增計畫類型選擇
+  function openRecurringChooser(onDone) {
+    const hasLiab = S.getLiabilities().length > 0;
+    const ov = UI.openSheet('新增計畫', `
+      <div class="ga-list">
+        <div class="ga-item" data-k="dca"><b>定期定額（股票 / 加密）</b><span class="ga-sub">依排程自動買入固定金額</span></div>
+        <div class="ga-item" data-k="liability"><b>定期繳款（負債）</b><span class="ga-sub">${hasLiab ? '依排程自動扣減負債餘額' : '請先於資產頁新增負債'}</span></div>
+      </div>`, '');
+    ov.querySelectorAll('.ga-item').forEach(it => it.addEventListener('click', () => {
+      const k = it.dataset.k;
+      if (k === 'liability' && !S.getLiabilities().length) { UI.toast('請先於資產頁新增負債', 'info'); return; }
+      UI.closeSheet();
+      openRecurringForm(k, null, onDone);
+    }));
+  }
+
+  // 計畫編輯表單（新增 / 編輯定期定額 or 定期繳款）
+  function openRecurringForm(kind, editing, onDone) {
+    const esc = s => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const isDca = kind === 'dca';
+    const p = editing || {};
+    const today = U.isoDate();
+    const liabs = S.getLiabilities();
+    const st = {
+      freq: p.freq || 'monthly',
+      basis: p.priceBasis || 'close',
+      feeMode: p.feeMode || 'rate',
+      enabled: p.enabled !== false,
+      picked: editing && isDca ? { code: p.symbol, name: p.name, market: p.market } : null,
+    };
+    const dom = Math.min(28, (p.freq !== 'monthly' && p.day != null) ? 6 : (p.day || 6));
+    const dow = (p.freq && p.freq !== 'monthly' && p.day != null) ? p.day : 1;
+    const target = isDca
+      ? `<label class="fld">標的（股票 / 加密貨幣）
+          ${editing ? `<div class="locked">${esc(p.symbol)}${p.name && p.name !== p.symbol ? ' · ' + esc(p.name) : ''} <span>🔒</span></div>`
+            : `<input class="input" id="rp-sym" autocomplete="off" placeholder="代碼或名稱（2330、台積電、AAPL、BTC…）">
+               <div class="suggest" id="rp-suggest"></div>`}
+        </label>`
+      : `<label class="fld">負債
+          <select class="input" id="rp-liab">${liabs.map(l => `<option value="${l.id}"${p.liabilityId === l.id ? ' selected' : ''}>${esc(l.name)}（${l.currency} ${U.formatPrice(l.balance || 0)}）</option>`).join('')}</select>
+        </label>`;
+    const body = `
+      ${target}
+      <label class="fld">${isDca ? '每期投入金額' : '每期繳款金額'}<input class="input" id="rp-amount" type="number" inputmode="decimal" value="${p.amount != null ? p.amount : ''}" placeholder="0"></label>
+      <label class="fld">頻率
+        <div class="fee-mode" id="rp-freq">
+          <button type="button" class="fm-btn ${st.freq === 'monthly' ? 'active' : ''}" data-f="monthly">每月</button>
+          <button type="button" class="fm-btn ${st.freq === 'biweekly' ? 'active' : ''}" data-f="biweekly">每兩週</button>
+          <button type="button" class="fm-btn ${st.freq === 'weekly' ? 'active' : ''}" data-f="weekly">每週</button>
+        </div>
+      </label>
+      <label class="fld" id="rp-dom-fld" style="${st.freq === 'monthly' ? '' : 'display:none'}">每月執行日<input class="input" id="rp-dom" type="number" inputmode="numeric" min="1" max="28" value="${dom}" placeholder="1–28"></label>
+      <label class="fld" id="rp-dow-fld" style="${st.freq === 'monthly' ? 'display:none' : ''}">每週執行日
+        <select class="input" id="rp-dow">${WD_OPTS(dow)}</select>
+      </label>
+      <div class="fld-row">
+        <label class="fld">開始日期<input class="input" id="rp-start" type="date" value="${p.startDate || today}"></label>
+        <label class="fld">結束日期（可留空）<input class="input" id="rp-end" type="date" value="${p.endDate || ''}"></label>
+      </div>
+      ${isDca ? `
+      <label class="fld">買入價格基準
+        <div class="fee-mode" id="rp-basis">
+          <button type="button" class="fm-btn ${st.basis === 'close' ? 'active' : ''}" data-b="close">收盤價</button>
+          <button type="button" class="fm-btn ${st.basis === 'open' ? 'active' : ''}" data-b="open">開盤價</button>
+        </div>
+        <div class="set-hint">依排程日歷史價自動建立買入（非即時成交價）。加密貨幣一律用當日價。</div>
+      </label>
+      <label class="fld">手續費
+        <div class="fee-mode" id="rp-feemode">
+          <button type="button" class="fm-btn ${st.feeMode === 'rate' ? 'active' : ''}" data-m="rate">費率 %</button>
+          <button type="button" class="fm-btn ${st.feeMode === 'fixed' ? 'active' : ''}" data-m="fixed">固定金額</button>
+          <button type="button" class="fm-btn ${st.feeMode === 'none' ? 'active' : ''}" data-m="none">無</button>
+        </div>
+        <input class="input" id="rp-feeval" type="number" inputmode="decimal" value="${p.feeVal != null ? p.feeVal : '0.1425'}" ${st.feeMode === 'none' ? 'disabled' : ''}>
+      </label>` : ''}
+      <label class="fld">${isDca ? '扣款現金帳戶（選填）' : '繳款來源現金帳戶（選填）'}
+        <select class="input" id="rp-acct"><option value="">不使用現金帳戶</option></select>
+      </label>
+      <label class="fld">狀態
+        <div class="fee-mode" id="rp-enabled">
+          <button type="button" class="fm-btn ${st.enabled ? 'active' : ''}" data-e="1">啟用</button>
+          <button type="button" class="fm-btn ${st.enabled ? '' : 'active'}" data-e="0">暫停</button>
+        </div>
+      </label>
+      <div class="set-hint">${isDca ? '每次到期自動建立買入交易；儲存後會立即補齊「開始日～今天」的期數。' : '每期自動扣減負債餘額；有選帳戶則同步扣款。儲存後立即補齊已到期期數。'}</div>`;
+    const footer = `${editing ? '<button class="btn btn-danger" id="rp-del">刪除</button>' : ''}<button class="btn btn-ghost" id="rp-cancel">取消</button><button class="btn btn-primary" id="rp-ok">${editing ? '儲存' : '建立'}</button>`;
+    const ov = UI.openSheet(editing ? '編輯計畫' : (isDca ? '新增定期定額' : '新增定期繳款'), body, footer);
+    const $ = s => ov.querySelector(s);
+
+    function curForDca() {
+      const mk = st.picked ? U.normalizeMarketKey(st.picked.market)
+        : U.guessMarketBySymbol(U.sanitizeSymbol($('#rp-sym') ? $('#rp-sym').value : (p.symbol || '')));
+      return (mk === U.Market.us || mk === U.Market.crypto) ? 'USD' : 'TWD';
+    }
+    function curForLiab() { const l = liabs.find(x => x.id === ($('#rp-liab') ? $('#rp-liab').value : p.liabilityId)); return l ? l.currency : 'TWD'; }
+    function refreshAcct() {
+      const sel = $('#rp-acct'); if (!sel) return;
+      const want = isDca ? curForDca() : curForLiab();
+      const keep = sel.value || (editing ? p.accountId : '');
+      const opts = S.getCashAccounts().filter(a => a.currency === want);
+      sel.innerHTML = '<option value="">不使用現金帳戶</option>' + opts.map(a => `<option value="${a.id}">${esc(a.name)}（${a.currency} ${U.formatPrice(a.balance || 0)}）</option>`).join('');
+      if (keep && opts.some(a => a.id === keep)) sel.value = keep;
+    }
+    refreshAcct();
+
+    // 頻率切換 → 顯示對應的執行日欄位
+    ov.querySelectorAll('#rp-freq .fm-btn').forEach(b => b.addEventListener('click', () => {
+      st.freq = b.dataset.f;
+      ov.querySelectorAll('#rp-freq .fm-btn').forEach(x => x.classList.remove('active')); b.classList.add('active');
+      $('#rp-dom-fld').style.display = st.freq === 'monthly' ? '' : 'none';
+      $('#rp-dow-fld').style.display = st.freq === 'monthly' ? 'none' : '';
+    }));
+    if (isDca) {
+      ov.querySelectorAll('#rp-basis .fm-btn').forEach(b => b.addEventListener('click', () => {
+        st.basis = b.dataset.b; ov.querySelectorAll('#rp-basis .fm-btn').forEach(x => x.classList.remove('active')); b.classList.add('active');
+      }));
+      ov.querySelectorAll('#rp-feemode .fm-btn').forEach(b => b.addEventListener('click', () => {
+        st.feeMode = b.dataset.m; ov.querySelectorAll('#rp-feemode .fm-btn').forEach(x => x.classList.remove('active')); b.classList.add('active');
+        $('#rp-feeval').disabled = st.feeMode === 'none';
+      }));
+    }
+    ov.querySelectorAll('#rp-enabled .fm-btn').forEach(b => b.addEventListener('click', () => {
+      st.enabled = b.dataset.e === '1'; ov.querySelectorAll('#rp-enabled .fm-btn').forEach(x => x.classList.remove('active')); b.classList.add('active');
+    }));
+    if (!isDca) { const ls = $('#rp-liab'); if (ls) ls.addEventListener('change', refreshAcct); }
+
+    // 標的自動完成（定期定額，新增時）
+    if (isDca && !editing) {
+      const symInput = $('#rp-sym'), sug = $('#rp-suggest');
+      let timer = null;
+      symInput.addEventListener('input', () => {
+        const q = symInput.value.trim();
+        clearTimeout(timer);
+        st.picked = null; refreshAcct();
+        if (!q) { sug.innerHTML = ''; return; }
+        timer = setTimeout(async () => {
+          const res = await App.Api.searchSymbols(q);
+          sug.innerHTML = res.map(r => `<div class="sug-item" data-code="${r.code}" data-name="${encodeURIComponent(r.name)}" data-mk="${r.market}"${r.cgid ? ` data-cgid="${r.cgid}"` : ''}>
+            <span class="sc">${r.code}</span><span class="sn">${esc(r.name)}</span><span class="sm">${U.marketLabel(r.market)}</span></div>`).join('');
+          sug.querySelectorAll('.sug-item').forEach(it => it.addEventListener('click', () => {
+            const name = decodeURIComponent(it.dataset.name);
+            symInput.value = it.dataset.code + ' ' + name;
+            sug.innerHTML = '';
+            st.picked = { code: it.dataset.code, name, market: it.dataset.mk };
+            if (it.dataset.cgid) App.Api.cacheCgId(it.dataset.code, it.dataset.cgid);
+            if (st.feeMode === 'rate') $('#rp-feeval').value = it.dataset.mk === 'crypto' ? '0.1' : (it.dataset.mk === 'us' ? '0.08' : '0.1425');
+            refreshAcct();
+          }));
+        }, 220);
+      });
+    }
+
+    $('#rp-cancel').addEventListener('click', UI.closeSheet);
+    if ($('#rp-del')) $('#rp-del').addEventListener('click', () => UI.confirmDialog('刪除此計畫？（已建立的交易不會被刪除）', () => {
+      S.setRecurringPlans(S.getRecurringPlans().filter(x => x.id !== p.id));
+      UI.closeSheet(); if (App.Sync) App.Sync.markDirty(); onDone && onDone();
+    }, '刪除'));
+
+    $('#rp-ok').addEventListener('click', () => {
+      const amount = parseFloat($('#rp-amount').value);
+      if (!(amount > 0)) return UI.toast('請輸入正確的金額', 'info');
+      const startDate = $('#rp-start').value || today;
+      const endDate = $('#rp-end').value || null;
+      if (endDate && endDate < startDate) return UI.toast('結束日期不能早於開始日期', 'info');
+      const day = st.freq === 'monthly' ? Math.min(28, Math.max(1, parseInt($('#rp-dom').value, 10) || 6)) : parseInt($('#rp-dow').value, 10);
+      const accountId = $('#rp-acct').value || null;
+      const base = { freq: st.freq, day, startDate, endDate, enabled: st.enabled, accountId };
+
+      let plan;
+      if (isDca) {
+        let symbol, market, name;
+        if (editing) { symbol = p.symbol; market = p.market; name = p.name; }
+        else {
+          const raw = $('#rp-sym').value;
+          symbol = U.sanitizeSymbol(raw);
+          if (!symbol) return UI.toast('請輸入標的代碼', 'info');
+          const pk = (st.picked && st.picked.code === symbol) ? st.picked : null;
+          market = pk ? U.normalizeMarketKey(pk.market) : U.guessMarketBySymbol(symbol);
+          name = pk ? pk.name : symbol;
+        }
+        const feeMode = st.feeMode;
+        const feeVal = feeMode === 'none' ? 0 : (parseFloat($('#rp-feeval').value) || 0);
+        plan = Object.assign({}, editing || {}, base, { kind: 'dca', symbol, market, name, priceBasis: st.basis, feeMode, feeVal });
+      } else {
+        const liabilityId = $('#rp-liab').value;
+        if (!liabilityId) return UI.toast('請選擇負債', 'info');
+        plan = Object.assign({}, editing || {}, base, { kind: 'liability', liabilityId });
+      }
+      plan.amount = amount;
+      if (!plan.id) { plan.id = S.uuid(); plan.createdAt = Date.now(); plan.lastRun = null; }
+
+      const list = S.getRecurringPlans();
+      const idx = list.findIndex(x => x.id === plan.id);
+      if (idx >= 0) list[idx] = plan; else list.push(plan);
+      S.setRecurringPlans(list);
+      UI.closeSheet();
+      if (App.Sync) App.Sync.markDirty();
+      onDone && onDone();
+      // 立即補齊已到期期數（DCA 會回補歷史買入 → 重建走勢）
+      if (App.runRecurringPlans) App.runRecurringPlans().then(async n => {
+        if (n > 0) { if (plan.kind === 'dca' && App.rebuildHistory) await App.rebuildHistory(); UI.toast(`已補齊 ${n} 筆`, 'success'); }
+        App.renderCurrent(); onDone && onDone();
+      });
+    });
+  }
+  const WD_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+  function WD_OPTS(sel) { return WD_LABELS.map((w, i) => `<option value="${i}"${i === sel ? ' selected' : ''}>星期${w}</option>`).join(''); }
 
   async function renderLockBody(el, root) {
     if (!el || !App.Auth) return;

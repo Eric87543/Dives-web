@@ -152,6 +152,26 @@ App.Api = (function () {
     return out;
   }
 
+  // ---- 單檔日線（開/收）：供定期定額回補指定日期買入價 ----
+  // 回傳升序 [{date, open, close}]；台股/美股走 FinMind、加密走 CoinGecko(無開盤 → open=close)
+  async function fetchDailySeries(market, code, startDate) {
+    const mk = U.normalizeMarketKey(market);
+    try {
+      if (mk === U.Market.crypto) {
+        const h = await fetchCryptoHistory([code], startDate);
+        return (h[code] || []).map(r => ({ date: r.date, open: r.close, close: r.close }));
+      }
+      const isUs = mk === U.Market.us;
+      const ds = isUs ? 'USStockPrice' : 'TaiwanStockPrice';
+      const j = await fetchJson(fmUrl({ dataset: ds, data_id: code, start_date: startDate }));
+      return (j.data || []).map(r => {
+        const close = U.parseNum(isUs ? r.Close : r.close);
+        const open = U.parseNum(isUs ? r.Open : r.open);
+        return { date: r.date, open: open != null ? open : close, close };
+      }).filter(r => r.close != null).sort((a, b) => a.date < b.date ? -1 : 1);
+    } catch (e) { return []; }
+  }
+
   // ---- 台股盤中即時（TWSE MIS，經 proxy；可批次多檔）----
   // 回傳 {code: {price, dailyChange, prevClose}}；盤中時段使用
   async function fetchTwRealtime(metas) {
@@ -433,5 +453,5 @@ App.Api = (function () {
     return results.slice(0, 30);
   }
 
-  return { fetchText, fetchJson, loadTwUniverse, fetchTwPrice, fetchTwHistory, fetchUsHistory, fetchTwRealtime, fetchUsQuote, fetchCryptoQuotes, fetchCryptoHistory, cacheCgId, fetchFx, refreshPrices, searchSymbols, finnhubKey };
+  return { fetchText, fetchJson, loadTwUniverse, fetchTwPrice, fetchTwHistory, fetchUsHistory, fetchDailySeries, fetchTwRealtime, fetchUsQuote, fetchCryptoQuotes, fetchCryptoHistory, cacheCgId, fetchFx, refreshPrices, searchSymbols, finnhubKey };
 })();

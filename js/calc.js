@@ -126,9 +126,12 @@ App.Calc = (function () {
   // 新增交易（SELL 同步寫入已實現損益）；回傳 {ok, msg}
   // market/name 為選填覆寫（例：從建議清單選了加密貨幣時傳入 'crypto'）
   // accountId 為選填現金帳戶：買入自動扣款、賣出自動存入
-  function addTransaction({ symbolInput, type, shares, price, fee, market, name, accountId }) {
+  // time 為選填成交時間(ms，供指定日期/定期定額回補)；source 標記來源(例：'dca')
+  function addTransaction({ symbolInput, type, shares, price, fee, market, name, accountId, time, source }) {
     const symbol = U.sanitizeSymbol(symbolInput);
     if (!symbol || shares <= 0 || price <= 0) return { ok: false, msg: '請輸入正確的代碼/股數/價格' };
+    fee = Math.round((fee || 0) * 100) / 100; // 手續費一律存到小數點第 2 位
+    const ts = time || Date.now();
 
     // 確保 meta 存在（有明確 market 覆寫時優先採用）
     const mmap = S.metaMap();
@@ -152,12 +155,13 @@ App.Calc = (function () {
       if (shares > posShares + 1e-9) return { ok: false, msg: '賣出股數超過持倉（持倉：' + U.formatShares(posShares) + '）' };
       const realized = shares * price - shares * avgCost - fee;
       const rz = S.getRealized();
-      rz.push({ id: S.uuid(), symbol, shares, sellPrice: price, avgCost, realizedPnl: realized, time: Date.now() });
+      rz.push({ id: S.uuid(), symbol, shares, sellPrice: price, avgCost, realizedPnl: realized, time: ts });
       S.setRealized(rz);
     }
 
-    const newTx = { id: S.uuid(), symbol, type, shares, price, fee, time: Date.now() };
+    const newTx = { id: S.uuid(), symbol, type, shares, price, fee, time: ts };
     if (accountId) newTx.accountId = accountId;
+    if (source) newTx.source = source;
     txs.push(newTx);
     S.setTransactions(txs);
     // 現金帳戶連動：買入扣款、賣出存入（帳戶原幣別金額）
@@ -174,6 +178,7 @@ App.Calc = (function () {
   // 更新交易並重算該代碼的已實現損益（現金效果：先沖銷舊值再套用新值）
   function updateTransaction(id, { type, shares, price, fee, time }) {
     if (shares <= 0 || price <= 0) return { ok: false, msg: '請輸入正確的股數/價格' };
+    fee = Math.round((fee || 0) * 100) / 100; // 手續費一律存到小數點第 2 位
     const txs = S.getTransactions();
     const tx = txs.find(t => t.id === id);
     if (!tx) return { ok: false, msg: '找不到交易' };
@@ -641,10 +646,92 @@ App.Calc = (function () {
     return { period, periodPnl, periodReturnPct, bestTrade, worstTrade };
   }
 
+  // ===== 定期定額 / 定期繳款（排程為純函式，可測試）=====
+  // 以「日曆日期字串」運算，不涉時區；day 對月頻為 1..31(超過月底自動夾到當月最後一天)、
+  // 對週/雙週頻為 0..6(週日..週六)。
+  function _ymd(iso) { const p = (iso || '').split('-').map(Number); return { y: p[0], m: p[1], d: p[2] }; }
+  function _pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function _mkIso(y, m, d) { return y + '-' + _pad(m) + '-' + _pad(d); }
+  function _daysInMonth(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); } // m:1..12
+  function _isoWeekday(iso) { const p = _ymd(iso); return new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay(); }
+  function isoAddDays(iso, n) { const p = _ymd(iso); const dt = new Date(Date.UTC(p.y, p.m - 1, p.d)); dt.setUTCDate(dt.getUTCDate() + n); return dt.toISOString().slice(0, 10); }
+  function _monthlyOcc(y, m, day) { return _mkIso(y, m, Math.min(day, _daysInMonth(y, m))); }
+  function _addMonth(y, m, k) { const idx = (m - 1) + k; const ny = y + Math.floor(idx / 12); const nm = ((idx % 12) + 12) % 12 + 1; return { y: ny, m: nm }; }
+
+  // 計畫在 (lastRun, today] 且 ≤ endDate 之間、所有「已到期未執行」的排程日期(升序)
+  function recurringDueDates(plan, today) {
+    if (!plan || !plan.startDate || !today) return [];
+    const start = plan.startDate;
+    const after = plan.lastRun || null;              // 僅回傳嚴格晚於 lastRun 者
+    const end = plan.endDate || null;
+    const limit = end && end < today ? end : today;  // 不超過今天，也不超過結束日
+    if (limit < start) return [];
+    const out = [];
+    const freq = plan.freq || 'monthly';
+    if (freq === 'monthly') {
+      const day = plan.day || _ymd(start).d;
+      let { y, m } = _ymd(start);
+      let occ = _monthlyOcc(y, m, day);
+      if (occ < start) { const nx = _addMonth(y, m, 1); y = nx.y; m = nx.m; occ = _monthlyOcc(y, m, day); }
+      let guard = 0;
+      while (occ <= limit && guard < 1200) {
+        if (!after || occ > after) out.push(occ);
+        const nx = _addMonth(y, m, 1); y = nx.y; m = nx.m; occ = _monthlyOcc(y, m, day);
+        guard++;
+      }
+    } else {
+      const step = freq === 'weekly' ? 7 : 14;
+      const wd = (plan.day != null) ? plan.day : _isoWeekday(start);
+      let occ = start, g0 = 0;
+      while (_isoWeekday(occ) !== wd && g0 < 7) { occ = isoAddDays(occ, 1); g0++; }
+      let guard = 0;
+      while (occ <= limit && guard < 4000) {
+        if (occ >= start && (!after || occ > after)) out.push(occ);
+        occ = isoAddDays(occ, step);
+        guard++;
+      }
+    }
+    return out;
+  }
+
+  // 從升序日線 series 取「≤ dateIso 最近一筆」的價(basis: 'open'|'close')；假日/休市自動用前一交易日
+  function priceOnOrBefore(series, dateIso, basis) {
+    if (!series || !series.length) return null;
+    let chosen = null;
+    for (const r of series) { if (r.date <= dateIso) chosen = r; else break; }
+    if (!chosen) return null;
+    const v = (basis === 'open' && chosen.open != null) ? chosen.open : chosen.close;
+    return (v > 0) ? v : null;
+  }
+
+  // 依計畫費率/固定手續費算單筆手續費(存到小數第 2 位)；amount = 該期投入金額
+  function planFee(plan, amount) {
+    const mode = plan && plan.feeMode || 'none';
+    let fee = 0;
+    if (mode === 'rate') fee = (amount || 0) * ((+plan.feeVal || 0) / 100);
+    else if (mode === 'fixed') fee = (+plan.feeVal || 0);
+    return Math.round(fee * 100) / 100;
+  }
+
+  // 對負債套用一期繳款：餘額扣 pay(不超付/不為負)，若指定現金帳戶則同幣別同步扣款
+  function applyLiabilityPayment(liabilityId, amount, accountId) {
+    const list = S.getLiabilities();
+    const liab = list.find(l => l.id === liabilityId);
+    if (!liab) return { ok: false, paid: 0 };
+    const bal = liab.balance || 0;
+    const pay = Math.min(Math.max(0, +amount || 0), bal); // 不超付、不為負
+    if (pay <= 0) return { ok: false, paid: 0 };
+    liab.balance = Math.round((bal - pay) * 100) / 100;
+    S.setLiabilities(list);
+    if (accountId) S.adjustCashBalance(accountId, -pay);
+    return { ok: true, paid: pay };
+  }
+
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
     netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats,
+    recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment,
   };
 })();

@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v110';
+  App.VERSION = 'v111';
 
   const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -250,6 +250,52 @@
     } catch (e) { console.warn('auto backfill failed', e); }
   }
 
+  // 執行定期定額 / 定期繳款：把每個啟用計畫「已到期未執行」的期數補上
+  //   DCA → 抓歷史日線，用該日開/收價建立買入（股數 = 金額 ÷ 價），連動扣款帳戶
+  //   liability → 依期數對負債扣款（同步扣現金帳戶）
+  //   lastRun 前移避免重複；抓不到價則停在上一個成功日，下次啟動再補
+  async function runRecurringPlans() {
+    const plans = S.getRecurringPlans();
+    if (!plans.length) return 0;
+    const today = App.Util.isoDate();
+    let created = 0, changed = false;
+    const touched = [];
+    for (const plan of plans) {
+      if (!plan || plan.enabled === false) continue;
+      const dues = C.recurringDueDates(plan, today);
+      if (!dues.length) continue;
+      if (plan.kind === 'liability') {
+        let done = null;
+        for (const d of dues) {
+          const r = C.applyLiabilityPayment(plan.liabilityId, plan.amount, plan.accountId || null);
+          if (!r.ok) break; // 負債不存在或已清零 → 停
+          created++; done = d;
+        }
+        if (done && done !== plan.lastRun) { plan.lastRun = done; changed = true; }
+      } else {
+        const from = C.isoAddDays(dues[0], -10); // 往前 10 天確保有收盤價可用
+        let series = [];
+        try { series = await Api.fetchDailySeries(plan.market, plan.symbol, from); } catch (e) { series = []; }
+        let done = plan.lastRun || null;
+        for (const d of dues) {
+          const px = C.priceOnOrBefore(series, d, plan.priceBasis || 'close');
+          if (!(px > 0)) break;               // 抓不到價 → 停,下次再補
+          const shares = plan.amount / px;
+          if (!(shares > 0)) break;
+          const fee = C.planFee(plan, plan.amount);
+          const time = new Date(d + 'T12:00:00+08:00').getTime();
+          const r = C.addTransaction({ symbolInput: plan.symbol, type: 'BUY', shares, price: px, fee, market: plan.market, name: plan.name, accountId: plan.accountId || undefined, time, source: 'dca' });
+          if (!r.ok) break;
+          created++; touched.push(plan.symbol); done = d;
+        }
+        if (done && done !== plan.lastRun) { plan.lastRun = done; changed = true; }
+      }
+    }
+    if (changed) S.setRecurringPlans(plans);
+    if (created > 0) { C.saveTodaySnapshot(); if (App.Sync) App.Sync.markDirty(); }
+    return created;
+  }
+
   // 載入示範資料（測試用）：現金/負債/台美股+加密/群組/120 天歷史快照
   function seedDemo() {
     const U = App.Util;
@@ -324,6 +370,7 @@
   App.rebuildHistory = rebuildHistory;
   App.snapshotGapDays = snapshotGapDays;
   App.maybeBackfill = maybeBackfill;
+  App.runRecurringPlans = runRecurringPlans;
   App.seedDemo = seedDemo;
 
   // 初始化
@@ -385,6 +432,12 @@
         const r = await App.Sync.pull();
         if (r.changed) renderCurrent();
       }
+      // 定期定額/繳款：拉取雲端後執行（lastRun 已同步 → 不會多裝置重複扣）
+      try {
+        const n = await runRecurringPlans();
+        // 有回補歷史日期的買入 → 重建走勢讓歷史快照反映；rebuildHistory 內含 renderCurrent
+        if (n > 0) { await rebuildHistory(); UI.toast(`定期計畫已執行，新增 ${n} 筆`, 'success'); }
+      } catch (e) { console.warn('recurring failed', e); }
       const hasTx = S.getTransactions().length > 0;
       if (hasTx) await refresh();
       Api.loadTwUniverse(false).catch(() => {});
