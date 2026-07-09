@@ -1,10 +1,48 @@
-# Dives — 投資追蹤 PWA 使用手冊
+# Dives — 台股 · 美股 · 加密貨幣　投資與淨資產追蹤
 
-台股 / 美股 / 虛擬貨幣個人投資與**淨資產**追蹤 App。純前端、零後端,**資料完全存在你的裝置本機**,可選擇用 GitHub Gist 跨裝置同步。可「加入主畫面」變成像原生 App 的圖示,**不需要 Apple Developer Program、不會過期**。
+> **一個 App，看懂你的淨資產。** 台股、美股、虛擬貨幣、現金與負債，全部整合在一個乾淨、快速、零廣告的介面裡。
 
-🔗 **線上使用:https://weihao0107.github.io/Dives-web/**
+**純前端、零後端 — 你的財務資料 100% 只存在自己的裝置。** 可選擇用 GitHub 私人 Gist 加密跨裝置同步。加入主畫面即變成全螢幕原生體驗:**免安裝、免註冊、免 Apple 開發者帳號、永不過期、完全免費。**
 
+### 🔗 立即使用(免安裝)→ **https://weihao0107.github.io/Dives-web/**
+
+<p align="center">
+  <img src="screenshots/assets.png" width="31%" alt="資產（淨資產）" />
+  <img src="screenshots/portfolio.png" width="31%" alt="投資（持倉）" />
+  <img src="screenshots/chart.png" width="31%" alt="淨資產走勢圖" />
+</p>
+<p align="center">
+  <img src="screenshots/report.png" width="31%" alt="年度報表" />
+  <img src="screenshots/history.png" width="31%" alt="交易紀錄" />
+  <img src="screenshots/settings.png" width="31%" alt="設定" />
+</p>
+
+---
+
+## ✨ 為什麼選 Dives
+
+- 📊 **一頁看懂淨資產** — 流動資金 ＋ 投資市值 − 負債,美金 / 加密自動換算台幣,手風琴式分類一目了然。
+- 🌏 **台股 × 美股 × 加密一站整合** — 盤中即時報價、自動補歷史收盤,不用同時開三個 App。
+- 📈 **走勢與報表** — 淨資產／各類別走勢圖、漲幅與投入分解、年→月→日鑽取的績效報表加迷你走勢摘要。
+- 🧾 **完整交易帳本** — 買入成本、賣出已實現損益與報酬率、依買賣／市場／時間區間篩選、頂部即時統計。
+- 🔒 **隱私優先** — 資料只存本機;App 鎖定(PIN / Face ID / 指紋);一鍵隱藏金額。
+- ☁️ **想同步才同步** — 用你自己的 GitHub 私人 Gist 跨裝置,開發者與他人都看不到你的資料。
+- ⚡ **PWA 原生體驗** — 加入主畫面、離線可看、自動更新、**無廣告、無追蹤**。
+
+## 🖼️ 操作導覽
+
+| 畫面 | 功能重點 |
+|---|---|
+| <img src="screenshots/assets.png" width="180" /> | **資產** — 淨資產與今日漲跌、流動資金／投資／負債分類、每檔佔比環圈。點淨資產進走勢圖。 |
+| <img src="screenshots/portfolio.png" width="180" /> | **投資** — 依市場(台股／美股／加密)分組的持倉,市值、今日與未實現損益、佔比。 |
+| <img src="screenshots/chart.png" width="180" /> | **走勢圖** — 淨資產／各類別走勢、漲幅、投入分解;全部／年初至今／自選日期,點擊釘選數值。 |
+| <img src="screenshots/report.png" width="180" /> | **報表** — 累計損益＋迷你走勢與投入／市值／未實現／已實現;年→月→日鑽取,右上角進統計。 |
+| <img src="screenshots/history.png" width="180" /> | **歷史** — 交易紀錄,買入成本／賣出獲利與比例、搜尋與漏斗篩選、頂部即時統計。 |
+| <img src="screenshots/settings.png" width="180" /> | **設定** — 雲端同步、App 鎖定、顯示偏好、資料備份還原、報價來源設定。 |
+
+> 想先體驗完整功能?打開後到「**設定 → 載入示範資料**」一鍵填入示範資料(上方畫面即為示範資料)。
 > 開發者文件:資料模型與行為規格見 [SPEC.md](SPEC.md);核心運算的自動化測試見 [`tests/`](tests/)(`npm test`)。
+> 顏色慣例:**漲紅、跌綠**(台股慣例)。
 
 ---
 

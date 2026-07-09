@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dives — 台股 · 美股 · 加密貨幣　投資與淨資產追蹤</title>
+<meta name="description" content="把台股、美股、虛擬貨幣、現金與負債收進一個乾淨、快速、零廣告的介面。純前端、資料只存你的裝置，免安裝、免註冊、完全免費。" />
+<meta property="og:title" content="Dives — 看懂你的每一分淨資產" />
+<meta property="og:description" content="台股 · 美股 · 加密貨幣，一頁看懂淨資產。資料只屬於你。" />
+<meta property="og:image" content="screenshots/assets.png" />
+<meta name="theme-color" content="#0b0c10" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@600;700;900&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#0b0c10; --ink-2:#111319; --panel:#15171f;
+    --paper:#f3efe7; --dim:rgba(243,239,231,.60); --faint:rgba(243,239,231,.38);
+    --line:rgba(243,239,231,.11);
+    --violet:#a99cff; --violet-deep:#6d5fd5; --gold:#e7b567;
+    --up:#ff5a5f; --down:#4fc27f;
+    --serif:'Fraunces','Noto Serif TC',serif;
+    --sans:'Noto Sans TC',-apple-system,BlinkMacSystemFont,sans-serif;
+    --max:1120px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--ink); color:var(--paper); font-family:var(--sans);
+    font-weight:300; line-height:1.7; letter-spacing:.01em;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  /* atmosphere */
+  .glow{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  .glow::before,.glow::after{content:'';position:absolute;border-radius:50%;filter:blur(120px);opacity:.5}
+  .glow::before{width:720px;height:720px;top:-320px;left:50%;transform:translateX(-50%);
+    background:radial-gradient(circle,rgba(109,95,213,.55),transparent 62%)}
+  .glow::after{width:560px;height:560px;top:38vh;right:-220px;
+    background:radial-gradient(circle,rgba(231,181,103,.20),transparent 60%)}
+  body::after{content:'';position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.045;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  .wrap{position:relative;z-index:3;max-width:var(--max);margin:0 auto;padding:0 24px}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:40;transition:background .4s,border-color .4s,backdrop-filter .4s;border-bottom:1px solid transparent}
+  nav.solid{background:rgba(11,12,16,.72);backdrop-filter:blur(14px);border-color:var(--line)}
+  .nav-in{max-width:var(--max);margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-weight:700;font-size:23px;letter-spacing:.02em}
+  .brand .mk{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+    background:linear-gradient(150deg,var(--violet),var(--violet-deep));color:#0b0c10;font-size:16px;font-weight:700;transform:rotate(-6deg)}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:500;font-size:15px;
+    padding:11px 20px;border-radius:999px;text-decoration:none;transition:transform .25s,box-shadow .25s,background .25s,color .25s;cursor:pointer;white-space:nowrap}
+  .btn-primary{background:linear-gradient(140deg,var(--violet),var(--violet-deep));color:#0b0c10;font-weight:700;
+    box-shadow:0 12px 30px -10px rgba(109,95,213,.7)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 18px 40px -12px rgba(109,95,213,.85)}
+  .btn-ghost{color:var(--paper);border:1px solid var(--line)}
+  .btn-ghost:hover{border-color:var(--violet);color:var(--violet)}
+  nav .btn{padding:9px 18px;font-size:14px}
+
+  /* hero */
+  .hero{padding:64px 0 40px;position:relative}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center}
+  .eyebrow{font-family:var(--sans);font-weight:500;font-size:13px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);margin-bottom:22px}
+  h1{font-family:var(--serif);font-weight:900;font-size:clamp(44px,6.4vw,76px);line-height:1.02;letter-spacing:-.01em}
+  h1 em{font-style:italic;font-weight:500;color:var(--violet);font-family:var(--serif)}
+  .lead{font-size:19px;color:var(--dim);max-width:30em;margin:26px 0 12px;font-weight:300}
+  .cta-row{display:flex;flex-wrap:wrap;gap:14px;margin-top:30px}
+  .trust{margin-top:20px;font-size:13.5px;color:var(--faint);letter-spacing:.02em}
+  .trust b{color:var(--dim);font-weight:500}
+
+  /* phones */
+  .stage{position:relative;height:560px;display:flex;align-items:center;justify-content:center}
+  .phone{position:relative;border-radius:38px;padding:9px;background:linear-gradient(165deg,#2a2b34,#111219);
+    border:1px solid rgba(255,255,255,.09);box-shadow:0 50px 90px -34px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.03)}
+  .phone img{display:block;width:100%;border-radius:30px}
+  .phone::before{content:'';position:absolute;inset:-40px;z-index:-1;border-radius:60px;filter:blur(46px);opacity:.5;
+    background:radial-gradient(circle at 50% 30%,rgba(109,95,213,.6),transparent 66%)}
+  .ph-a{width:270px;z-index:3;animation:float 7s ease-in-out infinite}
+  .ph-b{width:224px;position:absolute;left:2%;top:16%;z-index:2;opacity:.92;transform:rotate(-9deg);animation:float 8.5s ease-in-out infinite reverse}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}
+  .ph-b{animation-name:floatB}
+  @keyframes floatB{0%,100%{transform:rotate(-9deg) translateY(0)}50%{transform:rotate(-9deg) translateY(-13px)}}
+  .chip-float{position:absolute;right:-6px;top:8%;z-index:5;background:rgba(21,23,31,.82);backdrop-filter:blur(10px);
+    border:1px solid var(--line);border-radius:16px;padding:12px 16px;box-shadow:0 20px 44px -18px rgba(0,0,0,.8);animation:float 6s ease-in-out infinite}
+  .chip-float .k{font-size:11px;color:var(--faint);letter-spacing:.05em}
+  .chip-float .v{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--up);margin-top:2px}
+  .chip-float .v small{font-size:13px;font-weight:600}
+
+  /* marquee strip */
+  .strip{border-block:1px solid var(--line);margin-top:34px;overflow:hidden;background:rgba(255,255,255,.012)}
+  .strip-in{display:flex;gap:44px;padding:16px 0;white-space:nowrap;animation:slide 26s linear infinite;width:max-content}
+  .strip span{font-size:14px;color:var(--dim);letter-spacing:.04em;display:inline-flex;align-items:center;gap:44px}
+  .strip span::after{content:'◈';color:var(--violet);font-size:11px}
+  @keyframes slide{to{transform:translateX(-50%)}}
+
+  /* sections */
+  section{position:relative;z-index:3}
+  .sec{padding:96px 0}
+  .kicker{font-family:var(--sans);font-weight:500;font-size:12.5px;letter-spacing:.3em;text-transform:uppercase;color:var(--violet);margin-bottom:18px}
+  h2{font-family:var(--serif);font-weight:700;font-size:clamp(30px,4.4vw,46px);line-height:1.1;letter-spacing:-.01em}
+  h2 em{font-style:italic;color:var(--gold);font-weight:500}
+  .feat{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;padding:60px 0;border-top:1px solid var(--line)}
+  .feat.rev .fx-text{order:2}
+  .fx-text h3{font-family:var(--serif);font-weight:700;font-size:clamp(26px,3.4vw,36px);line-height:1.14;margin-bottom:18px}
+  .fx-text p{color:var(--dim);font-size:17px;max-width:30em}
+  .fx-list{list-style:none;margin-top:22px;display:flex;flex-direction:column;gap:12px}
+  .fx-list li{display:flex;gap:12px;align-items:flex-start;font-size:15.5px;color:var(--dim)}
+  .fx-list li::before{content:'';flex:none;width:8px;height:8px;margin-top:9px;border-radius:50%;
+    background:linear-gradient(140deg,var(--violet),var(--violet-deep));box-shadow:0 0 12px rgba(109,95,213,.7)}
+  .fx-shot{display:flex;justify-content:center}
+  .fx-shot .phone{width:262px}
+
+  /* gallery */
+  .gal{display:flex;gap:22px;overflow-x:auto;padding:8px 24px 28px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .gal::-webkit-scrollbar{height:0}
+  .gal .phone{flex:none;width:230px;scroll-snap-align:center}
+  .gal-wrap{max-width:100vw}
+
+  /* number band */
+  .nums{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;border-block:1px solid var(--line);padding:56px 0}
+  .num .big{font-family:var(--serif);font-weight:900;font-size:clamp(42px,6vw,64px);line-height:1;
+    background:linear-gradient(140deg,var(--paper),var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .num .lb{margin-top:12px;color:var(--dim);font-size:15px}
+
+  /* privacy band */
+  .band{background:linear-gradient(160deg,rgba(109,95,213,.12),rgba(231,181,103,.05));border:1px solid var(--line);
+    border-radius:28px;padding:clamp(34px,5vw,64px);position:relative;overflow:hidden}
+  .band h2{max-width:14em}
+  .band p{color:var(--dim);font-size:17px;max-width:40em;margin-top:20px}
+  .lock{position:absolute;right:-30px;bottom:-40px;font-size:220px;opacity:.05;font-family:var(--serif)}
+
+  /* final cta */
+  .final{text-align:center;padding:110px 0 96px}
+  .final h2{font-size:clamp(36px,6vw,60px);max-width:16em;margin:0 auto}
+  .final .lead{margin:24px auto 34px;text-align:center}
+
+  footer{border-top:1px solid var(--line);padding:44px 0 60px;color:var(--faint);font-size:14px}
+  .foot-in{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center}
+  footer a{color:var(--dim);text-decoration:none;margin-right:22px;transition:color .2s}
+  footer a:hover{color:var(--violet)}
+  .dot-up{color:var(--up)} .dot-dn{color:var(--down)}
+
+  /* reveal */
+  .rv{opacity:0;transform:translateY(26px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1)}
+  .rv.in{opacity:1;transform:none}
+  .d1{transition-delay:.08s}.d2{transition-delay:.16s}.d3{transition-delay:.24s}.d4{transition-delay:.32s}
+
+  @media(max-width:860px){
+    .hero-grid{grid-template-columns:1fr;gap:10px}
+    .stage{height:470px;margin-top:16px}
+    .feat{grid-template-columns:1fr;gap:30px;padding:48px 0}
+    .feat.rev .fx-text{order:0}
+    .fx-shot .phone{width:240px}
+    .nums{grid-template-columns:1fr;gap:36px;text-align:center}
+    .lead{margin-inline:0}
+  }
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}.rv{transition:none;opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="glow" aria-hidden="true"></div>
+
+<nav id="nav">
+  <div class="nav-in">
+    <div class="brand"><span class="mk">◈</span>Dives</div>
+    <a class="btn btn-primary" href="https://weihao0107.github.io/Dives-web/">開啟 App</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <div class="eyebrow rv">台股 · 美股 · 加密貨幣</div>
+        <h1 class="rv d1">看懂你的每一分<br /><em>淨資產。</em></h1>
+        <p class="lead rv d2">把台股、美股、虛擬貨幣、現金與負債，收進一個乾淨、快速、零廣告的介面。<br />資料只屬於你 —— 只存在你的裝置。</p>
+        <div class="cta-row rv d3">
+          <a class="btn btn-primary" href="https://weihao0107.github.io/Dives-web/">立即使用 · 免安裝 →</a>
+          <a class="btn btn-ghost" href="#features">看看功能</a>
+        </div>
+        <div class="trust rv d4">免註冊　·　<b>完全免費</b>　·　無廣告無追蹤　·　可加入主畫面離線使用</div>
+      </div>
+      <div class="stage rv d2">
+        <div class="phone ph-b"><img src="screenshots/portfolio.png" alt="投資持倉畫面" loading="lazy" /></div>
+        <div class="phone ph-a"><img src="screenshots/assets.png" alt="資產淨資產畫面" /></div>
+        <div class="chip-float"><div class="k">今日淨資產</div><div class="v">▲ 0.48% <small>+41,473</small></div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="strip" aria-hidden="true">
+  <div class="strip-in">
+    <span>純前端 · 零後端</span><span>100% 本機資料</span><span>GitHub 私密同步</span><span>App 鎖定 · Face ID</span><span>離線可用</span><span>台股 × 美股 × 加密</span>
+    <span>純前端 · 零後端</span><span>100% 本機資料</span><span>GitHub 私密同步</span><span>App 鎖定 · Face ID</span><span>離線可用</span><span>台股 × 美股 × 加密</span>
+  </div>
+</div>
+
+<section class="sec" id="features">
+  <div class="wrap">
+    <div class="rv"><div class="kicker">Features</div>
+    <h2>你需要知道的一切，<em>剛好一頁。</em></h2></div>
+
+    <div class="feat rv">
+      <div class="fx-text">
+        <h3>一頁看懂淨資產</h3>
+        <p>淨資產 = 流動資金 ＋ 投資市值 − 負債。美金與加密自動換算台幣，手風琴式分類，每一檔的佔比一目了然。</p>
+        <ul class="fx-list">
+          <li>頂部顯示淨資產與今日漲跌，點一下進走勢圖</li>
+          <li>流動資金、投資群組、負債分類收合切換</li>
+          <li>各群組與持倉的今日損益、佔比環圈</li>
+        </ul>
+      </div>
+      <div class="fx-shot"><div class="phone"><img src="screenshots/assets.png" alt="資產畫面" loading="lazy" /></div></div>
+    </div>
+
+    <div class="feat rev rv">
+      <div class="fx-text">
+        <h3>走勢與報表，看得見的成長</h3>
+        <p>淨資產與各類別的走勢圖、漲幅與投入分解；年 → 月 → 日層層鑽取的績效報表，配上迷你走勢與累計損益摘要。</p>
+        <ul class="fx-list">
+          <li>全部 / 年初至今 / 自選日期，點擊釘選當日數值</li>
+          <li>報表頂部：累計損益、投入、市值、未實現、已實現</li>
+          <li>走勢紀錄跨裝置共用、關閉重開仍保留</li>
+        </ul>
+      </div>
+      <div class="fx-shot"><div class="phone"><img src="screenshots/report.png" alt="報表畫面" loading="lazy" /></div></div>
+    </div>
+
+    <div class="feat rv">
+      <div class="fx-text">
+        <h3>完整的交易帳本</h3>
+        <p>每一筆買入的成本、每一筆賣出的已實現損益與報酬率，全部記得清清楚楚。搜尋、依買賣／市場／時間區間篩選，頂部即時統計總投入與總獲利。</p>
+        <ul class="fx-list">
+          <li>買入顯示成本、賣出顯示獲利金額與比例</li>
+          <li>漏斗面板：買賣類型 · 市場 · 時間區間</li>
+          <li>買賣可連動現金帳戶，自動扣款 / 存入</li>
+        </ul>
+      </div>
+      <div class="fx-shot"><div class="phone"><img src="screenshots/history.png" alt="歷史交易畫面" loading="lazy" /></div></div>
+    </div>
+
+    <div class="feat rev rv">
+      <div class="fx-text">
+        <h3>隱私，是預設值</h3>
+        <p>資料只存在你的裝置。想跨裝置時，用你<strong style="color:var(--paper);font-weight:500">自己</strong>的 GitHub 私人 Gist 同步 —— 開發者與任何人都看不到。再加上 App 鎖定與一鍵隱藏金額。</p>
+        <ul class="fx-list">
+          <li>App 鎖定：PIN · Face ID · 指紋，自動鎖定</li>
+          <li>一鍵把淨資產與總倉位換成 ✱✱✱✱</li>
+          <li>CSV 備份還原，與 iOS 原生 App 相容</li>
+        </ul>
+      </div>
+      <div class="fx-shot"><div class="phone"><img src="screenshots/settings.png" alt="設定畫面" loading="lazy" /></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" style="padding-top:20px">
+  <div class="wrap rv">
+    <div class="kicker">Every screen</div>
+    <h2 style="margin-bottom:8px">從第一眼就<em>對得起你的錢。</em></h2>
+  </div>
+  <div class="gal-wrap">
+    <div class="gal rv">
+      <div class="phone"><img src="screenshots/assets.png" alt="資產" loading="lazy" /></div>
+      <div class="phone"><img src="screenshots/portfolio.png" alt="投資" loading="lazy" /></div>
+      <div class="phone"><img src="screenshots/chart.png" alt="走勢圖" loading="lazy" /></div>
+      <div class="phone"><img src="screenshots/report.png" alt="報表" loading="lazy" /></div>
+      <div class="phone"><img src="screenshots/history.png" alt="歷史" loading="lazy" /></div>
+      <div class="phone"><img src="screenshots/settings.png" alt="設定" loading="lazy" /></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" style="padding-block:40px">
+  <div class="wrap">
+    <div class="nums rv">
+      <div class="num"><div class="big">3</div><div class="lb">個市場，台股 · 美股 · 加密，一個 App</div></div>
+      <div class="num"><div class="big">0</div><div class="lb">後端伺服器　·　零廣告 · 零追蹤</div></div>
+      <div class="num"><div class="big">100%</div><div class="lb">你的資料，只存在你的裝置</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" style="padding-top:20px">
+  <div class="wrap rv">
+    <div class="band">
+      <div class="kicker">Yours, only yours</div>
+      <h2>沒有帳號，沒有雲端資料庫，<br /><em>沒有人在看你的錢。</em></h2>
+      <p>Dives 是純前端網頁 App —— 沒有後端。你的交易、餘額與淨資產只寫進瀏覽器本機儲存。開啟同步時，也只是存到你自己 GitHub 帳號裡的一個私人 Gist。這代表：沒有註冊、沒有訂閱、沒有資料外洩的對象，也永遠不會過期。</p>
+      <span class="lock" aria-hidden="true">◈</span>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap rv">
+    <h2>現在，就開始追蹤<em>屬於你的淨資產。</em></h2>
+    <p class="lead">用瀏覽器打開，加入主畫面，一分鐘就上手。免費，而且一直都會是。</p>
+    <a class="btn btn-primary" style="font-size:17px;padding:15px 30px" href="https://weihao0107.github.io/Dives-web/">立即使用 Dives →</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-in">
+    <div class="brand" style="font-size:19px"><span class="mk" style="width:22px;height:22px;font-size:13px">◈</span>Dives</div>
+    <div>
+      <a href="https://weihao0107.github.io/Dives-web/">開啟 App</a>
+      <a href="https://github.com/WeiHao0107/Dives-web">使用手冊 · 原始碼</a>
+    </div>
+    <div style="width:100%;margin-top:8px;color:var(--faint)">
+      顏色慣例：<span class="dot-up">漲紅</span> · <span class="dot-dn">跌綠</span>（台股慣例）。資料存於你的裝置本機。© Dives — 個人投資與淨資產追蹤 PWA。
+    </div>
+  </div>
+</footer>
+
+<script>
+  const nav=document.getElementById('nav');
+  addEventListener('scroll',()=>nav.classList.toggle('solid',scrollY>24),{passive:true});
+  const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.14,rootMargin:'0px 0px -8% 0px'});
+  document.querySelectorAll('.rv').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
