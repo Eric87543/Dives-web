@@ -1558,7 +1558,7 @@ App.Views = (function () {
     ], S.getPctBasis(), v => { S.setPctBasis(v); if (App.Sync) App.Sync.markDirty(); settings(root); }));
     on('set-dm', () => openChooser('當日漲跌計算', [
       { v: 'native', label: '原始', hint: '各市場自己的當日漲跌相加' },
-      { v: 'twday', label: '台股日', hint: '以台股 09:00 起算；美股未開盤顯示 0，晚上開盤才計入（凌晨那盤歸昨天）' },
+      { v: 'twday', label: '台股日', hint: '以台股 09:00 起算歸零：台股開盤前與週末顯示 0（不顯示前一交易日漲跌）；美股白天顯示 0，晚上開盤才計入（凌晨那盤歸昨天）' },
     ], S.getDayMode(), v => { S.setDayMode(v); settings(root); }));
     on('set-export', doExport);
     on('set-import', () => root.querySelector('#file-import').click());

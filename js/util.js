@@ -182,6 +182,17 @@ App.Util = (function () {
     return !(mins >= 9 * 60 && mins < usOpen);
   }
 
+  // 「台股日」模式下，台股當日漲跌是否計入今日。
+  //   平日 09:00（台股開盤）之後才計入；開盤前 or 週末 → 今日尚無台股盤 → 0
+  //   （避免假日/收盤後仍顯示前一交易日的漲跌；每天 09:00 歸零重算）
+  //   parts 可注入（供測試）；預設取台北現在時間
+  function twCountsTowardToday(parts) {
+    const p = parts || taipeiParts();
+    if (p.weekday === 'Sat' || p.weekday === 'Sun') return false;
+    const mins = p.hour * 60 + p.minute;
+    return mins >= 9 * 60;
+  }
+
   // 解析數字字串（處理逗號、空字串、"-"）
   function parseNum(s) {
     if (s === null || s === undefined) return null;
@@ -195,6 +206,6 @@ App.Util = (function () {
     Market, normalizeMarketKey, guessMarketBySymbol, marketLabel,
     sanitizeSymbol, canonicalizeTwCode,
     fmtWhole, formatShares, formatPrice, fmtKMBB, fmtBanner, fmtBannerSigned, fmtPct,
-    isoDate, taipeiParts, isWeekend, shouldUseMisRealtime, usCountsTowardToday, parseNum
+    isoDate, taipeiParts, isWeekend, shouldUseMisRealtime, usCountsTowardToday, twCountsTowardToday, parseNum
   };
 })();
