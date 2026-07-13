@@ -135,8 +135,9 @@ App.Views = (function () {
       const tot = list.reduce((s, p) => s + mvTwd(p), 0);
       const pct = totalAll > 1e-9 ? tot / totalAll * 100 : 0;
       // 該市場當日漲跌（TWD）＋比例（相對前一日市值）
-      // twday 模式：台股白天美股未開盤 → 美股卡當日漲跌顯示 0（與 Hero 一致）
-      const dayOn = S.getDayMode() !== 'twday' || M.key !== 'us' || U.usCountsTowardToday();
+      // twday 模式：美股白天未開盤 → 美股卡 0；台股開盤前/週末 → 台股卡 0；加密 24h 照算（與 Hero 一致）
+      const dayOn = S.getDayMode() !== 'twday'
+        || (M.key === 'us' ? U.usCountsTowardToday() : M.key === 'tw' ? U.twCountsTowardToday() : true);
       const dayChg = dayOn ? list.reduce((s, p) => s + (p.dailyChange || 0) * p.shares * convOf(p), 0) : 0;
       const prevMv = tot - dayChg;
       const dayChgPct = Math.abs(prevMv) > 1e-9 ? dayChg / Math.abs(prevMv) * 100 : 0;
@@ -790,11 +791,14 @@ App.Views = (function () {
       else ungrouped.push(p);
     }
     const groupTotal = gid => (byGroup[gid] || []).reduce((s, p) => s + mvTwdOf(p, rate), 0);
-    // 群組今日漲跌（TWD）：各持倉當日 × 股數 × 匯率；台股日模式下美股未開盤則當日計 0
+    // 群組今日漲跌（TWD）：各持倉當日 × 股數 × 匯率
+    // 台股日模式：美股白天未開盤 → 美股計 0；台股開盤前/週末 → 台股計 0（與 Hero 一致）
     const usGated = S.getDayMode() === 'twday' && !U.usCountsTowardToday();
+    const twGated = S.getDayMode() === 'twday' && !U.twCountsTowardToday();
     const posDayTwd = p => {
       const mk = U.normalizeMarketKey(p.market);
       if (usGated && mk === U.Market.us) return 0;
+      if (twGated && mk !== U.Market.us && mk !== U.Market.crypto) return 0; // 台股(上市/上櫃/興櫃)
       const conv = (mk === U.Market.us || mk === U.Market.crypto) ? rate : 1;
       return (p.dailyChange || 0) * p.shares * conv;
     };
