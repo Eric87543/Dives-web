@@ -27,6 +27,9 @@ App.Store = (function () {
     notif: 'dives_notifications',
     autoDiv: 'dives_auto_div',
     autoDivAcct: 'dives_auto_div_acct',
+    autoDivUs: 'dives_auto_div_us',
+    autoDivAcctUs: 'dives_auto_div_acct_us',
+    autoDivUsTax: 'dives_auto_div_us_tax',
     pctBasis: 'dives_pct_basis',
     dayMode: 'dives_day_mode',
     privacy: 'dives_privacy',
@@ -153,6 +156,15 @@ App.Store = (function () {
   function getAutoDivAcct() { return localStorage.getItem(K.autoDivAcct) || ''; }
   function setAutoDivAcct(id) { if (id) localStorage.setItem(K.autoDivAcct, id); else localStorage.removeItem(K.autoDivAcct); }
 
+  // ---- 自動匯入美股股利（需 Finnhub 金鑰才生效；預設開啟）----
+  function getAutoDivUs() { return localStorage.getItem(K.autoDivUs) !== '0'; }
+  function setAutoDivUs(v) { localStorage.setItem(K.autoDivUs, v ? '1' : '0'); }
+  function getAutoDivAcctUs() { return localStorage.getItem(K.autoDivAcctUs) || ''; }
+  function setAutoDivAcctUs(id) { if (id) localStorage.setItem(K.autoDivAcctUs, id); else localStorage.removeItem(K.autoDivAcctUs); }
+  // 美股股息預扣稅率 %（預設 30；Finnhub 給稅前,入帳存稅後淨額）
+  function getAutoDivUsTax() { const v = localStorage.getItem(K.autoDivUsTax); const n = v == null ? 30 : +v; return isFinite(n) && n >= 0 && n <= 100 ? n : 30; }
+  function setAutoDivUsTax(p) { localStorage.setItem(K.autoDivUsTax, String(p)); }
+
   // ---- 定期定額 / 定期繳款計畫 ----
   // {id, kind:'dca'|'liability', enabled, freq:'monthly'|'biweekly'|'weekly', day,
   //  startDate, endDate|null, lastRun|null, createdAt,
@@ -213,6 +225,7 @@ App.Store = (function () {
     getDividends, setDividends,
     getNotifications, setNotifications, pushNotification, unreadNotifCount, markNotificationsRead,
     getAutoDivImport, setAutoDivImport, getAutoDivAcct, setAutoDivAcct,
+    getAutoDivUs, setAutoDivUs, getAutoDivAcctUs, setAutoDivAcctUs, getAutoDivUsTax, setAutoDivUsTax,
     getGroups, setGroups, getGroupMap, setGroupMap,
     getPctBasis, setPctBasis, getDayMode, setDayMode,
     getPrivacy, setPrivacy, getChartRange, setChartRange,

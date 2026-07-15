@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v119';
+  App.VERSION = 'v120';
 
   const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -296,29 +296,37 @@
     return created;
   }
 
-  // 全自動匯入台股股利（設定預設開啟，每日掃描一次；force 可立即重掃）
-  //   資料：FinMind 股利政策(免金鑰) → 現金股利以「發放日」入帳(未發放不匯)、配股以「除息日」加股
-  //   金額：依除息日當時持股計算；入帳到設定的台幣帳戶(未設定→只記收益)
+  // 全自動匯入股利（設定預設開啟，每日掃描一次；force 可立即重掃）
+  //   台股：FinMind 股利政策(免金鑰) → 現金以「發放日」入帳台幣帳戶、配股以「除權日」加股
+  //   美股：Finnhub /stock/dividend(需自填金鑰才生效) → 稅前×(1−預扣稅率)=稅後淨額(USD)入帳美金帳戶
+  //   金額：依除息日當時持股計算；未設定帳戶 → 只記收益
   //   去重：同標的＋除息日已有紀錄(或發放日±7天)略過；多裝置靠已同步的股利紀錄防重複
   //   另推播通知：股息入帳/配股、以及 7 天內即將除息(除權)提醒
-  async function autoImportTwDividends(force) {
-    if (!S.getAutoDivImport()) return 0;
+  async function autoImportDividends(force) {
+    const twOn = S.getAutoDivImport();
+    const usOn = S.getAutoDivUs() && !!Api.finnhubKey(); // 美股前提:有 Finnhub 金鑰
+    if (!twOn && !usOn) return 0;
     const today = App.Util.isoDate();
     if (!force && localStorage.getItem('dives_autodiv_date') === today) return 0; // 每日一次
-    const mmap = S.metaMap();
-    const isTw = sym => { const m = App.Util.normalizeMarketKey(mmap[sym]?.market || App.Util.guessMarketBySymbol(sym)); return m !== App.Util.Market.us && m !== App.Util.Market.crypto; };
-    const txs = S.getTransactions();
-    const twSyms = [...new Set(txs.filter(t => isTw(t.symbol)).map(t => t.symbol))];
     localStorage.setItem('dives_autodiv_date', today);
-    if (!twSyms.length) return 0;
+    const mmap = S.metaMap();
+    const mkOf = sym => App.Util.normalizeMarketKey(mmap[sym]?.market || App.Util.guessMarketBySymbol(sym));
+    const isTw = sym => { const m = mkOf(sym); return m !== App.Util.Market.us && m !== App.Util.Market.crypto; };
+    const txs = S.getTransactions();
+    const twSyms = twOn ? [...new Set(txs.filter(t => isTw(t.symbol)).map(t => t.symbol))] : [];
+    const usSyms = usOn ? [...new Set(txs.filter(t => mkOf(t.symbol) === App.Util.Market.us).map(t => t.symbol))] : [];
+    if (!twSyms.length && !usSyms.length) return 0;
     const firstDate = {};
-    for (const t of txs) { if (!isTw(t.symbol)) continue; const d = App.Util.isoDate(new Date(t.time)); if (!firstDate[t.symbol] || d < firstDate[t.symbol]) firstDate[t.symbol] = d; }
+    for (const t of txs) { const d = App.Util.isoDate(new Date(t.time)); if (!firstDate[t.symbol] || d < firstDate[t.symbol]) firstDate[t.symbol] = d; }
     const dayDiff = (a, b) => Math.abs((new Date(a + 'T00:00:00+08:00') - new Date(b + 'T00:00:00+08:00')) / 864e5);
-    const acct = S.getCashAccounts().find(x => x.id === S.getAutoDivAcct() && x.currency === 'TWD');
-    const acctId = acct ? acct.id : undefined;
+    const twAcct = S.getCashAccounts().find(x => x.id === S.getAutoDivAcct() && x.currency === 'TWD');
+    const usAcct = S.getCashAccounts().find(x => x.id === S.getAutoDivAcctUs() && x.currency === 'USD');
+    const usTax = S.getAutoDivUsTax();
     const in7 = C.isoAddDays(today, 7);
     const ps2 = v => Math.round(v * 100) / 100;
     let imported = 0; const details = []; const touched = new Set();
+
+    // ── 台股（FinMind）──
     for (const sym of twSyms) {
       let events = [];
       try { events = await Api.fetchTwDividends(sym, firstDate[sym]); } catch (e) { events = []; }
@@ -341,8 +349,8 @@
           if (ev.payDate > today) continue; // 未到發放日
           if (divs.some(d => d.symbol === sym && (d.exDate === ev.exDate || dayDiff(d.date, ev.payDate) <= 7))) continue;
           const amount = ps2(ev.perShare * shares);
-          const r = C.addDividend({ symbolInput: sym, market, name, amount, date: ev.payDate, accountId: acctId, exDate: ev.exDate, note: '自動匯入' });
-          if (r.ok) { imported++; touched.add(sym); details.push({ kind: 'cash', sym, name, amount, payDate: ev.payDate }); }
+          const r = C.addDividend({ symbolInput: sym, market, name, amount, date: ev.payDate, accountId: twAcct ? twAcct.id : undefined, exDate: ev.exDate, note: '自動匯入' });
+          if (r.ok) { imported++; touched.add(sym); details.push({ kind: 'cash', sym, name, amount, payDate: ev.payDate, acctName: twAcct ? twAcct.name : null }); }
         } else {
           if (stockTxs.some(t => t.symbol === sym && dayDiff(App.Util.isoDate(new Date(t.time)), ev.exDate) <= 7)) continue;
           const cs = ps2(shares * ev.perShare / 10); // 配股率 = 每股股票股利(元)/面額10
@@ -352,15 +360,45 @@
         }
       }
     }
+
+    // ── 美股（Finnhub，稅後淨額入帳）──
+    for (const sym of usSyms) {
+      let events = [];
+      try { events = await Api.fetchUsDividends(sym, firstDate[sym]); } catch (e) { events = []; }
+      const divs = S.getDividends();
+      const name = mmap[sym]?.name || sym;
+      for (const ev of events) {
+        if (ev.exDate > today) {
+          if (ev.exDate <= in7 && C.sharesHeldBefore(sym, '9999-12-31') > 0) {
+            S.pushNotification({ type: 'exdiv', key: 'exdiv:' + sym + ':' + ev.exDate + ':cash',
+              title: sym + ' ' + name + ' 即將除息', body: ev.exDate + '・每股 $' + ps2(ev.perShare) });
+          }
+          continue;
+        }
+        const shares = C.sharesHeldBefore(sym, ev.exDate);
+        if (!(shares > 0)) continue;
+        if (ev.payDate > today) continue;
+        if (divs.some(d => d.symbol === sym && (d.exDate === ev.exDate || dayDiff(d.date, ev.payDate) <= 7))) continue;
+        const amount = ps2(ev.perShare * shares * (1 - usTax / 100)); // 稅後淨額(USD)
+        if (!(amount > 0)) continue;
+        const r = C.addDividend({ symbolInput: sym, market: 'us', name, amount, date: ev.payDate, accountId: usAcct ? usAcct.id : undefined, exDate: ev.exDate, note: '自動匯入(稅後' + usTax + '%)' });
+        if (r.ok) { imported++; touched.add(sym); details.push({ kind: 'cash', us: true, sym, name, amount, payDate: ev.payDate, acctName: usAcct ? usAcct.name : null }); }
+      }
+    }
+
     if (imported > 0) {
+      const money = d => d.us ? '$' + App.Util.formatPrice(d.amount) : 'NT$ ' + App.Util.fmtWhole(d.amount);
       if (imported <= 4) { // 少量逐筆通知;首次大量回補則彙總一則
         for (const d of details) S.pushNotification(d.kind === 'cash'
-          ? { type: 'div', title: d.sym + ' ' + d.name + ' 股息入帳 NT$ ' + App.Util.fmtWhole(d.amount), body: (acctId ? '已入帳 ' + acct.name + '・' : '') + '發放日 ' + d.payDate }
+          ? { type: 'div', title: d.sym + ' ' + d.name + ' 股息入帳 ' + money(d), body: (d.acctName ? '已入帳 ' + d.acctName + '・' : '') + '發放日 ' + d.payDate }
           : { type: 'div', title: d.sym + ' ' + d.name + ' 配股 +' + App.Util.formatShares(d.shares) + ' 股', body: '除權日 ' + d.exDate });
       } else {
-        const sum = details.filter(d => d.kind === 'cash').reduce((s, d) => s + d.amount, 0);
-        S.pushNotification({ type: 'div', title: '自動匯入 ' + imported + ' 筆台股股利',
-          body: (sum > 0 ? '現金合計 NT$ ' + App.Util.fmtWhole(sum) : '') + (acctId ? '・已入帳 ' + acct.name : '') });
+        const twSum = details.filter(d => d.kind === 'cash' && !d.us).reduce((s, d) => s + d.amount, 0);
+        const usSum = details.filter(d => d.kind === 'cash' && d.us).reduce((s, d) => s + d.amount, 0);
+        const parts = [];
+        if (twSum > 0) parts.push('台股 NT$ ' + App.Util.fmtWhole(twSum));
+        if (usSum > 0) parts.push('美股 $' + App.Util.formatPrice(usSum));
+        S.pushNotification({ type: 'div', title: '自動匯入 ' + imported + ' 筆股利', body: parts.join('・') });
       }
       C.saveTodaySnapshot();
       if (App.Sync) App.Sync.markDirty();
@@ -443,7 +481,7 @@
   App.snapshotGapDays = snapshotGapDays;
   App.maybeBackfill = maybeBackfill;
   App.runRecurringPlans = runRecurringPlans;
-  App.autoImportTwDividends = autoImportTwDividends;
+  App.autoImportDividends = autoImportDividends;
   App.seedDemo = seedDemo;
 
   // 初始化
@@ -516,7 +554,7 @@
       } catch (e) { console.warn('recurring failed', e); }
       // 全自動匯入台股股利（每日一次；含即將除息提醒）
       try {
-        const nd = await autoImportTwDividends();
+        const nd = await autoImportDividends();
         if (nd > 0) { renderCurrent(); UI.toast(`已自動匯入 ${nd} 筆台股股利`, 'success'); }
         else renderCurrent(); // 讓鈴鐺紅點反映新提醒(如即將除息)
       } catch (e) { console.warn('auto dividends failed', e); }

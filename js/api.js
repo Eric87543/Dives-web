@@ -189,6 +189,20 @@ App.Api = (function () {
     } catch (e) { return []; }
   }
 
+  // ---- 美股股利（Finnhub /stock/dividend，需自填金鑰）供自動匯入 ----
+  // 回傳升序 [{type:'cash', exDate, payDate, perShare(USD,稅前)}]；無金鑰回 []
+  async function fetchUsDividends(symbol, from) {
+    if (!finnhubKey()) return [];
+    try {
+      const to = U.isoDate(new Date(Date.now() + 30 * 864e5)); // 往後 30 天,涵蓋已宣告的未來配息(供除息提醒)
+      const j = await fetchJson('https://finnhub.io/api/v1/stock/dividend?symbol=' + encodeURIComponent(symbol) +
+        '&from=' + encodeURIComponent(from || '2015-01-01') + '&to=' + to + '&token=' + encodeURIComponent(finnhubKey()));
+      return (Array.isArray(j) ? j : []).map(r => ({ type: 'cash', exDate: r.date, payDate: r.payDate || r.date, perShare: +r.amount || 0 }))
+        .filter(e => e.exDate && e.perShare > 0)
+        .sort((a, b) => a.exDate < b.exDate ? -1 : 1);
+    } catch (e) { return []; }
+  }
+
   // ---- 台股盤中即時（TWSE MIS，經 proxy；可批次多檔）----
   // 回傳 {code: {price, dailyChange, prevClose}}；盤中時段使用
   async function fetchTwRealtime(metas) {
@@ -470,5 +484,5 @@ App.Api = (function () {
     return results.slice(0, 30);
   }
 
-  return { fetchText, fetchJson, loadTwUniverse, fetchTwPrice, fetchTwHistory, fetchUsHistory, fetchDailySeries, fetchTwDividends, fetchTwRealtime, fetchUsQuote, fetchCryptoQuotes, fetchCryptoHistory, cacheCgId, fetchFx, refreshPrices, searchSymbols, finnhubKey };
+  return { fetchText, fetchJson, loadTwUniverse, fetchTwPrice, fetchTwHistory, fetchUsHistory, fetchDailySeries, fetchTwDividends, fetchUsDividends, fetchTwRealtime, fetchUsQuote, fetchCryptoQuotes, fetchCryptoHistory, cacheCgId, fetchFx, refreshPrices, searchSymbols, finnhubKey };
 })();

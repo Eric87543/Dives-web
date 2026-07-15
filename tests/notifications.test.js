@@ -48,3 +48,20 @@ test('clearAll：一併清空通知', () => {
   S.clearAll();
   assert.deepEqual(S.getNotifications(), []);
 });
+
+test('自動匯入美股股利設定：預設開啟、帳戶、稅率預設 30 且夾在 0–100', () => {
+  assert.equal(S.getAutoDivUs(), true);
+  S.setAutoDivUs(false);
+  assert.equal(S.getAutoDivUs(), false);
+  S.setAutoDivUs(true);
+  assert.equal(S.getAutoDivAcctUs(), '');
+  S.setAutoDivAcctUs('usd-1');
+  assert.equal(S.getAutoDivAcctUs(), 'usd-1');
+  assert.equal(S.getAutoDivUsTax(), 30);        // 預設 30%
+  S.setAutoDivUsTax(15);
+  assert.equal(S.getAutoDivUsTax(), 15);
+  S.setAutoDivUsTax(0);
+  assert.equal(S.getAutoDivUsTax(), 0);          // 0 合法(記稅前全額)
+  localStorage.setItem('dives_auto_div_us_tax', '999'); // 異常值 → 回預設
+  assert.equal(S.getAutoDivUsTax(), 30);
+});
