@@ -715,6 +715,30 @@ App.Calc = (function () {
     return Math.round(fee * 100) / 100;
   }
 
+  // 期間實際投入（TWD，FX 中性）：直接由「交易」計算，不用快照的成本基礎差
+  //   背景：usCostBasisTwd 以「當日匯率」換算，會隨匯率漂移；用 Δ成本 當「本期投入」會在
+  //   沒有任何交易的期間出現假投入（重建歷史因全程用同一匯率才剛好歸零）。改由交易直接算：
+  //   買入 +（股數×價＋手續費）；賣出 −（股數×賣出時均價，即移除的成本）；美股/加密以目前匯率換算。
+  //   from 為前一期日期（不含），to 為本期日期（含）；from 為 null → 自始累計。
+  function investedBetween(from, to) {
+    if (!to) return 0;
+    const rate = S.getFxRate() || 31.5;
+    const mmap = S.metaMap();
+    const isUsd = sym => { const m = U.normalizeMarketKey((mmap[sym] && mmap[sym].market) || U.guessMarketBySymbol(sym)); return m === U.Market.us || m === U.Market.crypto; };
+    const inWin = d => (!from || d > from) && d <= to;
+    let sum = 0;
+    for (const t of S.getTransactions()) {
+      if (t.type !== 'BUY') continue;
+      if (!inWin(U.isoDate(new Date(t.time)))) continue;
+      sum += (t.shares * t.price + (t.fee || 0)) * (isUsd(t.symbol) ? rate : 1);
+    }
+    for (const r of S.getRealized()) {
+      if (!inWin(U.isoDate(new Date(r.time)))) continue;
+      sum -= (r.shares * r.avgCost) * (isUsd(r.symbol) ? rate : 1);
+    }
+    return sum;
+  }
+
   // 對負債套用一期繳款：餘額扣 pay(不超付/不為負)，若指定現金帳戶則同幣別同步扣款
   function applyLiabilityPayment(liabilityId, amount, accountId) {
     const list = S.getLiabilities();
@@ -734,6 +758,6 @@ App.Calc = (function () {
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
     netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats,
-    recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment,
+    recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment, investedBetween,
   };
 })();

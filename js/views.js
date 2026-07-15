@@ -544,7 +544,8 @@ App.Views = (function () {
       label,
       // 總倉位 = 台股 + 美股 + 加密 總市值（欄位名沿用 netAsset 以相容既有圖表）
       netAsset: s.totalMarketValueTwd != null ? s.totalMarketValueTwd : (s.netAsset || 0),
-      newInvestment: cost - (prev ? prev.totalCostBasisTwd : 0),
+      // 本期投入：由交易直接算（FX 中性），避免匯率漂移在無交易期間造成假投入
+      newInvestment: C.investedBetween(prev ? prev.date : null, s.date),
       periodPnl: pPnl,
       totalPnl: s.totalPnl,
       returnPct: s.totalReturnPct,
