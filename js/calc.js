@@ -739,6 +739,23 @@ App.Calc = (function () {
     return sum;
   }
 
+  // 期間手續費統計（TWD）：{total, buy, sell, count}
+  //   from/to 為含頭尾的 ISO 日期（皆選填；空 = 不限）；美股/加密手續費以目前匯率換算 TWD
+  function feesSummary(from, to) {
+    const rate = S.getFxRate() || 31.5;
+    const mmap = S.metaMap();
+    const isUsd = sym => { const m = U.normalizeMarketKey((mmap[sym] && mmap[sym].market) || U.guessMarketBySymbol(sym)); return m === U.Market.us || m === U.Market.crypto; };
+    const inWin = d => (!from || d >= from) && (!to || d <= to);
+    let total = 0, buy = 0, sell = 0, count = 0;
+    for (const t of S.getTransactions()) {
+      if (!inWin(U.isoDate(new Date(t.time)))) continue;
+      const f = (t.fee || 0) * (isUsd(t.symbol) ? rate : 1);
+      total += f; count++;
+      if (t.type === 'BUY') buy += f; else sell += f;
+    }
+    return { total, buy, sell, count };
+  }
+
   // 對負債套用一期繳款：餘額扣 pay(不超付/不為負)，若指定現金帳戶則同幣別同步扣款
   function applyLiabilityPayment(liabilityId, amount, accountId) {
     const list = S.getLiabilities();
@@ -758,6 +775,6 @@ App.Calc = (function () {
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
     netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats,
-    recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment, investedBetween,
+    recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment, investedBetween, feesSummary,
   };
 })();

@@ -326,6 +326,20 @@ App.Views = (function () {
       ${row('最賠一筆', worst, { trade: true })}
     </div>`;
 
+    // 手續費統計卡（本期/全部歷史；美股・加密以目前匯率換算 TWD）
+    const fee = C.feesSummary(scope && scope.from, scope && scope.to);
+    const nt = v => 'NT$ ' + U.fmtKMBB(v || 0);
+    const feeCard = `<div class="card stats-card">
+      <div class="stats-title">手續費</div>
+      <div class="tr-row"><div class="tr-amt">${nt(fee.total)}</div></div>
+      <div class="tr-grid">
+        <div class="trg"><span class="trg-k">買入手續費</span><span class="trg-v">${nt(fee.buy)}</span></div>
+        <div class="trg"><span class="trg-k">賣出手續費</span><span class="trg-v">${nt(fee.sell)}</span></div>
+        <div class="trg"><span class="trg-k">交易筆數</span><span class="trg-v">${fee.count} 筆</span></div>
+        <div class="trg"><span class="trg-k">平均每筆</span><span class="trg-v">${nt(fee.count ? fee.total / fee.count : 0)}</span></div>
+      </div>
+    </div>`;
+
     if (level === 'all') {
       const st = C.tradingStats();
       const sm = C.buildSummary(C.buildPositions()); // 累計報酬（vs 投入本金）
@@ -343,6 +357,7 @@ App.Views = (function () {
             <div class="trg"><span class="trg-k">已實現</span><span class="trg-v" style="color:${col(sm.totalRealizedPnl)}">${sf(sm.totalRealizedPnl)}</span></div>
           </div>
         </div>
+        ${feeCard}
         ${perfCard(st.period.all, ['day', 'week', 'month', 'year'])}
         ${tradeCard(st.bestTrade, st.worstTrade)}
         <div class="card stats-card">
@@ -362,6 +377,7 @@ App.Views = (function () {
           <div class="tr-pct" style="color:${col(st.periodReturnPct || 0)}">${pctTxt(st.periodReturnPct || 0)}</div>
         </div>
       </div>
+      ${feeCard}
       ${perfCard(st.period, grans)}
       ${tradeCard(st.bestTrade, st.worstTrade)}`;
   }
