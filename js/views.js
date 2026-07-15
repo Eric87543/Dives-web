@@ -377,18 +377,18 @@ App.Views = (function () {
       const sm = C.buildSummary(C.buildPositions()); // 累計報酬（vs 投入本金）
       return `
         <div class="card stats-card">
-          <div class="stats-title">自投入本金以來</div>
+          <div class="stats-title">自投入本金以來${sm.totalDividendTwd > 0 ? '（含息）' : ''}</div>
           <div class="tr-row">
-            <div class="tr-amt" style="color:${col(sm.totalPnl)}">${sf(sm.totalPnl)}</div>
-            <div class="tr-pct" style="color:${col(sm.totalReturnPct || 0)}">${pctTxt(sm.totalReturnPct || 0)}</div>
+            <div class="tr-amt" style="color:${col(sm.totalPnlWithDiv)}">${sf(sm.totalPnlWithDiv)}</div>
+            <div class="tr-pct" style="color:${col(sm.totalReturnWithDivPct || 0)}">${pctTxt(sm.totalReturnWithDivPct || 0)}</div>
           </div>
           <div class="tr-grid">
             <div class="trg"><span class="trg-k">投入本金</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalCostBasisTwd)}</span></div>
             <div class="trg"><span class="trg-k">目前市值</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalMarketValueTwd)}</span></div>
             <div class="trg"><span class="trg-k">未實現</span><span class="trg-v" style="color:${col(sm.totalUnrealizedPnl)}">${sf(sm.totalUnrealizedPnl)}</span></div>
             <div class="trg"><span class="trg-k">已實現</span><span class="trg-v" style="color:${col(sm.totalRealizedPnl)}">${sf(sm.totalRealizedPnl)}</span></div>
-            <div class="trg"><span class="trg-k">股息收入</span><span class="trg-v">${sf(sm.totalDividendTwd)}</span></div>
-            <div class="trg"><span class="trg-k">含息報酬率</span><span class="trg-v" style="color:${col(sm.totalReturnWithDivPct || 0)}">${pctTxt(sm.totalReturnWithDivPct || 0)}</span></div>
+            <div class="trg"><span class="trg-k">股息收入</span><span class="trg-v" style="color:${col(sm.totalDividendTwd)}">${sf(sm.totalDividendTwd)}</span></div>
+            <div class="trg"><span class="trg-k">資本報酬率</span><span class="trg-v" style="color:${col(sm.totalReturnPct || 0)}">${pctTxt(sm.totalReturnPct || 0)}</span></div>
           </div>
         </div>
         ${feeCard}
@@ -406,10 +406,10 @@ App.Views = (function () {
     const st = C.scopedStats(scope.from, scope.to, grans);
     return `
       <div class="card stats-card">
-        <div class="stats-title">本期損益</div>
+        <div class="stats-title">本期損益${st.periodDividend > 0 ? '（含息）' : ''}</div>
         <div class="tr-row">
-          <div class="tr-amt" style="color:${col(st.periodPnl)}">${sf(st.periodPnl)}</div>
-          <div class="tr-pct" style="color:${col(st.periodReturnPct || 0)}">${pctTxt(st.periodReturnPct || 0)}</div>
+          <div class="tr-amt" style="color:${col((st.periodPnl || 0) + (st.periodDividend || 0))}">${sf((st.periodPnl || 0) + (st.periodDividend || 0))}</div>
+          <div class="tr-pct" style="color:${col(st.periodReturnWithDivPct || 0)}">${pctTxt(st.periodReturnWithDivPct || 0)}</div>
         </div>
       </div>
       ${feeCard}
@@ -649,6 +649,9 @@ App.Views = (function () {
       dividendCum: cumDiv,
       periodDividend: periodDiv,
       returnWithDivPct: cost > 1e-9 ? (s.totalPnl + cumDiv) / cost * 100 : 0,
+      // 含息損益 = 資本損益 + 股息（累計損益/本期損益 一律用此）
+      periodPnlDiv: pPnl + periodDiv,
+      periodReturnDivPct: cost > 1e-9 ? (pPnl + periodDiv) / cost * 100 : 0,
       periodRealizedPnl: s.realizedPnl - (prev ? prev.realizedPnl : 0),
       unrealizedPnl: s.unrealizedPnl,
     };
@@ -690,17 +693,17 @@ App.Views = (function () {
       if (allSnaps.length) {
         const last = allSnaps[allSnaps.length - 1];
         const hero = mkReport('', last, null, cl);
-        const col = UI.pnlColor(hero.periodPnl);
+        const col = UI.pnlColor(hero.periodPnlDiv);
         topHtml += `<div class="rep-hero">
-          <div class="nw-cap">累計損益</div>
-          <div class="rep-heroline"><span class="nw-num" style="color:${col}">${U.fmtBannerSigned(hero.periodPnl)}</span><span class="rep-heropct" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">${U.fmtPct(hero.periodReturnPct)}</span></div>
-          ${sparklineHtml(allSnaps.map(s => s.totalPnl || 0), col)}
+          <div class="nw-cap">累計損益${hero.dividendCum > 0 ? ' · 含息' : ''}</div>
+          <div class="rep-heroline"><span class="nw-num" style="color:${col}">${U.fmtBannerSigned(hero.periodPnlDiv)}</span><span class="rep-heropct" style="color:${UI.pnlColor(hero.periodReturnDivPct || 0)}">${U.fmtPct(hero.periodReturnDivPct)}</span></div>
+          ${sparklineHtml(allSnaps.map(s => (s.totalPnl || 0) + C.dividendsUpTo(s.date)), col)}
           <div class="rep-chips">
             <span>投入本金 <b>NT$ ${U.fmtKMBB(last.totalCostBasisTwd)}</b></span>
             <span>目前市值 <b>NT$ ${U.fmtKMBB(last.totalMarketValueTwd || 0)}</b></span>
             <span>未實現 <b style="color:${UI.pnlColor(last.unrealizedPnl)}">${U.fmtBannerSigned(last.unrealizedPnl)}</b></span>
             <span>已實現 <b style="color:${UI.pnlColor(last.realizedPnl)}">${U.fmtBannerSigned(last.realizedPnl)}</b></span>
-            ${hero.dividendCum > 0 ? `<span>股息 <b style="color:${UI.pnlColor(1)}">${U.fmtBannerSigned(hero.dividendCum)}</b></span><span>含息報酬率 <b style="color:${UI.pnlColor(hero.returnWithDivPct)}">${U.fmtPct(hero.returnWithDivPct)}</b></span>` : ''}
+            ${hero.dividendCum > 0 ? `<span>股息 <b style="color:${UI.pnlColor(1)}">${U.fmtBannerSigned(hero.dividendCum)}</b></span><span>資本報酬率 <b style="color:${UI.pnlColor(hero.returnPct || 0)}">${U.fmtPct(hero.returnPct)}</b></span>` : ''}
           </div>
         </div>`;
       }
@@ -720,11 +723,11 @@ App.Views = (function () {
       }
       const hero = hSnaps.length ? mkReport('', hSnaps[hSnaps.length - 1], hPrev, cl) : null;
       if (hero) {
-        const col = UI.pnlColor(hero.periodPnl);
+        const col = UI.pnlColor(hero.periodPnlDiv);
         topHtml += `<div class="rep-hero">
-          <div class="nw-cap">${hLabel}</div>
-          <div class="rep-heroline"><span class="nw-num" style="color:${col}">${U.fmtBannerSigned(hero.periodPnl)}</span><span class="rep-heropct" style="color:${UI.pnlColor(hero.periodReturnPct || 0)}">${U.fmtPct(hero.periodReturnPct)}</span></div>
-          ${sparklineHtml(hSnaps.map(s => s.totalPnl || 0), col)}
+          <div class="nw-cap">${hLabel}${hero.periodDividend > 0 ? ' · 含息' : ''}</div>
+          <div class="rep-heroline"><span class="nw-num" style="color:${col}">${U.fmtBannerSigned(hero.periodPnlDiv)}</span><span class="rep-heropct" style="color:${UI.pnlColor(hero.periodReturnDivPct || 0)}">${U.fmtPct(hero.periodReturnDivPct)}</span></div>
+          ${sparklineHtml(hSnaps.map(s => (s.totalPnl || 0) + C.dividendsUpTo(s.date)), col)}
         </div>`;
       }
     }
@@ -747,8 +750,8 @@ App.Views = (function () {
             <div class="rep-prow-sub">總倉位 ${U.fmtKMBB(r.netAsset)} · 投入 ${U.fmtBannerSigned(r.newInvestment)}${r.periodDividend > 0 ? ' · 股息 ' + U.fmtBannerSigned(r.periodDividend) : ''}</div>
           </div>
           <div class="rep-prow-val">
-            <div class="rep-prow-pnl" style="color:${UI.pnlColor(r.periodPnl)}">${U.fmtBannerSigned(r.periodPnl)}</div>
-            <div class="rep-prow-pct" style="color:${UI.pnlColor(r.periodReturnPct)}">${U.fmtPct(r.periodReturnPct)}</div>
+            <div class="rep-prow-pnl" style="color:${UI.pnlColor(r.periodPnlDiv)}">${U.fmtBannerSigned(r.periodPnlDiv)}</div>
+            <div class="rep-prow-pct" style="color:${UI.pnlColor(r.periodReturnDivPct)}">${U.fmtPct(r.periodReturnDivPct)}</div>
           </div>
           ${drill ? '<span class="rep-prow-chev">›</span>' : ''}
         </div>`;

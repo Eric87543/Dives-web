@@ -726,13 +726,15 @@ App.Calc = (function () {
     const period = {};
     for (const g of (grans || ['day', 'week', 'month'])) period[g] = periodExtremes(g);
 
-    // 區間損益 = 區間最後一筆 totalPnl − 基準 totalPnl
-    let periodPnl = null, periodReturnPct = null;
+    // 區間損益 = 區間最後一筆 totalPnl − 基準 totalPnl（含息 = 再加上區間收到的股息）
+    let periodPnl = null, periodReturnPct = null, periodDividend = 0, periodReturnWithDivPct = null;
     if (inRange.length) {
       const last = inRange[inRange.length - 1];
       periodPnl = (last.totalPnl || 0) - (base ? (base.totalPnl || 0) : 0);
       const cost = last.totalCostBasisTwd || 0;
       periodReturnPct = cost > 1e-9 ? periodPnl / cost * 100 : 0;
+      periodDividend = dividendsBetween(from, to).total; // 區間股息(TWD)
+      periodReturnWithDivPct = cost > 1e-9 ? (periodPnl + periodDividend) / cost * 100 : 0;
     }
 
     // 該區間單筆交易之最（已實現，依成交日過濾）
@@ -747,7 +749,7 @@ App.Calc = (function () {
       if (r.realizedPnl < 0 && (!worstTrade || r.realizedPnl < worstTrade.amount)) worstTrade = rec;
     }
 
-    return { period, periodPnl, periodReturnPct, bestTrade, worstTrade };
+    return { period, periodPnl, periodReturnPct, periodDividend, periodReturnWithDivPct, bestTrade, worstTrade };
   }
 
   // ===== 定期定額 / 定期繳款（排程為純函式，可測試）=====

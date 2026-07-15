@@ -150,3 +150,18 @@ test('sharesHeldBefore：除息日(不含當日)前的持股', () => {
   assert.equal(C.sharesHeldBefore('2330', '2026-06-11'), 150); // 兩筆都在除息日之前
   assert.equal(C.sharesHeldBefore('2330', '2026-01-01'), 0);   // 都還沒買
 });
+
+test('scopedStats：本期損益含息 = 資本損益 + 區間股息', () => {
+  S.setFxRate(30);
+  S.upsertMeta([{ code: '2330', name: '台積電', market: 'tse' }]);
+  S.setSnapshots([
+    { date: '2025-12-31', totalPnl: 1000, totalCostBasisTwd: 50000, realizedPnl: 0 },
+    { date: '2026-06-30', totalPnl: 4000, totalCostBasisTwd: 50000, realizedPnl: 0 },
+  ]);
+  S.setDividends([{ id: 'd1', symbol: '2330', market: 'tse', amount: 1500, date: '2026-03-10' }]);
+  const st = C.scopedStats('2026-01-01', '2026-12-31', ['month']);
+  assert.equal(Math.round(st.periodPnl), 3000);                 // 4000 − 1000(基準)
+  assert.equal(Math.round(st.periodDividend), 1500);            // 區間股息
+  assert.equal(Math.round((st.periodPnl + st.periodDividend)), 4500); // 含息損益
+  assert.ok(Math.abs(st.periodReturnWithDivPct - 9) < 0.01);    // 4500/50000 = 9%
+});
