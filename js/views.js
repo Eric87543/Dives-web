@@ -1607,6 +1607,7 @@ App.Views = (function () {
     if (set.sub === 'lock') return settingsLock(root);
     if (set.sub === 'adv') return settingsAdv(root);
     if (set.sub === 'recurring') return settingsRecurring(root);
+    if (set.sub === 'autodiv') return settingsAutoDiv(root);
     const lastTs = S.getPricesTs(), rate = S.getFxRate();
     const syncOn = !!(App.Sync && App.Sync.enabled());
     const lockOn = !!(App.Auth && App.Auth.isEnabled());
@@ -1629,11 +1630,10 @@ App.Views = (function () {
     <div class="s-head">自動化</div>
     <div class="s-list">
       ${nav('repeat', 'set-recurring', '定期定額・定期繳款', (() => { const n = S.getRecurringPlans().filter(p => p && p.enabled !== false).length; return n ? n + ' 個' : ''; })())}
-      ${nav('bell', 'set-autodiv', '自動匯入台股股利', S.getAutoDivImport() ? '開啟' : '關閉')}
-      ${nav('coin', 'set-autodiv-acct', '台股股息入帳帳戶', (() => { const a = S.getCashAccounts().find(x => x.id === S.getAutoDivAcct()); return a ? a.name : '不入帳'; })())}
-      ${nav('bell', 'set-autodiv-us', '自動匯入美股股利', App.Api.finnhubKey() ? (S.getAutoDivUs() ? '開啟' : '關閉') : '需 Finnhub 金鑰')}
-      ${nav('coin', 'set-autodiv-acct-us', '美股股息入帳帳戶', (() => { const a = S.getCashAccounts().find(x => x.id === S.getAutoDivAcctUs()); return a ? a.name : '不入帳'; })())}
-      ${nav('info', 'set-autodiv-us-tax', '美股股息預扣稅率', S.getAutoDivUsTax() + '%')}
+      ${nav('bell', 'set-autodiv-page', '自動股利匯入', (() => {
+        const tw = S.getAutoDivImport(), us = S.getAutoDivUs() && App.Api.finnhubKey();
+        return tw && us ? '台股・美股' : tw ? '台股' : us ? '美股' : '關閉';
+      })())}
     </div>
     <div class="s-head">資料</div>
     <div class="s-list">
@@ -1666,53 +1666,7 @@ App.Views = (function () {
     on('set-lock', () => { set.sub = 'lock'; settings(root); });
     on('set-adv', () => { set.sub = 'adv'; settings(root); });
     on('set-recurring', () => { set.sub = 'recurring'; settings(root); });
-    on('set-autodiv', () => openChooser('自動匯入台股股利', [
-      { v: '1', label: '開啟', hint: '每日自動掃描 FinMind 股利政策，依除息日持股匯入現金股息與配股，並推播通知' },
-      { v: '0', label: '關閉', hint: '不自動匯入（歷史頁既有紀錄仍可編輯）' },
-    ], S.getAutoDivImport() ? '1' : '0', v => {
-      S.setAutoDivImport(v === '1'); settings(root);
-      if (v === '1' && App.autoImportDividends) {
-        UI.toast('掃描台股股利中…', 'info');
-        App.autoImportDividends(true).then(n => { UI.toast(n > 0 ? `已自動匯入 ${n} 筆股利` : '沒有新的股利', n > 0 ? 'success' : 'info'); App.renderCurrent(); });
-      }
-    }));
-    on('set-autodiv-acct', () => {
-      const accts = S.getCashAccounts().filter(a => a.currency === 'TWD');
-      openChooser('台股股息入帳帳戶', [
-        { v: '', label: '不入帳', hint: '只計入收益統計，不動現金帳戶' },
-        ...accts.map(a => ({ v: a.id, label: a.name, hint: 'NT$ ' + U.formatPrice(a.balance || 0) })),
-      ], S.getAutoDivAcct(), v => { S.setAutoDivAcct(v); settings(root); });
-    });
-    on('set-autodiv-us', () => {
-      if (!App.Api.finnhubKey()) { // 前提:需自填 Finnhub 金鑰才可設定
-        UI.toast('請先於「報價來源與代理」填入 Finnhub 金鑰', 'info');
-        set.sub = 'adv'; settings(root);
-        return;
-      }
-      openChooser('自動匯入美股股利', [
-        { v: '1', label: '開啟', hint: '每日掃描美股配息（Finnhub；免費方案無股利權限時自動改用 Yahoo），依除息日持股、以稅後淨額(USD)入帳' },
-        { v: '0', label: '關閉', hint: '不自動匯入美股股利' },
-      ], S.getAutoDivUs() ? '1' : '0', v => {
-        S.setAutoDivUs(v === '1'); settings(root);
-        if (v === '1' && App.autoImportDividends) {
-          UI.toast('掃描美股股利中…', 'info');
-          App.autoImportDividends(true).then(n => { UI.toast(n > 0 ? `已自動匯入 ${n} 筆股利` : '沒有新的股利', n > 0 ? 'success' : 'info'); App.renderCurrent(); });
-        }
-      });
-    });
-    on('set-autodiv-acct-us', () => {
-      const accts = S.getCashAccounts().filter(a => a.currency === 'USD');
-      openChooser('美股股息入帳帳戶', [
-        { v: '', label: '不入帳', hint: '只計入收益統計，不動現金帳戶' },
-        ...accts.map(a => ({ v: a.id, label: a.name, hint: '$ ' + U.formatPrice(a.balance || 0) })),
-      ], S.getAutoDivAcctUs(), v => { S.setAutoDivAcctUs(v); settings(root); });
-    });
-    on('set-autodiv-us-tax', () => openChooser('美股股息預扣稅率', [
-      { v: '30', label: '30%', hint: '台灣投資人預設（非稅約國預扣）' },
-      { v: '15', label: '15%', hint: '稅約國稅率' },
-      { v: '10', label: '10%' },
-      { v: '0', label: '0%', hint: '記稅前全額' },
-    ], String(S.getAutoDivUsTax()), v => { S.setAutoDivUsTax(+v); settings(root); }));
+    on('set-autodiv-page', () => { set.sub = 'autodiv'; settings(root); });
     on('set-refresh-now', () => { UI.toast('更新中…', 'info'); App.refresh(undefined, true); });
     on('set-pb', () => openChooser('投資佔比基準', [
       { v: 'group', label: '組內', hint: '以所屬群組總額為分母' },
@@ -1823,6 +1777,68 @@ App.Views = (function () {
       S.setProxy(px);
       UI.toast('已儲存進階設定', 'success');
     });
+  }
+
+  // ── 設定子頁：自動股利匯入（台股/美股 分組 + iOS 開關）──
+  function settingsAutoDiv(root) {
+    const hasKey = !!App.Api.finnhubKey();
+    const twOn = S.getAutoDivImport();
+    const usOn = S.getAutoDivUs();
+    const acctName = (id, fallback) => { const a = S.getCashAccounts().find(x => x.id === id); return a ? a.name : fallback; };
+    const swRow = (label, id, on) => `<div class="s-row s-info"><span class="s-label">${label}</span>
+      <label class="switch" style="margin-left:auto"><input type="checkbox" id="${id}"${on ? ' checked' : ''}><span></span></label></div>`;
+    const navRow = (id, label, val) => `<button class="s-row" id="${id}"><span class="s-label">${label}</span><span class="s-val">${val}</span><span class="s-chev">›</span></button>`;
+
+    let usHtml;
+    if (!hasKey) {
+      usHtml = `<button class="s-row" id="ad-us-key"><span class="s-label">需 Finnhub 金鑰，前往填寫</span><span class="s-chev">›</span></button>`;
+    } else {
+      usHtml = swRow('自動匯入', 'ad-us-sw', usOn)
+        + navRow('ad-us-acct', '入帳帳戶', acctName(S.getAutoDivAcctUs(), '不入帳'))
+        + navRow('ad-us-tax', '預扣稅率', S.getAutoDivUsTax() + '%');
+    }
+    root.innerHTML = `<div class="page-full">${setSubHead('自動股利匯入')}
+      <div class="s-head">台股（FinMind・免金鑰）</div>
+      <div class="s-list">
+        ${swRow('自動匯入', 'ad-tw-sw', twOn)}
+        ${navRow('ad-tw-acct', '入帳帳戶', acctName(S.getAutoDivAcct(), '不入帳'))}
+      </div>
+      <div class="s-head">美股（Finnhub 金鑰・Yahoo 後備）</div>
+      <div class="s-list">${usHtml}</div>
+      <div class="set-hint" style="margin-top:12px">開啟後每日自動掃描一次：依「除息日當時持股」計算，現金股息入帳所選帳戶（未選 → 只計入收益統計）、配股自動加股，並推播通知。美股以稅後淨額(USD)入帳；Finnhub 免費方案無股利權限時自動改用 Yahoo（以除息日入帳）。</div>
+      <div style="height:16px"></div></div>`;
+    setSubBack(root);
+
+    const rescan = label => {
+      UI.toast('掃描' + label + '股利中…', 'info');
+      App.autoImportDividends(true).then(n => { UI.toast(n > 0 ? `已自動匯入 ${n} 筆股利` : '沒有新的股利', n > 0 ? 'success' : 'info'); App.renderCurrent(); });
+    };
+    const on = (id, fn) => { const el = root.querySelector('#' + id); if (el) el.addEventListener('click', fn); };
+    const tw = root.querySelector('#ad-tw-sw');
+    if (tw) tw.addEventListener('change', () => { S.setAutoDivImport(tw.checked); if (tw.checked) rescan('台股'); });
+    on('ad-tw-acct', () => {
+      const accts = S.getCashAccounts().filter(a => a.currency === 'TWD');
+      openChooser('台股股息入帳帳戶', [
+        { v: '', label: '不入帳', hint: '只計入收益統計，不動現金帳戶' },
+        ...accts.map(a => ({ v: a.id, label: a.name, hint: 'NT$ ' + U.formatPrice(a.balance || 0) })),
+      ], S.getAutoDivAcct(), v => { S.setAutoDivAcct(v); settingsAutoDiv(root); });
+    });
+    on('ad-us-key', () => { set.sub = 'adv'; settings(root); });
+    const us = root.querySelector('#ad-us-sw');
+    if (us) us.addEventListener('change', () => { S.setAutoDivUs(us.checked); if (us.checked) rescan('美股'); });
+    on('ad-us-acct', () => {
+      const accts = S.getCashAccounts().filter(a => a.currency === 'USD');
+      openChooser('美股股息入帳帳戶', [
+        { v: '', label: '不入帳', hint: '只計入收益統計，不動現金帳戶' },
+        ...accts.map(a => ({ v: a.id, label: a.name, hint: '$ ' + U.formatPrice(a.balance || 0) })),
+      ], S.getAutoDivAcctUs(), v => { S.setAutoDivAcctUs(v); settingsAutoDiv(root); });
+    });
+    on('ad-us-tax', () => openChooser('美股股息預扣稅率', [
+      { v: '30', label: '30%', hint: '台灣投資人預設（非稅約國預扣）' },
+      { v: '15', label: '15%', hint: '稅約國稅率' },
+      { v: '10', label: '10%' },
+      { v: '0', label: '0%', hint: '記稅前全額' },
+    ], String(S.getAutoDivUsTax()), v => { S.setAutoDivUsTax(+v); settingsAutoDiv(root); }));
   }
 
   // ── 設定子頁：定期定額 / 定期繳款 ──
