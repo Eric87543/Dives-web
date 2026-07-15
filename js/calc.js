@@ -12,7 +12,7 @@ App.Calc = (function () {
     let shares = 0, cost = 0;
     const sorted = [...txs].sort((a, b) => a.time - b.time);
     for (const t of sorted) {
-      if (t.type === 'BUY') {
+      if (t.type !== 'SELL') {          // BUY 與 STOCK_DIV(配股,零成本)皆累加
         shares += t.shares;
         cost += t.shares * t.price + t.fee;
       } else {
@@ -33,6 +33,9 @@ App.Calc = (function () {
     const bySym = {};
     for (const t of txs) (bySym[t.symbol] = bySym[t.symbol] || []).push(t);
 
+    const divBySym = {};
+    for (const d of S.getDividends()) divBySym[d.symbol] = (divBySym[d.symbol] || 0) + (d.amount || 0);
+
     const out = [];
     for (const sym in bySym) {
       const { shares, avgCost } = computeAvgCostPosition(bySym[sym]);
@@ -52,6 +55,7 @@ App.Calc = (function () {
         dailyChangePct: (pd && pd.prevClose) ? (pd.dailyChange / pd.prevClose) * 100 : null,
         unrealizedPnl: unreal,
         marketValue: mv,
+        dividend: divBySym[sym] || 0,
         market: meta ? meta.market : U.guessMarketBySymbol(sym),
       });
     }
@@ -122,6 +126,9 @@ App.Calc = (function () {
     s.usUnrealizedPnlPct = s.usCostBasisTwd > 1e-9 ? (s.usUnrealizedPnlTwd / s.usCostBasisTwd) * 100 : null;
     s.totalUnrealizedPnlPct = s.totalCostBasisTwd > 1e-9 ? (s.totalUnrealizedPnl / s.totalCostBasisTwd) * 100 : null;
     s.totalReturnPct = s.totalCostBasisTwd > 1e-9 ? (s.totalPnl / s.totalCostBasisTwd) * 100 : null;
+    s.totalDividendTwd = dividendsTotalTwd();
+    s.totalPnlWithDiv = s.totalPnl + s.totalDividendTwd;
+    s.totalReturnWithDivPct = s.totalCostBasisTwd > 1e-9 ? (s.totalPnlWithDiv / s.totalCostBasisTwd) * 100 : null;
     return s;
   }
 
@@ -208,7 +215,7 @@ App.Calc = (function () {
     const txs = S.getTransactions().filter(t => t.symbol === symbol).sort((a, b) => a.time - b.time);
     let shares = 0, cost = 0;
     for (const t of txs) {
-      if (t.type === 'BUY') {
+      if (t.type !== 'SELL') {          // BUY 與 STOCK_DIV 皆累加
         cost += t.shares * t.price + t.fee;
         shares += t.shares;
       } else {
@@ -223,6 +230,84 @@ App.Calc = (function () {
     S.setRealized(rz);
   }
 
+  // 股票股利(配股)：新增一筆 STOCK_DIV 交易(零成本加股)；走現有持倉/成本引擎
+  function addStockDividend({ symbolInput, market, name, shares, date }) {
+    const symbol = U.sanitizeSymbol(symbolInput);
+    if (!symbol || !(shares > 0)) return { ok: false, msg: '請輸入正確的代碼與配股股數' };
+    const mk = market ? U.normalizeMarketKey(market) : U.guessMarketBySymbol(symbol);
+    const mmap = S.metaMap();
+    if (!mmap[symbol] || market) S.upsertMeta([{ code: symbol, name: name || (mmap[symbol] && mmap[symbol].name) || symbol, market: mk }]);
+    const txs = S.getTransactions();
+    const time = date ? new Date(date + 'T12:00:00+08:00').getTime() : Date.now();
+    txs.push({ id: S.uuid(), symbol, type: 'STOCK_DIV', shares, price: 0, fee: 0, time });
+    S.setTransactions(txs);
+    return { ok: true, symbol };
+  }
+
+  // 股利換算 TWD 的共用判斷
+  function _divIsUsd(sym) { const mmap = S.metaMap(); const m = U.normalizeMarketKey((mmap[sym] && mmap[sym].market) || U.guessMarketBySymbol(sym)); return m === U.Market.us || m === U.Market.crypto; }
+
+  // 全部股利淨額 → TWD（美股以目前匯率換算）
+  function dividendsTotalTwd() {
+    const rate = S.getFxRate() || 31.5;
+    let sum = 0;
+    for (const d of S.getDividends()) sum += (d.amount || 0) * (_divIsUsd(d.symbol) ? rate : 1);
+    return sum;
+  }
+
+  // 期間股利統計（TWD）：{total, tw, us, count}；含頭尾 ISO 日期過濾
+  function dividendsBetween(from, to) {
+    const rate = S.getFxRate() || 31.5;
+    const inWin = dt => (!from || dt >= from) && (!to || dt <= to);
+    let total = 0, tw = 0, us = 0, count = 0;
+    for (const d of S.getDividends()) {
+      if (!inWin(d.date)) continue;
+      const usd = _divIsUsd(d.symbol);
+      const v = (d.amount || 0) * (usd ? rate : 1);
+      total += v; count++;
+      if (usd) us += v; else tw += v;
+    }
+    return { total, tw, us, count };
+  }
+
+  // 現金股利：寫入帳本；有 accountId 則入帳(原幣別)。回傳 {ok, id?}
+  function addDividend({ symbolInput, market, name, amount, date, accountId, note }) {
+    const symbol = U.sanitizeSymbol(symbolInput);
+    if (!symbol || !(amount > 0)) return { ok: false, msg: '請輸入正確的代碼與金額' };
+    const mk = market ? U.normalizeMarketKey(market) : U.guessMarketBySymbol(symbol);
+    const mmap = S.metaMap();
+    if (!mmap[symbol] || market) S.upsertMeta([{ code: symbol, name: name || (mmap[symbol] && mmap[symbol].name) || symbol, market: mk }]);
+    const list = S.getDividends();
+    const rec = { id: S.uuid(), symbol, market: mk, amount, date: date || U.isoDate(), createdAt: Date.now() };
+    if (accountId) rec.accountId = accountId;
+    if (note) rec.note = note;
+    list.push(rec);
+    S.setDividends(list);
+    if (accountId) S.adjustCashBalance(accountId, amount);
+    return { ok: true, symbol, id: rec.id };
+  }
+
+  function updateDividend(id, { amount, date, accountId, note }) {
+    const list = S.getDividends();
+    const rec = list.find(d => d.id === id);
+    if (!rec) return { ok: false, msg: '找不到股利' };
+    if (!(amount > 0)) return { ok: false, msg: '請輸入正確金額' };
+    if (rec.accountId) S.adjustCashBalance(rec.accountId, -rec.amount);   // 沖銷舊
+    rec.amount = amount; rec.date = date || rec.date;
+    rec.accountId = accountId || undefined; rec.note = note || undefined;
+    if (rec.accountId) S.adjustCashBalance(rec.accountId, rec.amount);    // 套用新
+    S.setDividends(list);
+    return { ok: true };
+  }
+
+  function deleteDividend(id) {
+    const list = S.getDividends();
+    const rec = list.find(d => d.id === id);
+    if (!rec) return;
+    if (rec.accountId) S.adjustCashBalance(rec.accountId, -rec.amount);
+    S.setDividends(list.filter(d => d.id !== id));
+  }
+
   // 刪除某代碼所有資料（含沖銷各交易的現金帳戶效果）
   function deleteSymbol(symbolInput) {
     const sym = U.sanitizeSymbol(symbolInput);
@@ -231,6 +316,8 @@ App.Calc = (function () {
     }
     S.setTransactions(S.getTransactions().filter(t => t.symbol !== sym));
     S.setRealized(S.getRealized().filter(r => r.symbol !== sym));
+    for (const d of S.getDividends()) { if (d.symbol === sym && d.accountId) S.adjustCashBalance(d.accountId, -d.amount); }
+    S.setDividends(S.getDividends().filter(d => d.symbol !== sym));
     const p = S.getPrices(); delete p[sym]; S.setPrices(p);
     // 群組對應一併移除
     const gm = S.getGroupMap();
@@ -749,6 +836,7 @@ App.Calc = (function () {
     let total = 0, buy = 0, sell = 0, count = 0;
     for (const t of S.getTransactions()) {
       if (!inWin(U.isoDate(new Date(t.time)))) continue;
+      if (t.type === 'STOCK_DIV') continue;         // 配股非交易,不計手續費/筆數
       const f = (t.fee || 0) * (isUsd(t.symbol) ? rate : 1);
       total += f; count++;
       if (t.type === 'BUY') buy += f; else sell += f;
@@ -773,6 +861,7 @@ App.Calc = (function () {
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
+    addStockDividend, dividendsTotalTwd, dividendsBetween, addDividend, updateDividend, deleteDividend,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
     netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats,
     recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment, investedBetween, feesSummary,

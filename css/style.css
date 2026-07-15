@@ -242,6 +242,7 @@ input, select { font-family: inherit; font-size: 15px; }
 .tx-type { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 6px; }
 .tx-type.buy, .tx-mini .buy { background: rgba(229,57,53,0.12); color: var(--gain); }
 .tx-type.sell, .tx-mini .sell { background: rgba(67,160,71,0.12); color: var(--loss); }
+.tx-type.evt { background: var(--soft); color: var(--sub); }
 .tx-main { flex: 1; min-width: 0; }
 .tx-sym { font-size: 14px; font-weight: 600; }
 .tx-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }

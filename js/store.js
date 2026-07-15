@@ -23,6 +23,7 @@ App.Store = (function () {
     groups: 'dives_groups',
     groupMap: 'dives_group_map',
     recurring: 'dives_recurring',
+    dividends: 'dives_dividends',
     pctBasis: 'dives_pct_basis',
     dayMode: 'dives_day_mode',
     privacy: 'dives_privacy',
@@ -125,6 +126,10 @@ App.Store = (function () {
   function getLiabilities() { return read(K.liab, []); }
   function setLiabilities(a) { write(K.liab, a); }
 
+  // ---- 股利帳本 ----  {id, symbol, market, amount(淨額,原幣別), date, accountId?, note?, createdAt}
+  function getDividends() { return read(K.dividends, []); }
+  function setDividends(a) { write(K.dividends, a); }
+
   // ---- 定期定額 / 定期繳款計畫 ----
   // {id, kind:'dca'|'liability', enabled, freq:'monthly'|'biweekly'|'weekly', day,
   //  startDate, endDate|null, lastRun|null, createdAt,
@@ -164,6 +169,7 @@ App.Store = (function () {
     setGroups([]);
     setGroupMap({});
     setRecurringPlans([]);
+    setDividends([]);
   }
 
   return {
@@ -180,6 +186,7 @@ App.Store = (function () {
     getCashAccounts, setCashAccounts, adjustCashBalance,
     getLiabilities, setLiabilities,
     getRecurringPlans, setRecurringPlans,
+    getDividends, setDividends,
     getGroups, setGroups, getGroupMap, setGroupMap,
     getPctBasis, setPctBasis, getDayMode, setDayMode,
     getPrivacy, setPrivacy, getChartRange, setChartRange,

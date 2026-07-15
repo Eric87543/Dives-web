@@ -189,7 +189,19 @@ App.Views = (function () {
     // 事件
     bindRefresh(root);
     const addBtn = root.querySelector('#pf-add-btn');
-    if (addBtn) addBtn.addEventListener('click', () => openTxForm(null));
+    if (addBtn) addBtn.addEventListener('click', () => {
+      const ov = UI.openSheet('新增', `
+        <div class="ga-list">
+          <div class="ga-item" data-k="tx"><b>買賣交易</b><span class="ga-sub">買入 / 賣出</span></div>
+          <div class="ga-item" data-k="cash"><b>現金股利（配息）</b><span class="ga-sub">可選導入現金帳戶</span></div>
+          <div class="ga-item" data-k="stock"><b>股票股利（配股）</b><span class="ga-sub">增加持股股數</span></div>
+        </div>`, '');
+      ov.querySelectorAll('.ga-item').forEach(it => it.addEventListener('click', () => {
+        const k = it.dataset.k; UI.closeSheet();
+        if (k === 'tx') openTxForm(null);
+        else openDividendForm(k === 'cash' ? 'cash' : 'stock', null);
+      }));
+    });
     const pfEye = root.querySelector('#pf-eye');
     if (pfEye) pfEye.addEventListener('click', () => { S.setPrivacy(!S.getPrivacy()); portfolio(root); });
     root.querySelectorAll('.as-head[data-mk]').forEach(h => h.addEventListener('click', () => {
@@ -340,6 +352,18 @@ App.Views = (function () {
       </div>
     </div>`;
 
+    const dv = C.dividendsBetween(scope && scope.from, scope && scope.to);
+    const divCard = `<div class="card stats-card">
+      <div class="stats-title">股息（本期／區間）</div>
+      <div class="tr-row"><div class="tr-amt">${nt(dv.total)}</div></div>
+      <div class="tr-grid">
+        <div class="trg"><span class="trg-k">台股股息</span><span class="trg-v">${nt(dv.tw)}</span></div>
+        <div class="trg"><span class="trg-k">美股股息</span><span class="trg-v">${nt(dv.us)}</span></div>
+        <div class="trg"><span class="trg-k">筆數</span><span class="trg-v">${dv.count} 筆</span></div>
+        <div class="trg"><span class="trg-k">平均每筆</span><span class="trg-v">${nt(dv.count ? dv.total / dv.count : 0)}</span></div>
+      </div>
+    </div>`;
+
     if (level === 'all') {
       const st = C.tradingStats();
       const sm = C.buildSummary(C.buildPositions()); // 累計報酬（vs 投入本金）
@@ -355,9 +379,12 @@ App.Views = (function () {
             <div class="trg"><span class="trg-k">目前市值</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalMarketValueTwd)}</span></div>
             <div class="trg"><span class="trg-k">未實現</span><span class="trg-v" style="color:${col(sm.totalUnrealizedPnl)}">${sf(sm.totalUnrealizedPnl)}</span></div>
             <div class="trg"><span class="trg-k">已實現</span><span class="trg-v" style="color:${col(sm.totalRealizedPnl)}">${sf(sm.totalRealizedPnl)}</span></div>
+            <div class="trg"><span class="trg-k">股息收入</span><span class="trg-v">${sf(sm.totalDividendTwd)}</span></div>
+            <div class="trg"><span class="trg-k">含息報酬率</span><span class="trg-v" style="color:${col(sm.totalReturnWithDivPct || 0)}">${pctTxt(sm.totalReturnWithDivPct || 0)}</span></div>
           </div>
         </div>
         ${feeCard}
+        ${divCard}
         ${perfCard(st.period.all, ['day', 'week', 'month', 'year'])}
         ${tradeCard(st.bestTrade, st.worstTrade)}
         <div class="card stats-card">
@@ -378,6 +405,7 @@ App.Views = (function () {
         </div>
       </div>
       ${feeCard}
+      ${divCard}
       ${perfCard(st.period, grans)}
       ${tradeCard(st.bestTrade, st.worstTrade)}`;
   }
@@ -387,19 +415,28 @@ App.Views = (function () {
     const mmap = S.metaMap();
     const rate = S.getFxRate() || 31.5;
     const isUsdMk = mk => mk === U.Market.us || mk === U.Market.crypto;
-    let txs = S.getTransactions().slice().sort((a, b) => b.time - a.time);
+    const mktOf = sym => U.normalizeMarketKey(mmap[sym]?.market || U.guessMarketBySymbol(sym));
     const q = hist.search.trim().toUpperCase();
-    txs = txs.filter(t => {
-      if (hist.type === 'buy' && t.type !== 'BUY') return false;
-      if (hist.type === 'sell' && t.type !== 'SELL') return false;
-      const m = U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol));
+
+    // 合併三種事件：交易(買/賣)、配股(STOCK_DIV 交易)、現金股利(股利帳本)
+    const events = [];
+    for (const t of S.getTransactions()) events.push({ kind: t.type === 'STOCK_DIV' ? 'stockdiv' : 'tx', time: t.time, symbol: t.symbol, tx: t });
+    for (const d of S.getDividends()) events.push({ kind: 'cashdiv', time: new Date(d.date + 'T12:00:00+08:00').getTime(), symbol: d.symbol, div: d });
+    events.sort((a, b) => b.time - a.time);
+
+    const isDivKind = e => e.kind === 'cashdiv' || e.kind === 'stockdiv';
+    const filtered = events.filter(e => {
+      if (hist.type === 'buy' && !(e.kind === 'tx' && e.tx.type === 'BUY')) return false;
+      if (hist.type === 'sell' && !(e.kind === 'tx' && e.tx.type === 'SELL')) return false;
+      if (hist.type === 'div' && !isDivKind(e)) return false;
+      const m = mktOf(e.symbol);
       if (hist.txFilter === 'tw' && (m === U.Market.us || m === U.Market.crypto)) return false;
       if (hist.txFilter === 'us' && m !== U.Market.us) return false;
       if (hist.txFilter === 'crypto' && m !== U.Market.crypto) return false;
-      const d = U.isoDate(new Date(t.time));
+      const d = U.isoDate(new Date(e.time));
       if (hist.from && d < hist.from) return false;
       if (hist.to && d > hist.to) return false;
-      if (q && !(t.symbol.includes(q) || (mmap[t.symbol]?.name || '').toUpperCase().includes(q))) return false;
+      if (q && !(e.symbol.includes(q) || (mmap[e.symbol]?.name || '').toUpperCase().includes(q))) return false;
       return true;
     });
 
@@ -407,19 +444,21 @@ App.Views = (function () {
     for (const r of S.getRealized()) rzByKey[r.symbol + '@' + r.time] = r;
     const toTwd = hist.txFilter === 'all'; // 全部市場 → 金額一律換算台幣
     const sumCur = (hist.txFilter === 'us' || hist.txFilter === 'crypto') ? '$' : 'NT$';
-    const convOfT = t => (isUsdMk(U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol))) && toTwd) ? rate : 1;
+    const convOf = sym => (isUsdMk(mktOf(sym)) && toTwd) ? rate : 1;
 
-    // 依目前篩選統計：總投入＝買入成本合計、總獲利＝賣出已實現合計、比例＝總獲利／總投入
-    let totalInvest = 0, totalProfit = 0;
-    for (const t of txs) {
-      const conv = convOfT(t);
-      if (t.type === 'BUY') totalInvest += (t.shares * t.price + (t.fee || 0)) * conv;
-      else { const rz = rzByKey[t.symbol + '@' + t.time]; if (rz) totalProfit += rz.realizedPnl * conv; }
+    // 依目前篩選統計：總投入＝買入成本、總獲利＝賣出已實現、股息＝現金股利合計、比例＝獲利／投入
+    let totalInvest = 0, totalProfit = 0, totalDiv = 0;
+    for (const e of filtered) {
+      const conv = convOf(e.symbol);
+      if (e.kind === 'tx' && e.tx.type === 'BUY') totalInvest += (e.tx.shares * e.tx.price + (e.tx.fee || 0)) * conv;
+      else if (e.kind === 'tx' && e.tx.type === 'SELL') { const rz = rzByKey[e.symbol + '@' + e.tx.time]; if (rz) totalProfit += rz.realizedPnl * conv; }
+      else if (e.kind === 'cashdiv') totalDiv += (e.div.amount || 0) * conv;
     }
     const roiPct = totalInvest > 1e-9 ? totalProfit / totalInvest * 100 : null;
 
-    // 搜尋 + 漏斗篩選 + 統計摘要（總投入／總獲利／比例）
+    // 搜尋 + 漏斗篩選 + 統計摘要（總投入／總獲利／比例；有股息時多一格股息）
     const filterOn = hist.type !== 'all' || hist.txFilter !== 'all' || hist.from || hist.to;
+    const divCell = totalDiv > 0 ? `<div class="hs-cell"><div class="hs-k">股息</div><div class="hs-v" style="color:${UI.pnlColor(1)}">+${sumCur} ${U.fmtKMBB(totalDiv)}</div></div>` : '';
     fixedEl.innerHTML = `<div class="tx-bar">
       <input class="input search" id="tx-search" placeholder="搜尋代碼或名稱" value="${hist.search}">
       <button class="tx-funnel${filterOn ? ' on' : ''}" id="tx-funnel" aria-label="篩選"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg></button>
@@ -428,38 +467,61 @@ App.Views = (function () {
       <div class="hs-cell"><div class="hs-k">總投入</div><div class="hs-v">${sumCur} ${U.fmtKMBB(totalInvest)}</div></div>
       <div class="hs-cell"><div class="hs-k">總獲利</div><div class="hs-v" style="color:${UI.pnlColor(totalProfit)}">${totalProfit >= 0 ? '+' : '−'}${sumCur} ${U.fmtKMBB(Math.abs(totalProfit))}</div></div>
       <div class="hs-cell"><div class="hs-k">比例</div><div class="hs-v" style="color:${roiPct == null ? 'var(--sub)' : UI.pnlColor(roiPct)}">${roiPct == null ? '--' : U.fmtPct(roiPct)}</div></div>
+      ${divCell}
     </div>`;
 
     let listHtml = `<div class="card tx-list">`;
-    if (!txs.length) listHtml += `<div class="empty">${filterOn || q ? '無符合篩選的交易' : '無交易紀錄'}</div>`;
-    for (const t of txs) {
-      const name = mmap[t.symbol]?.name || t.symbol;
-      const conv = convOfT(t);
-      const isUsd = isUsdMk(U.normalizeMarketKey(mmap[t.symbol]?.market || U.guessMarketBySymbol(t.symbol)));
+    if (!filtered.length) listHtml += `<div class="empty">${filterOn || q ? '無符合篩選的紀錄' : '無紀錄'}</div>`;
+    for (const e of filtered) {
+      const name = mmap[e.symbol]?.name || e.symbol;
+      const isUsd = isUsdMk(mktOf(e.symbol));
       const cur = (isUsd && !toTwd) ? '$' : 'NT$';
-      let valHtml;
-      if (t.type === 'SELL') {
-        const rz = rzByKey[t.symbol + '@' + t.time];
-        if (rz) {
-          const pnl = rz.realizedPnl * conv;
-          const base = rz.avgCost * rz.shares;
-          const pct = base > 1e-9 ? rz.realizedPnl / base * 100 : 0;
-          valHtml = `<div class="tx-amt" style="color:${UI.pnlColor(pnl)}">${pnl >= 0 ? '+' : '−'}${cur} ${U.fmtKMBB(Math.abs(pnl))}</div><div class="tx-cap" style="color:${UI.pnlColor(pnl)}">${U.fmtPct(pct)}</div>`;
-        } else {
-          valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(t.shares * t.price * conv)}</div>`;
-        }
+      const dstr = U.isoDate(new Date(e.time));
+      if (e.kind === 'cashdiv') {
+        const amt = (e.div.amount || 0) * convOf(e.symbol);
+        listHtml += `<div class="tx-row" data-kind="cashdiv" data-id="${e.div.id}">
+          <span class="tx-type evt">股息</span>
+          <div class="tx-main">
+            <div class="tx-sym">${e.symbol} <span class="h-name">${name}</span></div>
+            <div class="tx-sub">現金股利 · ${dstr}</div>
+          </div>
+          <div class="tx-meta"><div class="tx-amt" style="color:${UI.pnlColor(1)}">+${cur} ${U.fmtKMBB(amt)}</div></div>
+        </div>`;
+      } else if (e.kind === 'stockdiv') {
+        listHtml += `<div class="tx-row" data-kind="stockdiv" data-id="${e.tx.id}">
+          <span class="tx-type evt">配股</span>
+          <div class="tx-main">
+            <div class="tx-sym">${e.symbol} <span class="h-name">${name}</span></div>
+            <div class="tx-sub">配股 +${U.formatShares(e.tx.shares)}${shareUnit(mmap[e.symbol]?.market)} · ${dstr}</div>
+          </div>
+          <div class="tx-meta"><div class="tx-amt" style="color:var(--sub)">＋股</div></div>
+        </div>`;
       } else {
-        const cost = (t.shares * t.price + (t.fee || 0)) * conv;
-        valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(cost)}</div>`;
+        const t = e.tx, conv = convOf(e.symbol);
+        let valHtml;
+        if (t.type === 'SELL') {
+          const rz = rzByKey[t.symbol + '@' + t.time];
+          if (rz) {
+            const pnl = rz.realizedPnl * conv;
+            const base = rz.avgCost * rz.shares;
+            const pct = base > 1e-9 ? rz.realizedPnl / base * 100 : 0;
+            valHtml = `<div class="tx-amt" style="color:${UI.pnlColor(pnl)}">${pnl >= 0 ? '+' : '−'}${cur} ${U.fmtKMBB(Math.abs(pnl))}</div><div class="tx-cap" style="color:${UI.pnlColor(pnl)}">${U.fmtPct(pct)}</div>`;
+          } else {
+            valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(t.shares * t.price * conv)}</div>`;
+          }
+        } else {
+          const cost = (t.shares * t.price + (t.fee || 0)) * conv;
+          valHtml = `<div class="tx-amt">${cur} ${U.fmtKMBB(cost)}</div>`;
+        }
+        listHtml += `<div class="tx-row" data-kind="tx" data-id="${t.id}">
+          <span class="tx-type ${t.type === 'BUY' ? 'buy' : 'sell'}">${t.type === 'BUY' ? '買入' : '賣出'}</span>
+          <div class="tx-main">
+            <div class="tx-sym">${t.symbol} <span class="h-name">${name}</span></div>
+            <div class="tx-sub">${U.formatShares(t.shares)}${shareUnit(mmap[t.symbol]?.market)} @ ${U.formatPrice(t.price)} · ${dstr}</div>
+          </div>
+          <div class="tx-meta">${valHtml}</div>
+        </div>`;
       }
-      listHtml += `<div class="tx-row" data-id="${t.id}">
-        <span class="tx-type ${t.type === 'BUY' ? 'buy' : 'sell'}">${t.type === 'BUY' ? '買入' : '賣出'}</span>
-        <div class="tx-main">
-          <div class="tx-sym">${t.symbol} <span class="h-name">${name}</span></div>
-          <div class="tx-sub">${U.formatShares(t.shares)}${shareUnit(mmap[t.symbol]?.market)} @ ${U.formatPrice(t.price)} · ${U.isoDate(new Date(t.time))}</div>
-        </div>
-        <div class="tx-meta">${valHtml}</div>
-      </div>`;
     }
     listHtml += `</div>`;
     scrollEl.innerHTML = listHtml;
@@ -468,9 +530,19 @@ App.Views = (function () {
     se.addEventListener('input', e => { hist.search = e.target.value; });
     se.addEventListener('change', () => histTx(fixedEl, scrollEl));
     fixedEl.querySelector('#tx-funnel').addEventListener('click', () => openHistFilter(fixedEl, scrollEl));
+    const rerender = () => histTx(fixedEl, scrollEl);
     scrollEl.querySelectorAll('.tx-row').forEach(r => r.addEventListener('click', () => {
-      const tx = S.getTransactions().find(t => t.id === r.dataset.id);
-      if (tx) openTxForm(tx);
+      const kind = r.dataset.kind, id = r.dataset.id;
+      if (kind === 'cashdiv') {
+        const d = S.getDividends().find(x => x.id === id);
+        if (d) openDividendForm('cash', d, rerender);
+      } else if (kind === 'stockdiv') {
+        const tx = S.getTransactions().find(t => t.id === id);
+        if (tx) openDividendForm('stock', { id: tx.id, symbol: tx.symbol, name: mmap[tx.symbol]?.name || tx.symbol, market: mmap[tx.symbol]?.market, shares: tx.shares, date: U.isoDate(new Date(tx.time)) }, rerender);
+      } else {
+        const tx = S.getTransactions().find(t => t.id === id);
+        if (tx) openTxForm(tx);
+      }
     }));
   }
 
@@ -479,7 +551,7 @@ App.Views = (function () {
     let tType = hist.type, tMkt = hist.txFilter;
     const segRow = (id, cur, opts) => `<div class="seg seg-wide" id="${id}">${opts.map(([v, l]) => seg(v, l, cur)).join('')}</div>`;
     const body = `
-      <div class="flt-grp"><div class="flt-lbl">買賣類型</div>${segRow('flt-type', tType, [['all', '全部'], ['buy', '買入'], ['sell', '賣出']])}</div>
+      <div class="flt-grp"><div class="flt-lbl">類型</div>${segRow('flt-type', tType, [['all', '全部'], ['buy', '買入'], ['sell', '賣出'], ['div', '股利']])}</div>
       <div class="flt-grp"><div class="flt-lbl">市場</div>${segRow('flt-mkt', tMkt, [['all', '全部'], ['tw', '台股'], ['us', '美股'], ['crypto', '加密']])}</div>
       <div class="flt-grp"><div class="flt-lbl">時間區間</div><div class="range-dates"><input type="date" class="input" id="flt-from" value="${hist.from || ''}"><span>至</span><input type="date" class="input" id="flt-to" value="${hist.to || ''}"></div></div>`;
     const ov = UI.openSheet('篩選', body, `<button class="btn btn-ghost" id="flt-reset">重設</button><button class="btn btn-primary" id="flt-apply">套用</button>`);
@@ -2020,6 +2092,101 @@ App.Views = (function () {
   }
 
   /* ===================== 新增/編輯交易 ===================== */
+  // 股利/配股 輸入表單。kind: 'cash'(現金股利) | 'stock'(配股)
+  function openDividendForm(kind, editing, onDone) {
+    const isCash = kind === 'cash';
+    const p = editing || {};
+    const today = U.isoDate();
+    const st = { picked: editing ? { code: p.symbol, name: p.name, market: p.market } : null };
+    const symField = editing
+      ? `<div class="locked">${p.symbol}${p.name && p.name !== p.symbol ? ' · ' + p.name : ''} <span>🔒</span></div>`
+      : `<input class="input" id="dv-sym" autocomplete="off" placeholder="代碼或名稱（2330、台積電、AAPL…）">
+         <div class="suggest" id="dv-suggest"></div>`;
+    const body = `
+      <label class="fld">標的${symField}</label>
+      ${isCash
+        ? `<label class="fld">實收金額（美股填已扣稅後淨額）<input class="input" id="dv-amount" type="number" inputmode="decimal" value="${p.amount != null ? p.amount : ''}" placeholder="0"></label>`
+        : `<label class="fld">配發股數<input class="input" id="dv-shares" type="number" inputmode="decimal" value="${p.shares != null ? p.shares : ''}" placeholder="0"></label>`}
+      <label class="fld">日期<input class="input" id="dv-date" type="date" value="${p.date || today}"></label>
+      ${isCash ? `<label class="fld">導入現金帳戶（選填）
+        <select class="input" id="dv-acct"><option value="">不導入（只計入報酬統計）</option></select>
+      </label>
+      <div class="set-hint">選帳戶 → 股息入帳、淨資產增加；不選 → 只計入含息報酬與股息統計。</div>` : ''}`;
+    // 配股(stock)編輯模式僅供檢視/刪除(股數不改,要改則刪除重加) → 不顯示儲存鈕
+    const footer = `${editing ? '<button class="btn btn-danger" id="dv-del">刪除</button>' : ''}<button class="btn btn-ghost" id="dv-cancel">取消</button>${(editing && !isCash) ? '' : `<button class="btn btn-primary" id="dv-ok">${editing ? '儲存' : '新增'}</button>`}`;
+    const ov = UI.openSheet(editing ? (isCash ? '編輯現金股利' : '編輯配股') : (isCash ? '新增現金股利' : '新增配股（股票股利）'), body, footer);
+    const $ = s => ov.querySelector(s);
+
+    function marketOf() {
+      return st.picked ? U.normalizeMarketKey(st.picked.market)
+        : U.guessMarketBySymbol(U.sanitizeSymbol($('#dv-sym') ? $('#dv-sym').value : (p.symbol || '')));
+    }
+    function refreshAcct() {
+      const sel = $('#dv-acct'); if (!sel) return;
+      const mk = marketOf();
+      const want = (mk === U.Market.us || mk === U.Market.crypto) ? 'USD' : 'TWD';
+      const keep = sel.value || (editing ? p.accountId : '');
+      const opts = S.getCashAccounts().filter(a => a.currency === want);
+      sel.innerHTML = '<option value="">不導入（只計入報酬統計）</option>' + opts.map(a => `<option value="${a.id}">${a.name}（${a.currency} ${U.formatPrice(a.balance || 0)}）</option>`).join('');
+      if (keep && opts.some(a => a.id === keep)) sel.value = keep;
+    }
+    refreshAcct();
+
+    if (!editing) {
+      const symInput = $('#dv-sym'), sug = $('#dv-suggest');
+      let timer = null;
+      symInput.addEventListener('input', () => {
+        const q = symInput.value.trim(); clearTimeout(timer); st.picked = null; refreshAcct();
+        if (!q) { sug.innerHTML = ''; return; }
+        timer = setTimeout(async () => {
+          const res = await App.Api.searchSymbols(q);
+          sug.innerHTML = res.map(r => `<div class="sug-item" data-code="${r.code}" data-name="${encodeURIComponent(r.name)}" data-mk="${r.market}"${r.cgid ? ` data-cgid="${r.cgid}"` : ''}>
+            <span class="sc">${r.code}</span><span class="sn">${r.name}</span><span class="sm">${U.marketLabel(r.market)}</span></div>`).join('');
+          sug.querySelectorAll('.sug-item').forEach(it => it.addEventListener('click', () => {
+            const name = decodeURIComponent(it.dataset.name);
+            symInput.value = it.dataset.code + ' ' + name; sug.innerHTML = '';
+            st.picked = { code: it.dataset.code, name, market: it.dataset.mk };
+            if (it.dataset.cgid) App.Api.cacheCgId(it.dataset.code, it.dataset.cgid);
+            refreshAcct();
+          }));
+        }, 220);
+      });
+    }
+
+    $('#dv-cancel').addEventListener('click', UI.closeSheet);
+    if ($('#dv-del')) $('#dv-del').addEventListener('click', () => UI.confirmDialog('刪除這筆？', () => {
+      if (isCash) C.deleteDividend(p.id);
+      else C.deleteTransaction(p.id);
+      UI.closeSheet(); App.afterDataChange([p.symbol]);
+    }, '刪除'));
+
+    if ($('#dv-ok')) $('#dv-ok').addEventListener('click', () => {
+      let symbol, market, name;
+      if (editing) { symbol = p.symbol; market = p.market; name = p.name; }
+      else {
+        symbol = U.sanitizeSymbol($('#dv-sym').value);
+        if (!symbol) return UI.toast('請輸入標的代碼', 'info');
+        const pk = (st.picked && st.picked.code === symbol) ? st.picked : null;
+        market = pk ? U.normalizeMarketKey(pk.market) : U.guessMarketBySymbol(symbol);
+        name = pk ? pk.name : symbol;
+      }
+      const date = $('#dv-date').value || U.isoDate();
+      if (isCash) {
+        const amount = parseFloat($('#dv-amount').value);
+        if (!(amount > 0)) return UI.toast('請輸入正確金額', 'info');
+        const accountId = $('#dv-acct') ? ($('#dv-acct').value || undefined) : undefined;
+        const res = editing ? C.updateDividend(p.id, { amount, date, accountId }) : C.addDividend({ symbolInput: symbol, market, name, amount, date, accountId });
+        if (!res.ok) return UI.toast(res.msg, 'info');
+      } else {
+        const shares = parseFloat($('#dv-shares').value);
+        if (!(shares > 0)) return UI.toast('請輸入正確配股股數', 'info');
+        const res = C.addStockDividend({ symbolInput: symbol, market, name, shares, date });
+        if (!res.ok) return UI.toast(res.msg, 'info');
+      }
+      UI.closeSheet(); App.afterDataChange([symbol]);
+    });
+  }
+
   let txState = null;
   function openTxForm(editing, presetSym, txOpts) {
     txState = {
