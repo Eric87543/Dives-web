@@ -61,7 +61,7 @@ input, select { font-family: inherit; font-size: 15px; }
 .ref-btn svg { width: 17px; height: 17px; }
 .ref-btn:active { background: var(--soft); }
 .ref-btn.spin svg { animation: spin 0.8s linear infinite; }
-.nw-btns { display: flex; align-items: center; margin-left: auto; }
+.nw-btns { display: flex; align-items: center; margin-left: auto; flex: none; }
 /* 上方固定 + 下方列表獨立捲動（持倉 / 歷史） */
 .page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .page-top { flex: none; padding: 12px 14px 0; }
@@ -376,7 +376,7 @@ input, select { font-family: inherit; font-size: 15px; }
 .link-edit { color: var(--tw); font-size: 13px; }
 
 /* ---- 資產（淨資產）頁 ---- */
-.nw-hero { padding: 8px 4px 16px; display: flex; align-items: center; justify-content: flex-start; }
+.nw-hero { padding: 8px 4px 16px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
 .nw-eye { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 7px; padding: 0; border: none; background: none; color: var(--sub); -webkit-tap-highlight-color: transparent; }
 .nw-eye svg { width: 17px; height: 17px; }
 .nw-eye:active { opacity: 0.5; }
@@ -386,10 +386,10 @@ input, select { font-family: inherit; font-size: 15px; }
 .ga-item b { display: block; font-size: 15px; }
 .ga-item .ga-sub { display: block; font-size: 12px; color: var(--sub); margin-top: 2px; }
 .nw-cap { font-size: 14px; color: var(--sub); }
-.nw-num { font-size: 36px; font-weight: 800; letter-spacing: -0.5px; margin-top: 2px; }
-.nw-open { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.nw-num { font-size: clamp(24px, 9.2vw, 36px); font-weight: 800; letter-spacing: -0.5px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nw-open { flex: 1 1 auto; min-width: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .nw-open:active { opacity: 0.6; }
-.nw-day { font-size: 14px; font-weight: 700; margin-top: 4px; }
+.nw-day { font-size: 14px; font-weight: 700; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nw-stats { display: flex; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider); }
 .nw-stats .ns { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .nw-stats .ns-k { font-size: 11px; color: var(--sub); }
