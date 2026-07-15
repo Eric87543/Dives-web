@@ -228,10 +228,10 @@ input, select { font-family: inherit; font-size: 15px; }
 .tx-funnel.on::after { content: ''; position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .tx-cap { font-size: 11px; color: var(--sub); margin-top: 3px; white-space: nowrap; }
 .hist-sum { display: flex; background: var(--card); border-radius: var(--radius); box-shadow: 0 2px 4px rgba(0,0,0,0.04); padding: 11px 4px; margin-bottom: 10px; }
-.hs-cell { flex: 1; text-align: center; min-width: 0; }
+.hs-cell { flex: 1 1 0; text-align: center; min-width: 0; overflow: hidden; padding: 0 3px; }
 .hs-cell + .hs-cell { border-left: 1px solid var(--divider); }
 .hs-k { font-size: 11px; color: var(--sub); }
-.hs-v { font-size: 15px; font-weight: 800; margin-top: 3px; white-space: nowrap; }
+.hs-v { font-size: clamp(12px, 3.9vw, 15px); font-weight: 800; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .flt-grp { margin-bottom: 14px; }
 .flt-lbl { font-size: 12px; color: var(--sub); margin-bottom: 6px; }
 .tx-pnl { font-size: 11px; font-weight: 600; margin-top: 2px; white-space: nowrap; }

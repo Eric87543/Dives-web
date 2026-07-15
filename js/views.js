@@ -462,9 +462,8 @@ App.Views = (function () {
       else if (e.kind === 'tx' && e.tx.type === 'SELL') { const rz = rzByKey[e.symbol + '@' + e.tx.time]; if (rz) totalProfit += rz.realizedPnl * conv; }
       else if (e.kind === 'cashdiv') totalDiv += (e.div.amount || 0) * conv;
     }
-    const roiPct = totalInvest > 1e-9 ? totalProfit / totalInvest * 100 : null;
 
-    // 搜尋 + 漏斗篩選 + 統計摘要（總投入／總獲利／比例；有股息時多一格股息）
+    // 搜尋 + 漏斗篩選 + 統計摘要（總投入／總獲利；有股息時多一格股息）
     const filterOn = hist.type !== 'all' || hist.txFilter !== 'all' || hist.from || hist.to;
     const divCell = totalDiv > 0 ? `<div class="hs-cell"><div class="hs-k">股息</div><div class="hs-v" style="color:${UI.pnlColor(1)}">+${sumCur} ${U.fmtKMBB(totalDiv)}</div></div>` : '';
     fixedEl.innerHTML = `<div class="tx-bar">
@@ -474,7 +473,6 @@ App.Views = (function () {
     <div class="hist-sum">
       <div class="hs-cell"><div class="hs-k">總投入</div><div class="hs-v">${sumCur} ${U.fmtKMBB(totalInvest)}</div></div>
       <div class="hs-cell"><div class="hs-k">總獲利</div><div class="hs-v" style="color:${UI.pnlColor(totalProfit)}">${totalProfit >= 0 ? '+' : '−'}${sumCur} ${U.fmtKMBB(Math.abs(totalProfit))}</div></div>
-      <div class="hs-cell"><div class="hs-k">比例</div><div class="hs-v" style="color:${roiPct == null ? 'var(--sub)' : UI.pnlColor(roiPct)}">${roiPct == null ? '--' : U.fmtPct(roiPct)}</div></div>
       ${divCell}
     </div>`;
 
