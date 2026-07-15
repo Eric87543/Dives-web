@@ -1690,7 +1690,7 @@ App.Views = (function () {
         return;
       }
       openChooser('自動匯入美股股利', [
-        { v: '1', label: '開啟', hint: '每日以 Finnhub 掃描美股配息，依除息日持股、以稅後淨額(USD)入帳' },
+        { v: '1', label: '開啟', hint: '每日掃描美股配息（Finnhub；免費方案無股利權限時自動改用 Yahoo），依除息日持股、以稅後淨額(USD)入帳' },
         { v: '0', label: '關閉', hint: '不自動匯入美股股利' },
       ], S.getAutoDivUs() ? '1' : '0', v => {
         S.setAutoDivUs(v === '1'); settings(root);

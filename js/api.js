@@ -189,7 +189,9 @@ App.Api = (function () {
     } catch (e) { return []; }
   }
 
-  // ---- 美股股利（Finnhub /stock/dividend，需自填金鑰）供自動匯入 ----
+  // ---- 美股股利（需自填 Finnhub 金鑰才啟用）供自動匯入 ----
+  // 主來源 Finnhub /stock/dividend(付費方案才有,含發放日);免費方案無權限 → 自動改用
+  // Yahoo chart events(免金鑰,CORS 由 fetchText 的 proxy 備援處理;無發放日 → 以除息日入帳)
   // 回傳升序 [{type:'cash', exDate, payDate, perShare(USD,稅前)}]；無金鑰回 []
   async function fetchUsDividends(symbol, from) {
     if (!finnhubKey()) return [];
@@ -197,9 +199,30 @@ App.Api = (function () {
       const to = U.isoDate(new Date(Date.now() + 30 * 864e5)); // 往後 30 天,涵蓋已宣告的未來配息(供除息提醒)
       const j = await fetchJson('https://finnhub.io/api/v1/stock/dividend?symbol=' + encodeURIComponent(symbol) +
         '&from=' + encodeURIComponent(from || '2015-01-01') + '&to=' + to + '&token=' + encodeURIComponent(finnhubKey()));
-      return (Array.isArray(j) ? j : []).map(r => ({ type: 'cash', exDate: r.date, payDate: r.payDate || r.date, perShare: +r.amount || 0 }))
+      const out = (Array.isArray(j) ? j : []).map(r => ({ type: 'cash', exDate: r.date, payDate: r.payDate || r.date, perShare: +r.amount || 0 }))
         .filter(e => e.exDate && e.perShare > 0)
         .sort((a, b) => a.exDate < b.exDate ? -1 : 1);
+      if (out.length) return out;
+    } catch (e) { /* 落到 Yahoo 後備 */ }
+    return fetchUsDividendsYahoo(symbol, from);
+  }
+  async function fetchUsDividendsYahoo(symbol, from) {
+    try {
+      const p1 = Math.floor(new Date((from || '2015-01-01') + 'T00:00:00Z').getTime() / 1000);
+      const p2 = Math.floor(Date.now() / 1000) + 30 * 86400;
+      const j = await fetchJson('https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol) +
+        '?period1=' + p1 + '&period2=' + p2 + '&interval=3mo&events=div');
+      const divs = ((((j.chart || {}).result || [])[0] || {}).events || {}).dividends || {};
+      const out = [];
+      for (const k in divs) {
+        const v = divs[k] || {};
+        const ts = (v.date ? v.date : +k) * 1000; // 內層 date 才是真正除息日
+        if (!(ts > 0) || !(v.amount > 0)) continue;
+        const exDate = U.isoDate(new Date(ts));
+        if (from && exDate < from) continue;
+        out.push({ type: 'cash', exDate, payDate: exDate, perShare: +v.amount });
+      }
+      return out.sort((a, b) => a.exDate < b.exDate ? -1 : 1);
     } catch (e) { return []; }
   }
 
