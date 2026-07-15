@@ -24,6 +24,9 @@ App.Store = (function () {
     groupMap: 'dives_group_map',
     recurring: 'dives_recurring',
     dividends: 'dives_dividends',
+    notif: 'dives_notifications',
+    autoDiv: 'dives_auto_div',
+    autoDivAcct: 'dives_auto_div_acct',
     pctBasis: 'dives_pct_basis',
     dayMode: 'dives_day_mode',
     privacy: 'dives_privacy',
@@ -130,6 +133,26 @@ App.Store = (function () {
   function getDividends() { return read(K.dividends, []); }
   function setDividends(a) { write(K.dividends, a); }
 
+  // ---- 通知中心（本機，不上雲）----  {id, type, key?, title, body, time(ms), read}
+  function getNotifications() { return read(K.notif, []); }
+  function setNotifications(a) { write(K.notif, a); }
+  // 推播一則通知；key 已存在則略過(去重)；最多保留 50 則
+  function pushNotification({ type, key, title, body }) {
+    const list = getNotifications();
+    if (key && list.some(n => n.key === key)) return false;
+    list.unshift({ id: uuid(), type: type || 'info', key: key || undefined, title, body: body || '', time: Date.now(), read: false });
+    setNotifications(list.slice(0, 50));
+    return true;
+  }
+  function unreadNotifCount() { return getNotifications().filter(n => !n.read).length; }
+  function markNotificationsRead() { setNotifications(getNotifications().map(n => n.read ? n : Object.assign({}, n, { read: true }))); }
+
+  // ---- 自動匯入台股股利（預設開啟；入帳帳戶選填）----
+  function getAutoDivImport() { return localStorage.getItem(K.autoDiv) !== '0'; }
+  function setAutoDivImport(v) { localStorage.setItem(K.autoDiv, v ? '1' : '0'); }
+  function getAutoDivAcct() { return localStorage.getItem(K.autoDivAcct) || ''; }
+  function setAutoDivAcct(id) { if (id) localStorage.setItem(K.autoDivAcct, id); else localStorage.removeItem(K.autoDivAcct); }
+
   // ---- 定期定額 / 定期繳款計畫 ----
   // {id, kind:'dca'|'liability', enabled, freq:'monthly'|'biweekly'|'weekly', day,
   //  startDate, endDate|null, lastRun|null, createdAt,
@@ -170,6 +193,7 @@ App.Store = (function () {
     setGroupMap({});
     setRecurringPlans([]);
     setDividends([]);
+    setNotifications([]);
   }
 
   return {
@@ -187,6 +211,8 @@ App.Store = (function () {
     getLiabilities, setLiabilities,
     getRecurringPlans, setRecurringPlans,
     getDividends, setDividends,
+    getNotifications, setNotifications, pushNotification, unreadNotifCount, markNotificationsRead,
+    getAutoDivImport, setAutoDivImport, getAutoDivAcct, setAutoDivAcct,
     getGroups, setGroups, getGroupMap, setGroupMap,
     getPctBasis, setPctBasis, getDayMode, setDayMode,
     getPrivacy, setPrivacy, getChartRange, setChartRange,

@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v118';
+  App.VERSION = 'v119';
 
   const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -296,6 +296,78 @@
     return created;
   }
 
+  // 全自動匯入台股股利（設定預設開啟，每日掃描一次；force 可立即重掃）
+  //   資料：FinMind 股利政策(免金鑰) → 現金股利以「發放日」入帳(未發放不匯)、配股以「除息日」加股
+  //   金額：依除息日當時持股計算；入帳到設定的台幣帳戶(未設定→只記收益)
+  //   去重：同標的＋除息日已有紀錄(或發放日±7天)略過；多裝置靠已同步的股利紀錄防重複
+  //   另推播通知：股息入帳/配股、以及 7 天內即將除息(除權)提醒
+  async function autoImportTwDividends(force) {
+    if (!S.getAutoDivImport()) return 0;
+    const today = App.Util.isoDate();
+    if (!force && localStorage.getItem('dives_autodiv_date') === today) return 0; // 每日一次
+    const mmap = S.metaMap();
+    const isTw = sym => { const m = App.Util.normalizeMarketKey(mmap[sym]?.market || App.Util.guessMarketBySymbol(sym)); return m !== App.Util.Market.us && m !== App.Util.Market.crypto; };
+    const txs = S.getTransactions();
+    const twSyms = [...new Set(txs.filter(t => isTw(t.symbol)).map(t => t.symbol))];
+    localStorage.setItem('dives_autodiv_date', today);
+    if (!twSyms.length) return 0;
+    const firstDate = {};
+    for (const t of txs) { if (!isTw(t.symbol)) continue; const d = App.Util.isoDate(new Date(t.time)); if (!firstDate[t.symbol] || d < firstDate[t.symbol]) firstDate[t.symbol] = d; }
+    const dayDiff = (a, b) => Math.abs((new Date(a + 'T00:00:00+08:00') - new Date(b + 'T00:00:00+08:00')) / 864e5);
+    const acct = S.getCashAccounts().find(x => x.id === S.getAutoDivAcct() && x.currency === 'TWD');
+    const acctId = acct ? acct.id : undefined;
+    const in7 = C.isoAddDays(today, 7);
+    const ps2 = v => Math.round(v * 100) / 100;
+    let imported = 0; const details = []; const touched = new Set();
+    for (const sym of twSyms) {
+      let events = [];
+      try { events = await Api.fetchTwDividends(sym, firstDate[sym]); } catch (e) { events = []; }
+      const divs = S.getDividends();
+      const stockTxs = S.getTransactions().filter(t => t.type === 'STOCK_DIV');
+      const name = mmap[sym]?.name || sym, market = mmap[sym]?.market || 'tse';
+      for (const ev of events) {
+        // 即將除息/除權提醒（7 天內、目前仍有持股；key 去重不重複提醒）
+        if (ev.exDate > today) {
+          if (ev.exDate <= in7 && C.sharesHeldBefore(sym, '9999-12-31') > 0) {
+            S.pushNotification({ type: 'exdiv', key: 'exdiv:' + sym + ':' + ev.exDate + ':' + ev.type,
+              title: sym + ' ' + name + ' 即將' + (ev.type === 'cash' ? '除息' : '除權'),
+              body: ev.exDate + '・每股 ' + ps2(ev.perShare) + ' 元' });
+          }
+          continue;
+        }
+        const shares = C.sharesHeldBefore(sym, ev.exDate);
+        if (!(shares > 0)) continue;
+        if (ev.type === 'cash') {
+          if (ev.payDate > today) continue; // 未到發放日
+          if (divs.some(d => d.symbol === sym && (d.exDate === ev.exDate || dayDiff(d.date, ev.payDate) <= 7))) continue;
+          const amount = ps2(ev.perShare * shares);
+          const r = C.addDividend({ symbolInput: sym, market, name, amount, date: ev.payDate, accountId: acctId, exDate: ev.exDate, note: '自動匯入' });
+          if (r.ok) { imported++; touched.add(sym); details.push({ kind: 'cash', sym, name, amount, payDate: ev.payDate }); }
+        } else {
+          if (stockTxs.some(t => t.symbol === sym && dayDiff(App.Util.isoDate(new Date(t.time)), ev.exDate) <= 7)) continue;
+          const cs = ps2(shares * ev.perShare / 10); // 配股率 = 每股股票股利(元)/面額10
+          if (!(cs > 0)) continue;
+          const r = C.addStockDividend({ symbolInput: sym, market, name, shares: cs, date: ev.exDate });
+          if (r.ok) { imported++; touched.add(sym); details.push({ kind: 'stock', sym, name, shares: cs, exDate: ev.exDate }); }
+        }
+      }
+    }
+    if (imported > 0) {
+      if (imported <= 4) { // 少量逐筆通知;首次大量回補則彙總一則
+        for (const d of details) S.pushNotification(d.kind === 'cash'
+          ? { type: 'div', title: d.sym + ' ' + d.name + ' 股息入帳 NT$ ' + App.Util.fmtWhole(d.amount), body: (acctId ? '已入帳 ' + acct.name + '・' : '') + '發放日 ' + d.payDate }
+          : { type: 'div', title: d.sym + ' ' + d.name + ' 配股 +' + App.Util.formatShares(d.shares) + ' 股', body: '除權日 ' + d.exDate });
+      } else {
+        const sum = details.filter(d => d.kind === 'cash').reduce((s, d) => s + d.amount, 0);
+        S.pushNotification({ type: 'div', title: '自動匯入 ' + imported + ' 筆台股股利',
+          body: (sum > 0 ? '現金合計 NT$ ' + App.Util.fmtWhole(sum) : '') + (acctId ? '・已入帳 ' + acct.name : '') });
+      }
+      C.saveTodaySnapshot();
+      if (App.Sync) App.Sync.markDirty();
+    }
+    return imported;
+  }
+
   // 載入示範資料（測試用）：現金/負債/台美股+加密/群組/120 天歷史快照
   function seedDemo() {
     const U = App.Util;
@@ -371,6 +443,7 @@
   App.snapshotGapDays = snapshotGapDays;
   App.maybeBackfill = maybeBackfill;
   App.runRecurringPlans = runRecurringPlans;
+  App.autoImportTwDividends = autoImportTwDividends;
   App.seedDemo = seedDemo;
 
   // 初始化
@@ -436,8 +509,17 @@
       try {
         const n = await runRecurringPlans();
         // 有回補歷史日期的買入 → 重建走勢讓歷史快照反映；rebuildHistory 內含 renderCurrent
-        if (n > 0) { await rebuildHistory(); UI.toast(`定期計畫已執行，新增 ${n} 筆`, 'success'); }
+        if (n > 0) {
+          S.pushNotification({ type: 'recurring', title: '定期計畫已執行', body: '自動新增 ' + n + ' 筆買入/繳款' });
+          await rebuildHistory(); UI.toast(`定期計畫已執行，新增 ${n} 筆`, 'success');
+        }
       } catch (e) { console.warn('recurring failed', e); }
+      // 全自動匯入台股股利（每日一次；含即將除息提醒）
+      try {
+        const nd = await autoImportTwDividends();
+        if (nd > 0) { renderCurrent(); UI.toast(`已自動匯入 ${nd} 筆台股股利`, 'success'); }
+        else renderCurrent(); // 讓鈴鐺紅點反映新提醒(如即將除息)
+      } catch (e) { console.warn('auto dividends failed', e); }
       const hasTx = S.getTransactions().length > 0;
       if (hasTx) await refresh();
       Api.loadTwUniverse(false).catch(() => {});
