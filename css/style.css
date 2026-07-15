@@ -243,6 +243,16 @@ input, select { font-family: inherit; font-size: 15px; }
 .tx-type.buy, .tx-mini .buy { background: rgba(229,57,53,0.12); color: var(--gain); }
 .tx-type.sell, .tx-mini .sell { background: rgba(67,160,71,0.12); color: var(--loss); }
 .tx-type.evt { background: var(--soft); color: var(--sub); }
+/* 台股股利自動掃描 */
+.dvs-list { display: flex; flex-direction: column; gap: 2px; max-height: 44vh; overflow-y: auto; margin-top: 4px; }
+.dvs-row { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-top: 1px solid var(--divider); }
+.dvs-row:first-child { border-top: none; }
+.dvs-row.dup { opacity: 0.5; }
+.dvs-row input[type=checkbox] { width: 18px; height: 18px; flex: none; accent-color: var(--primary); }
+.dvs-main { flex: 1; min-width: 0; }
+.dvs-t { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.dvs-s { font-size: 12px; color: var(--sub); margin-top: 2px; }
+.dvs-dup { font-size: 10px; color: var(--sub); background: var(--soft); border-radius: 5px; padding: 1px 5px; }
 .tx-main { flex: 1; min-width: 0; }
 .tx-sym { font-size: 14px; font-weight: 600; }
 .tx-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }

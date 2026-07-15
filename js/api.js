@@ -172,6 +172,23 @@ App.Api = (function () {
     } catch (e) { return []; }
   }
 
+  // ---- 台股股利政策（FinMind TaiwanStockDividend，免金鑰）供自動帶入 ----
+  // 回傳升序事件 [{type:'cash'|'stock', exDate, payDate, perShare}]
+  //   cash perShare=現金股利/股(元)；stock perShare=配股/股(面額元,配股率=perShare/10)
+  async function fetchTwDividends(code, startDate) {
+    try {
+      const j = await fetchJson(fmUrl({ dataset: 'TaiwanStockDividend', data_id: code, start_date: startDate || '2015-01-01' }));
+      const out = [];
+      for (const r of (j.data || [])) {
+        const cash = (+r.CashEarningsDistribution || 0) + (+r.CashStatutorySurplus || 0);
+        const stock = (+r.StockEarningsDistribution || 0) + (+r.StockStatutorySurplus || 0);
+        if (cash > 0 && r.CashExDividendTradingDate) out.push({ type: 'cash', exDate: r.CashExDividendTradingDate, payDate: r.CashDividendPaymentDate || r.CashExDividendTradingDate, perShare: cash });
+        if (stock > 0 && r.StockExDividendTradingDate) out.push({ type: 'stock', exDate: r.StockExDividendTradingDate, payDate: r.StockExDividendTradingDate, perShare: stock });
+      }
+      return out.sort((a, b) => a.exDate < b.exDate ? -1 : 1);
+    } catch (e) { return []; }
+  }
+
   // ---- 台股盤中即時（TWSE MIS，經 proxy；可批次多檔）----
   // 回傳 {code: {price, dailyChange, prevClose}}；盤中時段使用
   async function fetchTwRealtime(metas) {
@@ -453,5 +470,5 @@ App.Api = (function () {
     return results.slice(0, 30);
   }
 
-  return { fetchText, fetchJson, loadTwUniverse, fetchTwPrice, fetchTwHistory, fetchUsHistory, fetchDailySeries, fetchTwRealtime, fetchUsQuote, fetchCryptoQuotes, fetchCryptoHistory, cacheCgId, fetchFx, refreshPrices, searchSymbols, finnhubKey };
+  return { fetchText, fetchJson, loadTwUniverse, fetchTwPrice, fetchTwHistory, fetchUsHistory, fetchDailySeries, fetchTwDividends, fetchTwRealtime, fetchUsQuote, fetchCryptoQuotes, fetchCryptoHistory, cacheCgId, fetchFx, refreshPrices, searchSymbols, finnhubKey };
 })();

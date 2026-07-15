@@ -270,6 +270,12 @@ App.Calc = (function () {
     return { total, tw, us, count };
   }
 
+  // 指定日期（不含當日）之前某標的的持股（供台股股利依除息日持股自動計算）
+  function sharesHeldBefore(symbol, dateIso) {
+    const txs = S.getTransactions().filter(t => t.symbol === symbol && U.isoDate(new Date(t.time)) < dateIso);
+    return computeAvgCostPosition(txs).shares;
+  }
+
   // 累計股利（TWD）至指定日期（含）；dateIso 為空 → 全部。美股以目前匯率換算（供報表歷史含息報酬）
   function dividendsUpTo(dateIso) {
     const rate = S.getFxRate() || 31.5;
@@ -279,7 +285,7 @@ App.Calc = (function () {
   }
 
   // 現金股利：寫入帳本；有 accountId 則入帳(原幣別)。回傳 {ok, id?}
-  function addDividend({ symbolInput, market, name, amount, date, accountId, note }) {
+  function addDividend({ symbolInput, market, name, amount, date, accountId, note, exDate }) {
     const symbol = U.sanitizeSymbol(symbolInput);
     if (!symbol || !(amount > 0)) return { ok: false, msg: '請輸入正確的代碼與金額' };
     const mk = market ? U.normalizeMarketKey(market) : U.guessMarketBySymbol(symbol);
@@ -289,6 +295,7 @@ App.Calc = (function () {
     const rec = { id: S.uuid(), symbol, market: mk, amount, date: date || U.isoDate(), createdAt: Date.now() };
     if (accountId) rec.accountId = accountId;
     if (note) rec.note = note;
+    if (exDate) rec.exDate = exDate; // 除息日,供自動掃描去重
     list.push(rec);
     S.setDividends(list);
     if (accountId) S.adjustCashBalance(accountId, amount);
@@ -869,7 +876,7 @@ App.Calc = (function () {
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
-    addStockDividend, dividendsTotalTwd, dividendsBetween, dividendsUpTo, addDividend, updateDividend, deleteDividend,
+    addStockDividend, dividendsTotalTwd, dividendsBetween, dividendsUpTo, addDividend, updateDividend, deleteDividend, sharesHeldBefore,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
     netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats,
     recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment, investedBetween, feesSummary,

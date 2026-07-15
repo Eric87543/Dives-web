@@ -195,10 +195,12 @@ App.Views = (function () {
           <div class="ga-item" data-k="tx"><b>買賣交易</b><span class="ga-sub">買入 / 賣出</span></div>
           <div class="ga-item" data-k="cash"><b>現金股利（配息）</b><span class="ga-sub">可選導入現金帳戶</span></div>
           <div class="ga-item" data-k="stock"><b>股票股利（配股）</b><span class="ga-sub">增加持股股數</span></div>
+          <div class="ga-item" data-k="scan"><b>自動帶入台股股利</b><span class="ga-sub">掃描 FinMind，依除息日持股計算</span></div>
         </div>`, '');
       ov.querySelectorAll('.ga-item').forEach(it => it.addEventListener('click', () => {
         const k = it.dataset.k; UI.closeSheet();
         if (k === 'tx') openTxForm(null);
+        else if (k === 'scan') openDividendScan(() => portfolio(root));
         else openDividendForm(k === 'cash' ? 'cash' : 'stock', null);
       }));
     });
@@ -2099,6 +2101,81 @@ App.Views = (function () {
 
   /* ===================== 新增/編輯交易 ===================== */
   // 股利/配股 輸入表單。kind: 'cash'(現金股利) | 'stock'(配股)
+  // 自動帶入台股股利：掃描 FinMind 股利政策 → 依除息日持股算金額 → 勾選匯入
+  async function openDividendScan(onDone) {
+    const mmap = S.metaMap();
+    const isTw = sym => { const m = U.normalizeMarketKey(mmap[sym]?.market || U.guessMarketBySymbol(sym)); return m !== U.Market.us && m !== U.Market.crypto; };
+    const txs = S.getTransactions();
+    const twSyms = [...new Set(txs.filter(t => isTw(t.symbol)).map(t => t.symbol))];
+    const ov = UI.openSheet('自動帶入台股股利', '<div class="empty" style="padding:28px">掃描 FinMind 股利政策中…</div>', '');
+    const body = () => ov.querySelector('.sheet-body');
+    if (!twSyms.length) { body().innerHTML = '<div class="empty" style="padding:28px">目前沒有台股持倉紀錄</div>'; return; }
+
+    const firstDate = {};
+    for (const t of txs) { if (!isTw(t.symbol)) continue; const d = U.isoDate(new Date(t.time)); if (!firstDate[t.symbol] || d < firstDate[t.symbol]) firstDate[t.symbol] = d; }
+
+    const divs = S.getDividends();
+    const stockTxs = txs.filter(t => t.type === 'STOCK_DIV');
+    const dayDiff = (a, b) => Math.abs((new Date(a + 'T00:00:00+08:00') - new Date(b + 'T00:00:00+08:00')) / 864e5);
+    const cashDup = (sym, exDate, payDate) => divs.some(d => d.symbol === sym && (d.exDate === exDate || dayDiff(d.date, payDate) <= 7));
+    const stockDup = (sym, exDate) => stockTxs.some(t => t.symbol === sym && dayDiff(U.isoDate(new Date(t.time)), exDate) <= 7);
+
+    const cands = [];
+    for (const sym of twSyms) {
+      let events = [];
+      try { events = await App.Api.fetchTwDividends(sym, firstDate[sym]); } catch (e) { events = []; }
+      for (const ev of events) {
+        const shares = C.sharesHeldBefore(sym, ev.exDate);
+        if (!(shares > 0)) continue;
+        const name = mmap[sym]?.name || sym;
+        const market = mmap[sym]?.market || 'tse';
+        if (ev.type === 'cash') {
+          const amount = Math.round(ev.perShare * shares * 100) / 100;
+          cands.push({ type: 'cash', sym, name, market, exDate: ev.exDate, payDate: ev.payDate, perShare: ev.perShare, shares, amount, dup: cashDup(sym, ev.exDate, ev.payDate) });
+        } else {
+          const cs = Math.round(shares * ev.perShare / 10 * 100) / 100;
+          if (!(cs > 0)) continue;
+          cands.push({ type: 'stock', sym, name, market, exDate: ev.exDate, perShare: ev.perShare, shares, configShares: cs, dup: stockDup(sym, ev.exDate) });
+        }
+      }
+    }
+    cands.sort((a, b) => a.exDate < b.exDate ? 1 : -1); // 新→舊
+
+    if (!cands.length) { body().innerHTML = '<div class="empty" style="padding:28px">沒有找到可帶入的股利<br><span style="font-size:12px">（持股期間無配息，或已全部記錄）</span></div>'; return; }
+
+    const twdAccts = S.getCashAccounts().filter(a => a.currency === 'TWD');
+    const acctSel = `<select class="input" id="dvs-acct"><option value="">不入帳（只記收益）</option>${twdAccts.map(a => `<option value="${a.id}">${a.name}（NT$ ${U.formatPrice(a.balance || 0)}）</option>`).join('')}</select>`;
+    const rows = cands.map((c, i) => {
+      const desc = c.type === 'cash'
+        ? `現金 ${c.perShare} 元/股 × ${U.formatShares(c.shares)} 股 = NT$ ${U.fmtKMBB(c.amount)}`
+        : `配股 ${U.formatShares(c.configShares)} 股（${c.perShare} 元/股）`;
+      return `<label class="dvs-row${c.dup ? ' dup' : ''}">
+        <input type="checkbox" data-i="${i}" ${c.dup ? '' : 'checked'}>
+        <div class="dvs-main"><div class="dvs-t">${c.sym} ${c.name} <span class="tx-type evt">${c.type === 'cash' ? '股息' : '配股'}</span>${c.dup ? '<span class="dvs-dup">已記錄</span>' : ''}</div>
+          <div class="dvs-s">${desc} · 除息 ${c.exDate}</div></div>
+      </label>`;
+    }).join('');
+    body().innerHTML = `
+      <div class="set-hint" style="margin-bottom:8px">依你在除息日的持股自動計算。勾選要帶入的項目：</div>
+      <label class="fld">現金股利入帳帳戶${acctSel}</label>
+      <div class="dvs-list">${rows}</div>
+      <button class="btn btn-block btn-primary" id="dvs-import" style="margin-top:12px">匯入勾選項目</button>`;
+
+    ov.querySelector('#dvs-import').addEventListener('click', () => {
+      const accountId = ov.querySelector('#dvs-acct').value || undefined;
+      const checked = [...ov.querySelectorAll('.dvs-list input[type=checkbox]:checked')].map(cb => cands[+cb.dataset.i]);
+      if (!checked.length) return UI.toast('請勾選要帶入的項目', 'info');
+      let n = 0; const touched = new Set();
+      for (const c of checked) {
+        const r = c.type === 'cash'
+          ? C.addDividend({ symbolInput: c.sym, market: c.market, name: c.name, amount: c.amount, date: c.payDate, accountId, exDate: c.exDate, note: '自動帶入' })
+          : C.addStockDividend({ symbolInput: c.sym, market: c.market, name: c.name, shares: c.configShares, date: c.exDate });
+        if (r.ok) { n++; touched.add(c.sym); }
+      }
+      UI.closeSheet(); UI.toast(`已帶入 ${n} 筆股利`, 'success'); App.afterDataChange([...touched]); onDone && onDone();
+    });
+  }
+
   function openDividendForm(kind, editing, onDone) {
     const isCash = kind === 'cash';
     const p = editing || {};

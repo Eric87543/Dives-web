@@ -142,3 +142,11 @@ test('dividendsUpTo：累計至指定日期(含)、美股換匯、null=全部', 
   assert.equal(Math.round(C.dividendsUpTo('2026-02-01')), 0);    // 全部之前
   assert.equal(Math.round(C.dividendsUpTo(null)), 1600);         // null → 全部
 });
+
+test('sharesHeldBefore：除息日(不含當日)前的持股', () => {
+  C.addTransaction({ symbolInput: '2330', type: 'BUY', shares: 100, price: 500, fee: 0, market: 'tse', name: '台積電', time: t('2026-01-10') });
+  C.addTransaction({ symbolInput: '2330', type: 'BUY', shares: 50, price: 600, fee: 0, market: 'tse', name: '台積電', time: t('2026-03-20') });
+  assert.equal(C.sharesHeldBefore('2330', '2026-03-17'), 100); // 3/20 那筆在除息日之後,不算
+  assert.equal(C.sharesHeldBefore('2330', '2026-06-11'), 150); // 兩筆都在除息日之前
+  assert.equal(C.sharesHeldBefore('2330', '2026-01-01'), 0);   // 都還沒買
+});
