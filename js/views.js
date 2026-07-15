@@ -377,18 +377,18 @@ App.Views = (function () {
       const sm = C.buildSummary(C.buildPositions()); // 累計報酬（vs 投入本金）
       return `
         <div class="card stats-card">
-          <div class="stats-title">自投入本金以來${sm.totalDividendTwd > 0 ? '（含息）' : ''}</div>
+          <div class="stats-title">自投入本金以來</div>
           <div class="tr-row">
-            <div class="tr-amt" style="color:${col(sm.totalPnlWithDiv)}">${sf(sm.totalPnlWithDiv)}</div>
-            <div class="tr-pct" style="color:${col(sm.totalReturnWithDivPct || 0)}">${pctTxt(sm.totalReturnWithDivPct || 0)}</div>
+            <div class="tr-amt" style="color:${col(sm.totalPnl)}">${sf(sm.totalPnl)}</div>
+            <div class="tr-pct" style="color:${col(sm.totalReturnPct || 0)}">${pctTxt(sm.totalReturnPct || 0)}</div>
           </div>
           <div class="tr-grid">
             <div class="trg"><span class="trg-k">投入本金</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalCostBasisTwd)}</span></div>
             <div class="trg"><span class="trg-k">目前市值</span><span class="trg-v">NT$ ${U.fmtKMBB(sm.totalMarketValueTwd)}</span></div>
             <div class="trg"><span class="trg-k">未實現</span><span class="trg-v" style="color:${col(sm.totalUnrealizedPnl)}">${sf(sm.totalUnrealizedPnl)}</span></div>
             <div class="trg"><span class="trg-k">已實現</span><span class="trg-v" style="color:${col(sm.totalRealizedPnl)}">${sf(sm.totalRealizedPnl)}</span></div>
-            <div class="trg"><span class="trg-k">股息收入</span><span class="trg-v" style="color:${col(sm.totalDividendTwd)}">${sf(sm.totalDividendTwd)}</span></div>
-            <div class="trg"><span class="trg-k">資本報酬率</span><span class="trg-v" style="color:${col(sm.totalReturnPct || 0)}">${pctTxt(sm.totalReturnPct || 0)}</span></div>
+            <div class="trg"><span class="trg-k">股息收入</span><span class="trg-v">${sf(sm.totalDividendTwd)}</span></div>
+            <div class="trg"><span class="trg-k">含息報酬率</span><span class="trg-v" style="color:${col(sm.totalReturnWithDivPct || 0)}">${pctTxt(sm.totalReturnWithDivPct || 0)}</span></div>
           </div>
         </div>
         ${feeCard}
@@ -406,10 +406,10 @@ App.Views = (function () {
     const st = C.scopedStats(scope.from, scope.to, grans);
     return `
       <div class="card stats-card">
-        <div class="stats-title">本期損益${st.periodDividend > 0 ? '（含息）' : ''}</div>
+        <div class="stats-title">本期損益</div>
         <div class="tr-row">
-          <div class="tr-amt" style="color:${col((st.periodPnl || 0) + (st.periodDividend || 0))}">${sf((st.periodPnl || 0) + (st.periodDividend || 0))}</div>
-          <div class="tr-pct" style="color:${col(st.periodReturnWithDivPct || 0)}">${pctTxt(st.periodReturnWithDivPct || 0)}</div>
+          <div class="tr-amt" style="color:${col(st.periodPnl)}">${sf(st.periodPnl)}</div>
+          <div class="tr-pct" style="color:${col(st.periodReturnPct || 0)}">${pctTxt(st.periodReturnPct || 0)}</div>
         </div>
       </div>
       ${feeCard}
