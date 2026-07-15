@@ -270,6 +270,14 @@ App.Calc = (function () {
     return { total, tw, us, count };
   }
 
+  // 累計股利（TWD）至指定日期（含）；dateIso 為空 → 全部。美股以目前匯率換算（供報表歷史含息報酬）
+  function dividendsUpTo(dateIso) {
+    const rate = S.getFxRate() || 31.5;
+    let sum = 0;
+    for (const d of S.getDividends()) if (!dateIso || d.date <= dateIso) sum += (d.amount || 0) * (_divIsUsd(d.symbol) ? rate : 1);
+    return sum;
+  }
+
   // 現金股利：寫入帳本；有 accountId 則入帳(原幣別)。回傳 {ok, id?}
   function addDividend({ symbolInput, market, name, amount, date, accountId, note }) {
     const symbol = U.sanitizeSymbol(symbolInput);
@@ -861,7 +869,7 @@ App.Calc = (function () {
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
-    addStockDividend, dividendsTotalTwd, dividendsBetween, addDividend, updateDividend, deleteDividend,
+    addStockDividend, dividendsTotalTwd, dividendsBetween, dividendsUpTo, addDividend, updateDividend, deleteDividend,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
     netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats,
     recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment, investedBetween, feesSummary,

@@ -129,3 +129,16 @@ test('deleteSymbol：一併刪除該檔股利並沖銷入帳現金', () => {
   assert.deepEqual(S.getDividends(), []);
   assert.equal(S.getCashAccounts()[0].balance, 1000);
 });
+
+test('dividendsUpTo：累計至指定日期(含)、美股換匯、null=全部', () => {
+  S.setFxRate(30);
+  S.upsertMeta([{ code: '2330', name: '台積電', market: 'tse' }, { code: 'AAPL', name: 'Apple', market: 'us' }]);
+  S.setDividends([
+    { id: '1', symbol: '2330', market: 'tse', amount: 1000, date: '2026-03-10' },
+    { id: '2', symbol: 'AAPL', market: 'us', amount: 20, date: '2026-06-10' }, // 20×30 = 600
+  ]);
+  assert.equal(Math.round(C.dividendsUpTo('2026-03-31')), 1000); // 只到 3 月
+  assert.equal(Math.round(C.dividendsUpTo('2026-06-10')), 1600); // 含 6/10 當日
+  assert.equal(Math.round(C.dividendsUpTo('2026-02-01')), 0);    // 全部之前
+  assert.equal(Math.round(C.dividendsUpTo(null)), 1600);         // null → 全部
+});

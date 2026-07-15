@@ -628,6 +628,8 @@ App.Views = (function () {
   function mkReport(label, s, prev, cl) {
     const cost = s.totalCostBasisTwd;
     const pPnl = s.totalPnl - (prev ? prev.totalPnl : 0);
+    const cumDiv = C.dividendsUpTo(s.date);                            // 累計股利至本期(TWD)
+    const periodDiv = cumDiv - (prev ? C.dividendsUpTo(prev.date) : 0); // 本期收到股息
     return {
       label,
       // 總倉位 = 台股 + 美股 + 加密 總市值（欄位名沿用 netAsset 以相容既有圖表）
@@ -638,6 +640,9 @@ App.Views = (function () {
       totalPnl: s.totalPnl,
       returnPct: s.totalReturnPct,
       periodReturnPct: cost > 1e-9 ? pPnl / cost * 100 : 0,
+      dividendCum: cumDiv,
+      periodDividend: periodDiv,
+      returnWithDivPct: cost > 1e-9 ? (s.totalPnl + cumDiv) / cost * 100 : 0,
       periodRealizedPnl: s.realizedPnl - (prev ? prev.realizedPnl : 0),
       unrealizedPnl: s.unrealizedPnl,
     };
@@ -689,6 +694,7 @@ App.Views = (function () {
             <span>目前市值 <b>NT$ ${U.fmtKMBB(last.totalMarketValueTwd || 0)}</b></span>
             <span>未實現 <b style="color:${UI.pnlColor(last.unrealizedPnl)}">${U.fmtBannerSigned(last.unrealizedPnl)}</b></span>
             <span>已實現 <b style="color:${UI.pnlColor(last.realizedPnl)}">${U.fmtBannerSigned(last.realizedPnl)}</b></span>
+            ${hero.dividendCum > 0 ? `<span>股息 <b style="color:${UI.pnlColor(1)}">${U.fmtBannerSigned(hero.dividendCum)}</b></span><span>含息報酬率 <b style="color:${UI.pnlColor(hero.returnWithDivPct)}">${U.fmtPct(hero.returnWithDivPct)}</b></span>` : ''}
           </div>
         </div>`;
       }
@@ -732,7 +738,7 @@ App.Views = (function () {
         listHtml += `<div class="rep-prow${drill ? ' rep-prow-drill' : ''}"${drill ? ` data-key="${r.key}"` : ''}>
           <div class="rep-prow-main">
             <div class="rep-prow-lbl">${r.label}</div>
-            <div class="rep-prow-sub">總倉位 ${U.fmtKMBB(r.netAsset)} · 投入 ${U.fmtBannerSigned(r.newInvestment)}</div>
+            <div class="rep-prow-sub">總倉位 ${U.fmtKMBB(r.netAsset)} · 投入 ${U.fmtBannerSigned(r.newInvestment)}${r.periodDividend > 0 ? ' · 股息 ' + U.fmtBannerSigned(r.periodDividend) : ''}</div>
           </div>
           <div class="rep-prow-val">
             <div class="rep-prow-pnl" style="color:${UI.pnlColor(r.periodPnl)}">${U.fmtBannerSigned(r.periodPnl)}</div>
