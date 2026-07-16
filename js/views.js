@@ -703,7 +703,7 @@ App.Views = (function () {
             <span>目前市值 <b>NT$ ${U.fmtKMBB(last.totalMarketValueTwd || 0)}</b></span>
             <span>未實現 <b style="color:${UI.pnlColor(last.unrealizedPnl)}">${U.fmtBannerSigned(last.unrealizedPnl)}</b></span>
             <span>已實現 <b style="color:${UI.pnlColor(last.realizedPnl)}">${U.fmtBannerSigned(last.realizedPnl)}</b></span>
-            ${hero.dividendCum > 0 ? `<span>股息 <b style="color:${UI.pnlColor(1)}">${U.fmtBannerSigned(hero.dividendCum)}</b></span><span>資本報酬率 <b style="color:${UI.pnlColor(hero.returnPct || 0)}">${U.fmtPct(hero.returnPct)}</b></span>` : ''}
+            ${hero.dividendCum > 0 ? `<span>股息 <b style="color:${UI.pnlColor(1)}">${U.fmtBannerSigned(hero.dividendCum)}</b></span>` : ''}
           </div>
         </div>`;
       }
@@ -1489,17 +1489,13 @@ App.Views = (function () {
       const bal = parseFloat($('#mf-bal').value);
       if (!name) return UI.toast('請輸入名稱', 'info');
       if (isNaN(bal)) return UI.toast('請輸入金額', 'info');
-      if (isCash) {
-        const list = S.getCashAccounts();
-        if (editing) { const x = list.find(i => i.id === a.id); if (x) { x.name = name; x.currency = cur; x.balance = bal; } }
-        else list.push({ id: S.uuid(), name, currency: cur, balance: bal });
-        S.setCashAccounts(list);
-      } else {
-        const list = S.getLiabilities();
-        if (editing) { const x = list.find(i => i.id === a.id); if (x) { x.name = name; x.currency = cur; x.balance = bal; } }
-        else list.push({ id: S.uuid(), name, currency: cur, balance: bal });
-        S.setLiabilities(list);
-      }
+      const list = isCash ? S.getCashAccounts() : S.getLiabilities();
+      // 名稱不可與其他同類帳戶重複（避免新增同名時看似覆蓋原本資金）
+      const dup = list.find(x => (x.name || '').trim() === name && (!editing || x.id !== a.id));
+      if (dup) return UI.toast('已有同名' + (isCash ? '現金帳戶' : '負債') + '「' + name + '」，請改用其他名稱或直接點該項目編輯', 'info');
+      if (editing) { const x = list.find(i => i.id === a.id); if (x) { x.name = name; x.currency = cur; x.balance = bal; } }
+      else list.push({ id: S.uuid(), name, currency: cur, balance: bal });
+      if (isCash) S.setCashAccounts(list); else S.setLiabilities(list);
       UI.closeSheet(); if (App.Sync) App.Sync.markDirty(); onDone && onDone();
     });
   }
