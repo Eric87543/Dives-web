@@ -538,6 +538,11 @@ input, select { font-family: inherit; font-size: 15px; }
 /* ---- Lock screen ---- */
 .lock-overlay { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; transition: opacity .25s; }
 .lock-overlay.hide { opacity: 0; }
+/* 隱私遮蔽層：切換 App/背景時蓋住內容(z 最高,含蓋鎖定/表單);顯示需即時(不淡入)以趕上切換器快照 */
+.privacy-cover { position: fixed; inset: 0; z-index: 9999; background: var(--bg); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+.privacy-cover.show { display: flex; }
+.privacy-cover img { width: 84px; height: 84px; border-radius: 20px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+.privacy-cover .pc-name { font-size: 20px; font-weight: 800; letter-spacing: 2px; color: var(--text); }
 .lock-box { width: 100%; max-width: 300px; display: flex; flex-direction: column; align-items: center; }
 .lock-icon { width: 64px; height: 64px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
 .lock-title { font-size: 22px; font-weight: 800; margin-top: 14px; }

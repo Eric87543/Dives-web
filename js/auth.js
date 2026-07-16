@@ -165,23 +165,23 @@ App.Auth = (function () {
 
     const faceBtn = ov.querySelector('#faceid-btn');
     const setFaceLabel = txt => { const l = faceBtn && faceBtn.querySelector('#faceid-label'); if (l) l.textContent = txt; };
-    if (faceBtn) faceBtn.addEventListener('click', async () => {
+    let facing = false;
+    async function faceFlow() {
+      if (facing) return; facing = true;
       setFaceLabel('驗證中…');
       const ok = await tryFaceId();
+      facing = false;
       if (ok) unlock();
       else { setFaceLabel('使用 Face ID'); subEl.textContent = 'Face ID 失敗，可改用密碼'; }
-    });
-
-    // 已設定 Face ID → 進入即自動觸發（部分平台需手勢，失敗則退回按鈕/PIN）
+    }
     if (faceEnabled) {
-      window.setTimeout(async () => {
-        if (!document.getElementById('lock-overlay')) return; // 已解鎖
-        setFaceLabel('驗證中…');
-        const ok = await tryFaceId();
-        if (ok) { unlock(); return; }
-        setFaceLabel('使用 Face ID');
-        subEl.textContent = '請用 Face ID 或輸入密碼';
-      }, 250);
+      subEl.textContent = '點一下以 Face ID 解鎖，或輸入密碼';
+      // iOS WebAuthn 需在使用者手勢中呼叫才會直接跳臉部辨識(免再點「使用通行密鑰」)。
+      // 因此改為：點畫面任一處(數字鍵除外)即以手勢觸發 Face ID → 一次點擊直達。
+      ov.addEventListener('pointerdown', e => {
+        if (e.target.closest('.pin-key')) return; // 想改用密碼 → 不攔，保留給下一次
+        faceFlow();
+      });
     }
   }
 
