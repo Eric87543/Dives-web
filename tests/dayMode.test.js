@@ -69,11 +69,12 @@ test('twday + 台股盤前但美股仍在盤 → 台股=0、美股照算（凌�
   assert.equal(Math.round(s.dayPnl), 600);
 });
 
-test('twCountsTowardToday：平日 09:00 後 true；盤前/週末 false', () => {
-  assert.equal(U.twCountsTowardToday({ weekday: 'Mon', hour: 8, minute: 59 }), false); // 開盤前
-  assert.equal(U.twCountsTowardToday({ weekday: 'Mon', hour: 9, minute: 0 }), true);   // 開盤
-  assert.equal(U.twCountsTowardToday({ weekday: 'Wed', hour: 13, minute: 40 }), true); // 收盤後同日
-  assert.equal(U.twCountsTowardToday({ weekday: 'Fri', hour: 22, minute: 0 }), true);  // 平日晚上
-  assert.equal(U.twCountsTowardToday({ weekday: 'Sat', hour: 10, minute: 0 }), false); // 週六
-  assert.equal(U.twCountsTowardToday({ weekday: 'Sun', hour: 11, minute: 0 }), false); // 週日
+test('twCountsTowardToday：09:00~美股開盤 為計入窗；盤前/美股開盤後/週末 false', () => {
+  const UO = 21 * 60 + 30; // 注入美股開盤(夏令 21:30)避免依賴真實 DST
+  assert.equal(U.twCountsTowardToday({ weekday: 'Mon', hour: 8, minute: 59 }, UO), false); // 開盤前
+  assert.equal(U.twCountsTowardToday({ weekday: 'Mon', hour: 9, minute: 0 }, UO), true);   // 開盤
+  assert.equal(U.twCountsTowardToday({ weekday: 'Wed', hour: 13, minute: 40 }, UO), true); // 台股收盤後、美股開盤前 → 仍計入
+  assert.equal(U.twCountsTowardToday({ weekday: 'Fri', hour: 22, minute: 0 }, UO), false); // 美股開盤後 → 歸零(新規則)
+  assert.equal(U.twCountsTowardToday({ weekday: 'Sat', hour: 10, minute: 0 }, UO), false); // 週六
+  assert.equal(U.twCountsTowardToday({ weekday: 'Sun', hour: 11, minute: 0 }, UO), false); // 週日
 });

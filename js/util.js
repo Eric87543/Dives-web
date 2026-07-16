@@ -172,25 +172,31 @@ App.Util = (function () {
     const utc = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
     return Math.round((utc - et) / 3600000) === 4;
   }
+  // 美股開盤時間（台北時間，分鐘）；夏令 21:30，冬令 22:30
+  function usOpenMinutes() { return usEasternIsDst() ? (21 * 60 + 30) : (22 * 60 + 30); }
+
   // 「台股今日(09:00 起算)」這個視窗內，美股是否已經開過盤。
   //   台股白天(09:00 ~ 美股開盤前) → 美股當天還沒開 → false（凌晨已收那盤歸昨天）
   //   台北晚上美股開盤後 ~ 隔天 09:00 前 → true（今晚這盤算今日）
-  function usCountsTowardToday() {
-    const p = taipeiParts();
+  //   parts / usOpenMin 可注入（供測試）；預設取台北現在時間 + 實際 DST
+  function usCountsTowardToday(parts, usOpenMin) {
+    const p = parts || taipeiParts();
     const mins = p.hour * 60 + p.minute;
-    const usOpen = usEasternIsDst() ? (21 * 60 + 30) : (22 * 60 + 30); // 美股開盤(台北時間)
+    const usOpen = usOpenMin != null ? usOpenMin : usOpenMinutes();
     return !(mins >= 9 * 60 && mins < usOpen);
   }
 
   // 「台股日」模式下，台股當日漲跌是否計入今日。
-  //   平日 09:00（台股開盤）之後才計入；開盤前 or 週末 → 今日尚無台股盤 → 0
-  //   （避免假日/收盤後仍顯示前一交易日的漲跌；每天 09:00 歸零重算）
-  //   parts 可注入（供測試）；預設取台北現在時間
-  function twCountsTowardToday(parts) {
+  //   計入窗：平日 09:00（台股開盤）起 ~ 美股開盤 止；美股開盤後歸零。
+  //   開盤前 / 收盤後(美股開盤起) / 週末 → 0。
+  //   → 與美股對稱：美股在台股 09:00 開盤歸零、台股在美股開盤歸零；任一時刻僅一市場計入。
+  //   parts / usOpenMin 可注入（供測試）；預設取台北現在時間 + 實際 DST
+  function twCountsTowardToday(parts, usOpenMin) {
     const p = parts || taipeiParts();
     if (p.weekday === 'Sat' || p.weekday === 'Sun') return false;
     const mins = p.hour * 60 + p.minute;
-    return mins >= 9 * 60;
+    const usOpen = usOpenMin != null ? usOpenMin : usOpenMinutes();
+    return mins >= 9 * 60 && mins < usOpen;
   }
 
   // 解析數字字串（處理逗號、空字串、"-"）
@@ -206,6 +212,6 @@ App.Util = (function () {
     Market, normalizeMarketKey, guessMarketBySymbol, marketLabel,
     sanitizeSymbol, canonicalizeTwCode,
     fmtWhole, formatShares, formatPrice, fmtKMBB, fmtBanner, fmtBannerSigned, fmtPct,
-    isoDate, taipeiParts, isWeekend, shouldUseMisRealtime, usCountsTowardToday, twCountsTowardToday, parseNum
+    isoDate, taipeiParts, isWeekend, shouldUseMisRealtime, usOpenMinutes, usCountsTowardToday, twCountsTowardToday, parseNum
   };
 })();
