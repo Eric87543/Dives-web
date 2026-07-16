@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v128';
+  App.VERSION = 'v129';
 
   const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -154,21 +154,6 @@
     const el = document.getElementById('last-updated');
     if (el) el.textContent = ts ? ('更新於 ' + new Date(ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })) : '';
   }
-
-  // 隱私遮蔽層（App 切換器/背景時蓋住畫面內容）
-  let coverEl = null;
-  function showPrivacyCover() {
-    if (!S.getPrivacyCover()) return;
-    if (!coverEl) {
-      coverEl = document.createElement('div');
-      coverEl.id = 'privacy-cover';
-      coverEl.className = 'privacy-cover';
-      coverEl.innerHTML = '<img src="icons/icon-192.png" alt=""><div class="pc-name">Dives</div>';
-      document.body.appendChild(coverEl);
-    }
-    coverEl.classList.add('show');
-  }
-  function hidePrivacyCover() { if (coverEl) coverEl.classList.remove('show'); }
 
   // 報價刷新
   let refreshing = false;
@@ -524,21 +509,14 @@
       startBackground();
     }
 
-    // 隱私遮蔽：切換 App / 回背景時蓋住內容（避免 App 切換器預覽外洩），回前景才移除
-    window.addEventListener('blur', showPrivacyCover);
-    window.addEventListener('pagehide', showPrivacyCover);
-    window.addEventListener('focus', () => { if (document.visibilityState === 'visible') hidePrivacyCover(); });
-
     // 回到前景：背景超過逾時則重新鎖定，否則同步 + 視情況刷新
     document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState === 'hidden') { if (App.Auth) App.Auth.noteHidden(); showPrivacyCover(); return; }
+      if (document.visibilityState === 'hidden') { if (App.Auth) App.Auth.noteHidden(); return; }
       if (App.Auth && App.Auth.shouldRelock()) {
         // 鎖定畫面已在顯示就不重複呼叫（避免蓋掉解鎖 callback / 重觸發驗證）
         if (!document.getElementById('lock-overlay')) App.Auth.showLock(() => { foregroundSync(); });
-        hidePrivacyCover(); // 鎖定畫面已覆蓋內容
         return;
       }
-      hidePrivacyCover();
       foregroundSync();
     });
 

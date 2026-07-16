@@ -1618,7 +1618,6 @@ App.Views = (function () {
     <div class="s-list">
       ${nav('cloud', 'set-sync', '雲端同步', syncOn ? '已啟用' : '未啟用')}
       ${nav('lock', 'set-lock', 'App 鎖定', lockOn ? '已啟用' : '未啟用')}
-      ${nav('lock', 'set-cover', '切換 App 時遮蔽畫面', S.getPrivacyCover() ? '開啟' : '關閉')}
     </div>
     <div class="s-head">顯示</div>
     <div class="s-list">
@@ -1662,10 +1661,6 @@ App.Views = (function () {
     const on = (id, fn) => { const el = root.querySelector('#' + id); if (el) el.addEventListener('click', fn); };
     on('set-sync', () => { set.sub = 'sync'; settings(root); });
     on('set-lock', () => { set.sub = 'lock'; settings(root); });
-    on('set-cover', () => openChooser('切換 App 時遮蔽畫面', [
-      { v: '1', label: '開啟', hint: '切到其他 App／回背景時以 Dives 標誌蓋住畫面，App 切換器預覽不會看到你的資產數字' },
-      { v: '0', label: '關閉', hint: '切換 App 時可能在預覽縮圖看到畫面內容' },
-    ], S.getPrivacyCover() ? '1' : '0', v => { S.setPrivacyCover(v === '1'); settings(root); }));
     on('set-adv', () => { set.sub = 'adv'; settings(root); });
     on('set-recurring', () => { set.sub = 'recurring'; settings(root); });
     on('set-autodiv-page', () => { set.sub = 'autodiv'; settings(root); });

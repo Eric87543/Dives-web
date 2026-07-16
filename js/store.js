@@ -33,7 +33,6 @@ App.Store = (function () {
     pctBasis: 'dives_pct_basis',
     dayMode: 'dives_day_mode',
     privacy: 'dives_privacy',
-    privacyCover: 'dives_privacy_cover',
     chartRange: 'dives_chart_range',
   };
 
@@ -189,9 +188,6 @@ App.Store = (function () {
   // ---- 隱藏金額（本機偏好，不上雲同步）----
   function getPrivacy() { return localStorage.getItem(K.privacy) === '1'; }
   function setPrivacy(v) { localStorage.setItem(K.privacy, v ? '1' : '0'); }
-  // 切換 App / 回到背景時，以遮蔽畫面蓋住內容（避免 App 切換器預覽外洩）；預設開啟
-  function getPrivacyCover() { return localStorage.getItem(K.privacyCover) !== '0'; }
-  function setPrivacyCover(v) { localStorage.setItem(K.privacyCover, v ? '1' : '0'); }
   // ---- 走勢圖時間區間（所有走勢圖共用、持久化；本機偏好，不上雲）----
   function getChartRange() { const r = read(K.chartRange, null); return { range: (r && r.range) || 'all', from: (r && r.from) || null, to: (r && r.to) || null }; }
   function setChartRange(r) { write(K.chartRange, { range: (r && r.range) || 'all', from: (r && r.from) || null, to: (r && r.to) || null }); }
@@ -232,7 +228,7 @@ App.Store = (function () {
     getAutoDivUs, setAutoDivUs, getAutoDivAcctUs, setAutoDivAcctUs, getAutoDivUsTax, setAutoDivUsTax,
     getGroups, setGroups, getGroupMap, setGroupMap,
     getPctBasis, setPctBasis, getDayMode, setDayMode,
-    getPrivacy, setPrivacy, getPrivacyCover, setPrivacyCover, getChartRange, setChartRange,
+    getPrivacy, setPrivacy, getChartRange, setChartRange,
     clearAll,
   };
 })();
