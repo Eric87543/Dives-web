@@ -37,6 +37,7 @@ App.Calc = (function () {
     for (const d of S.getDividends()) divBySym[d.symbol] = (divBySym[d.symbol] || 0) + (d.amount || 0);
 
     const out = [];
+    const todayIso = U.isoDate();
     for (const sym in bySym) {
       const { shares, avgCost } = computeAvgCostPosition(bySym[sym]);
       if (shares <= 1e-9) continue;
@@ -46,6 +47,18 @@ App.Calc = (function () {
       const price = pd ? pd.price : null;
       const mv = (price != null ? price : avgCost) * shares;
       const unreal = price != null ? mv - cost : 0;
+      // 當日損益（原幣）：今日買入以買入價為基準（不把跳空缺口算進當日），
+      // 昨日已持有股數以昨收為基準；同日買後又賣 → 視為先賣昨日持股
+      let dayPnl = 0;
+      if (pd && price != null) {
+        let buyShares = 0, buyCost = 0;
+        for (const t of bySym[sym]) {
+          if (t.type === 'BUY' && U.isoDate(new Date(t.time)) === todayIso) { buyShares += t.shares; buyCost += t.shares * t.price; }
+        }
+        const oldShares = Math.max(0, shares - buyShares);
+        const newHeld = shares - oldShares;
+        dayPnl = (pd.dailyChange || 0) * oldShares + (newHeld > 1e-9 ? (price - buyCost / buyShares) * newHeld : 0);
+      }
       out.push({
         symbol: sym,
         name: meta ? meta.name : sym,
@@ -53,6 +66,7 @@ App.Calc = (function () {
         lastPrice: price,
         dailyChange: pd ? pd.dailyChange : null,
         dailyChangePct: (pd && pd.prevClose) ? (pd.dailyChange / pd.prevClose) * 100 : null,
+        dayPnl,
         unrealizedPnl: unreal,
         marketValue: mv,
         dividend: divBySym[sym] || 0,
@@ -85,17 +99,17 @@ App.Calc = (function () {
         s.cryptoMarketValueTwd += mv * rate;
         s.cryptoCostBasisTwd += p.cost * rate;
         s.cryptoUnrealizedPnlTwd += p.unrealizedPnl * rate;
-        s.cryptoDayPnlTwd += (p.dailyChange || 0) * p.shares * rate;
+        s.cryptoDayPnlTwd += (p.dayPnl || 0) * rate;
       } else if (market === U.Market.us) {
         s.usMarketValueTwd += mv * rate;
         s.usCostBasisTwd += p.cost * rate;
         s.usUnrealizedPnlTwd += p.unrealizedPnl * rate;
-        s.usDayPnlTwd += (usDayOn ? (p.dailyChange || 0) : 0) * p.shares * rate;
+        s.usDayPnlTwd += (usDayOn ? (p.dayPnl || 0) : 0) * rate;
       } else {
         s.twMarketValue += mv;
         s.twCostBasis += p.cost;
         s.twUnrealizedPnl += p.unrealizedPnl;
-        s.twDayPnl += (twDayOn ? (p.dailyChange || 0) : 0) * p.shares;
+        s.twDayPnl += twDayOn ? (p.dayPnl || 0) : 0;
       }
     }
     for (const rt of S.getRealized()) {

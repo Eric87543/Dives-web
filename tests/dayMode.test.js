@@ -10,8 +10,10 @@ beforeEach(() => { resetStore(); S.setDayMode('native'); });
 function setup() {
   S.setFxRate(30);
   S.upsertMeta([{ code: '2330', name: '台積電', market: 'tse' }, { code: 'TSLA', name: 'Tesla', market: 'us' }]);
-  C.addTransaction({ symbolInput: '2330', type: 'BUY', shares: 100, price: 500, fee: 0, market: 'tse', name: '台積電' });
-  C.addTransaction({ symbolInput: 'TSLA', type: 'BUY', shares: 10, price: 300, fee: 0, market: 'us', name: 'Tesla' });
+  // 昨日買入：本檔測 gating 語意；今日買入的當日損益調整由 dayPnl.test.js 涵蓋
+  const YESTERDAY = Date.now() - 2 * 86400000;
+  C.addTransaction({ symbolInput: '2330', type: 'BUY', shares: 100, price: 500, fee: 0, market: 'tse', name: '台積電', time: YESTERDAY });
+  C.addTransaction({ symbolInput: 'TSLA', type: 'BUY', shares: 10, price: 300, fee: 0, market: 'us', name: 'Tesla', time: YESTERDAY });
   S.setPrices({ '2330': { price: 520, dailyChange: 5, prevClose: 515 }, TSLA: { price: 310, dailyChange: 2, prevClose: 308 } });
 }
 

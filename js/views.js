@@ -157,7 +157,7 @@ App.Views = (function () {
       // twday 模式：美股白天未開盤 → 美股卡 0；台股開盤前/週末 → 台股卡 0；加密 24h 照算（與 Hero 一致）
       const dayOn = S.getDayMode() !== 'twday'
         || (M.key === 'us' ? U.usCountsTowardToday() : M.key === 'tw' ? U.twCountsTowardToday() : true);
-      const dayChg = dayOn ? list.reduce((s, p) => s + (p.dailyChange || 0) * p.shares * convOf(p), 0) : 0;
+      const dayChg = dayOn ? list.reduce((s, p) => s + (p.dayPnl || 0) * convOf(p), 0) : 0;
       const prevMv = tot - dayChg;
       const dayChgPct = Math.abs(prevMv) > 1e-9 ? dayChg / Math.abs(prevMv) * 100 : 0;
       const dArrow = dayChg > 0 ? '▲' : dayChg < 0 ? '▼' : '–';
@@ -904,7 +904,7 @@ App.Views = (function () {
       if (usGated && mk === U.Market.us) return 0;
       if (twGated && mk !== U.Market.us && mk !== U.Market.crypto) return 0; // 台股(上市/上櫃/興櫃)
       const conv = (mk === U.Market.us || mk === U.Market.crypto) ? rate : 1;
-      return (p.dailyChange || 0) * p.shares * conv;
+      return (p.dayPnl || 0) * conv;
     };
     const groupDayChg = gid => (byGroup[gid] || []).reduce((s, p) => s + posDayTwd(p), 0);
     const fmtPctBadge = v => (v >= 9.95 ? Math.round(v) : v.toFixed(v >= 1 ? 0 : 1)) + '%';
