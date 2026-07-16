@@ -186,17 +186,20 @@ App.Util = (function () {
     return !(mins >= 9 * 60 && mins < usOpen);
   }
 
+  const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  function prevWeekday(wd) { const i = WEEKDAYS.indexOf(wd); return i < 0 ? wd : WEEKDAYS[(i + 6) % 7]; }
+
   // 「台股日」模式下，台股當日漲跌是否計入今日。
-  //   計入窗：平日 09:00（台股開盤）起 ~ 美股開盤 止；美股開盤後歸零。
-  //   開盤前 / 收盤後(美股開盤起) / 週末 → 0。
-  //   → 與美股對稱：美股在台股 09:00 開盤歸零、台股在美股開盤歸零；任一時刻僅一市場計入。
-  //   parts / usOpenMin 可注入（供測試）；預設取台北現在時間 + 實際 DST
-  function twCountsTowardToday(parts, usOpenMin) {
+  //   一個「台股日」從 09:00（台股開盤）起算，一路持續到「隔天 09:00 開盤」才重置。
+  //   → 傍晚美股開盤不歸零；夜間/凌晨(隔天 09:00 前)仍顯示當日漲跌。
+  //   09:00 前仍屬前一個台股日，故以「前一天」判定是否交易日(避免週一開盤前顯示上週五)。
+  //   該台股日起點為週末(未開盤) → 0（假日/收盤不顯示前一交易日）。
+  //   parts 可注入（供測試）；預設取台北現在時間
+  function twCountsTowardToday(parts) {
     const p = parts || taipeiParts();
-    if (p.weekday === 'Sat' || p.weekday === 'Sun') return false;
     const mins = p.hour * 60 + p.minute;
-    const usOpen = usOpenMin != null ? usOpenMin : usOpenMinutes();
-    return mins >= 9 * 60 && mins < usOpen;
+    const dayWd = mins >= 9 * 60 ? p.weekday : prevWeekday(p.weekday);
+    return dayWd !== 'Sat' && dayWd !== 'Sun';
   }
 
   // 解析數字字串（處理逗號、空字串、"-"）
