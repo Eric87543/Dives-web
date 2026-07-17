@@ -3,7 +3,7 @@
  * ======================================================================= */
 (function () {
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
-  App.VERSION = 'v133';
+  App.VERSION = 'v134';
 
   const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
@@ -485,7 +485,25 @@
   App.seedDemo = seedDemo;
 
   // 初始化
+  // ---- 外觀主題：套用設定(auto 跟隨系統) + 同步狀態列顏色 ----
+  function applyTheme() {
+    const pref = S.getTheme();
+    const dark = pref === 'dark' || (pref === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', dark ? '#141312' : '#FAFAF9');
+  }
+  App.applyTheme = applyTheme;
+
   function init() {
+    // 外觀：套用主題;auto 模式下跟隨系統即時切換
+    applyTheme();
+    try {
+      const mq = matchMedia('(prefers-color-scheme: dark)');
+      const onChg = () => { if (S.getTheme() === 'auto') applyTheme(); };
+      if (mq.addEventListener) mq.addEventListener('change', onChg); else mq.addListener(onChg);
+    } catch (e) {}
+
     // tab bar 事件（點資產 tab 時退回資產首頁）
     document.querySelectorAll('.tab-btn').forEach(b =>
       b.addEventListener('click', () => {

@@ -671,9 +671,10 @@ App.Views = (function () {
     const yAt = v => pad + (1 - (v - lo) / (hi - lo)) * (H - pad * 2);
     const line = pts.map((v, i) => (i ? 'L' : 'M') + xAt(i).toFixed(1) + ' ' + yAt(v).toFixed(1)).join(' ');
     const fill = color === UI.LOSS ? 'rgba(67,160,71,0.13)' : color === UI.GAIN ? 'rgba(229,57,53,0.13)' : 'rgba(109,95,213,0.13)';
+    // stroke 走 style 而非 SVG 屬性：CSS 變數(var(--gain))只在 style 內生效
     return `<svg class="rep-spark" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" aria-hidden="true">
-      <path d="${line} L${W} ${H} L0 ${H} Z" fill="${fill}"/>
-      <path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      <path d="${line} L${W} ${H} L0 ${H} Z" style="fill:${fill}"/>
+      <path d="${line}" fill="none" style="stroke:${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
     </svg>`;
   }
 
@@ -1572,6 +1573,7 @@ App.Views = (function () {
   const SET_ICONS = {
     cloud: SET_ICON('<path d="M7 18a4 4 0 1 1 .6-7.96A5.5 5.5 0 0 1 18 10.5a3.5 3.5 0 0 1-.5 7Z"/>'),
     lock: SET_ICON('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+    moon: SET_ICON('<path d="M20 13.5A8 8 0 0 1 10.5 4 8 8 0 1 0 20 13.5Z"/>'),
     pie: SET_ICON('<path d="M12 3a9 9 0 1 0 9 9h-9Z"/>'),
     cal: SET_ICON('<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>'),
     down: SET_ICON('<path d="M12 4v11M8 11l4 4 4-4M5 20h14"/>'),
@@ -1621,6 +1623,7 @@ App.Views = (function () {
     </div>
     <div class="s-head">顯示</div>
     <div class="s-list">
+      ${nav('moon', 'set-theme', '外觀', { auto: '跟隨系統', light: '淺色', dark: '深色' }[S.getTheme()])}
       ${nav('pie', 'set-pb', '投資佔比基準', pbLabel)}
       ${nav('cal', 'set-dm', '當日漲跌計算', dmLabel)}
     </div>
@@ -1665,6 +1668,11 @@ App.Views = (function () {
     on('set-recurring', () => { set.sub = 'recurring'; settings(root); });
     on('set-autodiv-page', () => { set.sub = 'autodiv'; settings(root); });
     on('set-refresh-now', () => { UI.toast('更新中…', 'info'); App.refresh(undefined, true); });
+    on('set-theme', () => openChooser('外觀', [
+      { v: 'auto', label: '跟隨系統', hint: '依 iOS 深/淺色模式自動切換' },
+      { v: 'light', label: '淺色', hint: '固定淺色主題' },
+      { v: 'dark', label: '深色', hint: '固定深色主題' },
+    ], S.getTheme(), v => { S.setTheme(v); if (App.applyTheme) App.applyTheme(); settings(root); }));
     on('set-pb', () => openChooser('投資佔比基準', [
       { v: 'group', label: '組內', hint: '以所屬群組總額為分母' },
       { v: 'invest', label: '投資', hint: '以投資總市值為分母' },

@@ -15,6 +15,12 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
 
+  <script>/* 主題搶先套用（讀取設定→data-theme），避免深色使用者開啟閃白 */
+  (function () { try {
+    var t = localStorage.getItem('dives_theme');
+    if (t !== 'light' && t !== 'dark') t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {} })();</script>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>

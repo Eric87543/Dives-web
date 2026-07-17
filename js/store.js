@@ -34,6 +34,7 @@ App.Store = (function () {
     dayMode: 'dives_day_mode',
     privacy: 'dives_privacy',
     chartRange: 'dives_chart_range',
+    theme: 'dives_theme',
   };
 
   function read(key, fallback) {
@@ -182,6 +183,10 @@ App.Store = (function () {
   // ---- 佔比基準：'group' | 'invest' | 'net' ----
   function getPctBasis() { return localStorage.getItem(K.pctBasis) || 'invest'; }
   function setPctBasis(b) { localStorage.setItem(K.pctBasis, b); }
+
+  // 外觀主題：auto(跟隨系統) | light | dark
+  function getTheme() { const t = localStorage.getItem(K.theme); return (t === 'light' || t === 'dark') ? t : 'auto'; }
+  function setTheme(t) { localStorage.setItem(K.theme, (t === 'light' || t === 'dark') ? t : 'auto'); }
   // 當日漲跌計算方式：native=各市場當日(預設) | twday=以台股開盤起算(美股凌晨算昨天)
   function getDayMode() { return localStorage.getItem(K.dayMode) === 'twday' ? 'twday' : 'native'; }
   function setDayMode(m) { localStorage.setItem(K.dayMode, m === 'twday' ? 'twday' : 'native'); }
@@ -227,7 +232,7 @@ App.Store = (function () {
     getAutoDivImport, setAutoDivImport, getAutoDivAcct, setAutoDivAcct,
     getAutoDivUs, setAutoDivUs, getAutoDivAcctUs, setAutoDivAcctUs, getAutoDivUsTax, setAutoDivUsTax,
     getGroups, setGroups, getGroupMap, setGroupMap,
-    getPctBasis, setPctBasis, getDayMode, setDayMode,
+    getPctBasis, setPctBasis, getDayMode, setDayMode, getTheme, setTheme,
     getPrivacy, setPrivacy, getChartRange, setChartRange,
     clearAll,
   };
