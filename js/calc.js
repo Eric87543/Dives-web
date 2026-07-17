@@ -711,6 +711,87 @@ App.Calc = (function () {
     };
   }
 
+  // ===== XIRR 年化報酬率（資金加權）=====
+  // 解 Σ amountᵢ/(1+r)^yearsᵢ = 0 的 r（年 = 365.25 天）。
+  // flows: [{time(ms), amount}]，負=投入、正=收回。Newton 快速收斂,失敗退二分法。
+  // 無解（全同號 / <2 筆 / 超出 −99.99%~+1000%）→ null。
+  function xirrRate(flows) {
+    if (!flows || flows.length < 2) return null;
+    let hasNeg = false, hasPos = false, t0 = Infinity;
+    for (const f of flows) {
+      if (f.amount < 0) hasNeg = true;
+      if (f.amount > 0) hasPos = true;
+      if (f.time < t0) t0 = f.time;
+    }
+    if (!hasNeg || !hasPos) return null;
+    const YEAR_MS = 365.25 * 86400000;
+    const npv = r => { let s = 0; for (const f of flows) s += f.amount / Math.pow(1 + r, (f.time - t0) / YEAR_MS); return s; };
+    const sane = r => (isFinite(r) && r > -0.9999 && r < 10) ? r : null;
+
+    // Newton-Raphson（數值微分）
+    let r = 0.1;
+    for (let i = 0; i < 60; i++) {
+      const v = npv(r);
+      if (Math.abs(v) < 1e-7) return sane(r);
+      const h = 1e-6;
+      const d = (npv(r + h) - v) / h;
+      if (!isFinite(d) || Math.abs(d) < 1e-12) break;
+      const nr = r - v / d;
+      if (!isFinite(nr) || nr <= -0.9999 || nr > 1e6) break;
+      if (Math.abs(nr - r) < 1e-10) return sane(nr);
+      r = nr;
+    }
+    // 二分法備援（需區間端點異號）
+    let lo = -0.9999, hi = 10, flo = npv(lo), fhi = npv(hi);
+    if (!isFinite(flo) || !isFinite(fhi) || flo * fhi > 0) return null;
+    for (let i = 0; i < 200; i++) {
+      const mid = (lo + hi) / 2, fm = npv(mid);
+      if (Math.abs(fm) < 1e-7 || (hi - lo) < 1e-10) return sane(mid);
+      if (flo * fm <= 0) { hi = mid; fhi = fm; } else { lo = mid; flo = fm; }
+    }
+    return null;
+  }
+
+  // 組合現金流：BUY −(股數×價+費)、SELL +(股數×價−費)、現金股利 +淨額、終值 +目前市值。
+  // STOCK_DIV(配股)無現金流（價值反映在終值）。美股/加密以現行匯率換 TWD（FX 中性慣例）。
+  function buildXirrFlows(nowMs) {
+    const now = nowMs || Date.now();
+    const rate = S.getFxRate() || 31.5;
+    const flows = [];
+    for (const t of S.getTransactions()) {
+      if (t.type === 'STOCK_DIV') continue;
+      const conv = _divIsUsd(t.symbol) ? rate : 1;
+      const amt = t.type === 'SELL'
+        ? (t.shares * t.price - (t.fee || 0))
+        : -(t.shares * t.price + (t.fee || 0));
+      flows.push({ time: t.time, amount: amt * conv });
+    }
+    for (const d of S.getDividends()) {
+      const time = d.date ? new Date(d.date + 'T12:00:00+08:00').getTime() : (d.createdAt || now);
+      const amt = (d.amount || 0) * (_divIsUsd(d.symbol) ? rate : 1);
+      if (amt > 0) flows.push({ time: Math.min(time, now), amount: amt });
+    }
+    let mv = 0;
+    for (const p of buildPositions()) {
+      const v = (p.lastPrice != null ? p.lastPrice : p.avgCost) * p.shares;
+      mv += v * (_divIsUsd(p.symbol) ? rate : 1);
+    }
+    if (mv > 1e-9) flows.push({ time: now, amount: mv });
+    return flows;
+  }
+
+  // 全組合 XIRR：回 {rate(%), days(自首筆投入), since('YYYY-MM-DD')}；不足以計算 → null
+  function portfolioXirr(nowMs) {
+    const now = nowMs || Date.now();
+    const flows = buildXirrFlows(now);
+    if (flows.length < 2) return null;
+    const r = xirrRate(flows);
+    if (r == null) return null;
+    let first = Infinity;
+    for (const f of flows) if (f.time < first) first = f.time;
+    return { rate: r * 100, days: Math.floor((now - first) / 86400000), since: U.isoDate(new Date(first)) };
+  }
+
   // 指定時間範圍的統計（報表鑽取用）：區間損益 + 區間獲利之最（各粒度）+ 該區間單筆交易之最
   //   from/to：ISO 日期含頭尾；grans：要計算的期間粒度。以區間前一筆快照為基準算首期變化。
   function scopedStats(from, to, grans) {
@@ -894,7 +975,7 @@ App.Calc = (function () {
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
     addStockDividend, dividendsTotalTwd, dividendsBetween, dividendsUpTo, addDividend, updateDividend, deleteDividend, sharesHeldBefore,
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
-    netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats,
+    netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats, xirrRate, buildXirrFlows, portfolioXirr,
     recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment, investedBetween, feesSummary,
   };
 })();

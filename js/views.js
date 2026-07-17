@@ -389,6 +389,13 @@ App.Views = (function () {
             <div class="trg"><span class="trg-k">已實現</span><span class="trg-v" style="color:${col(sm.totalRealizedPnl)}">${sf(sm.totalRealizedPnl)}</span></div>
             <div class="trg"><span class="trg-k">股息收入</span><span class="trg-v">${sf(sm.totalDividendTwd)}</span></div>
             <div class="trg"><span class="trg-k">含息報酬率</span><span class="trg-v" style="color:${col(sm.totalReturnWithDivPct || 0)}">${pctTxt(sm.totalReturnWithDivPct || 0)}</span></div>
+            ${(() => { // 年化報酬率(XIRR,資金加權):未滿 90 天年化失真 → 顯示 --
+              const x = C.portfolioXirr();
+              if (!x) return '';
+              const v = x.days >= 90 ? `<span class="trg-v" style="color:${col(x.rate)}">${pctTxt(x.rate)}</span>` : '<span class="trg-v" style="color:var(--sub)">--</span>';
+              return `<div class="trg"><span class="trg-k">年化報酬 XIRR</span>${v}</div>
+                <div class="trg"><span class="trg-k">投入天數</span><span class="trg-v">${x.days} 天</span></div>`;
+            })()}
           </div>
         </div>
         ${feeCard}
