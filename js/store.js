@@ -38,6 +38,7 @@ App.Store = (function () {
     avgdownCfg: 'dives_avgdown_cfg',
     avgdownStocks: 'dives_avgdown_stocks',
     avgdownRecords: 'dives_avgdown_records',
+    exposureMap: 'dives_exposure_map',
   };
 
   function read(key, fallback) {
@@ -216,6 +217,15 @@ App.Store = (function () {
     setNotifications([]);
   }
 
+  // ---- 曝險倍數 ----  {symbol: multiplier}（1 = 原形；2 = 正二；預設 1）
+  function getExposureMap() { return read(K.exposureMap, {}); }
+  function setExposureMap(m) { write(K.exposureMap, m); }
+  function setExposureMul(symbol, mul) {
+    const m = getExposureMap();
+    if (mul == null || mul === 1) delete m[symbol]; else m[symbol] = mul;
+    setExposureMap(m);
+  }
+
   // ---- 加碼功能 ----
   function getAvgdownCfg() { return read(K.avgdownCfg, { fundAccountId: null }); }
   function setAvgdownCfg(cfg) { write(K.avgdownCfg, cfg); }
@@ -246,6 +256,7 @@ App.Store = (function () {
     getPctBasis, setPctBasis, getDayMode, setDayMode, getTheme, setTheme,
     getPrivacy, setPrivacy, getChartRange, setChartRange,
     getAvgdownCfg, setAvgdownCfg, getAvgdownStocks, setAvgdownStocks, getAvgdownRecords, setAvgdownRecords,
+    getExposureMap, setExposureMap, setExposureMul,
     clearAll,
   };
 })();
