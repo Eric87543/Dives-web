@@ -5,7 +5,7 @@
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
   App.VERSION = 'v135';
 
-  const TAB_ORDER = ['assets', 'avgdown', 'portfolio', 'report', 'history', 'settings'];
+  const TAB_ORDER = ['assets', 'portfolio', 'avgdown', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
   let currentTab = (() => { try { return sessionStorage.getItem('dives_tab') || 'assets'; } catch (e) { return 'assets'; } })();
   const TABS = [
@@ -173,6 +173,8 @@
       await Api.refreshPrices(symbols);
       const isNewDay = C.saveTodaySnapshot();
       if (isNewDay && App.Sync) App.Sync.markDirty(); // 新的一天快照 → 同步
+      // 報價更新後檢查加碼觸發（推通知、鈴鐺紅點）
+      C.checkAvgDownTriggers(S.getAvgdownStocks(), S.getPrices());
       renderCurrent();
     } catch (e) {
       console.error(e); UI.toast('報價更新失敗', 'error');

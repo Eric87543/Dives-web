@@ -1008,6 +1008,19 @@ App.Calc = (function () {
     }
     if (newRecords.length > 0) {
       S.setAvgdownRecords([...records, ...newRecords]);
+      // 每筆新觸發推一則通知（key 去重，同一觸發不會重複推）
+      for (const rec of newRecords) {
+        const stock = stocks.find(s => s.id === rec.stockId);
+        const rule = stock && stock.rules.find(r => r.id === rec.ruleId);
+        if (!stock || !rule) continue;
+        const investAmt = calcSuggestedAmt(stock.allocatedAmt, 100, rule.buyPct);
+        S.pushNotification({
+          type: 'avgdown',
+          key: 'avgdown-' + rec.stockId + '-' + rec.ruleId,
+          title: `加碼提醒：${stock.symbol}`,
+          body: `跌幅達 ${rule.pullbackPct}%，建議投入 ${App.Util.fmtKMBB(investAmt)}`,
+        });
+      }
     }
     return newRecords;
   }

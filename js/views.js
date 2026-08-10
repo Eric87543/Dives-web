@@ -2659,15 +2659,15 @@ App.Views = (function () {
           const done = stockRecords.filter(r => r.boughtAt);
 
           if (pending.length > 0) {
-            html += '<div style="margin-top: 12px; padding: 8px; background: var(--accent); border-radius: 4px; color: white; font-size: 12px;">';
+            html += '<div style="margin-top: 12px; padding: 8px; background: color-mix(in srgb, var(--accent) 15%, transparent); border: 1px solid var(--accent); border-radius: 6px; font-size: 12px;">';
             pending.forEach(rec => {
               const rule = stock.rules.find(r => r.id === rec.ruleId);
               const rulePullbackPct = rule?.pullbackPct || rec.pullbackPct;
               const ruleTargetPrice = stock.highPrice * (1 - rulePullbackPct / 100);
               const investAmt = (stock.allocatedAmt || 0) * ((rule?.buyPct || 0) / 100);
               html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">`;
-              html += `<span>跌 ${rulePullbackPct}% (→ ${U.formatPrice(ruleTargetPrice)}) → 投入 ${rule?.buyPct || 0}% (${U.fmtKMBB(investAmt)})</span>`;
-              html += ` <button class="link-edit bought-btn" data-rec-id="${rec.id}" data-stock-id="${stock.id}" style="background: none; border: none; cursor: pointer; color: white; font-size: 14px; padding: 0 4px;">✓ 標記</button>`;
+              html += `<span style="color:var(--text)">跌 ${rulePullbackPct}% (→ ${U.formatPrice(ruleTargetPrice)}) → 投入 ${rule?.buyPct || 0}% (${U.fmtKMBB(investAmt)})</span>`;
+              html += ` <button class="link-edit bought-btn" data-rec-id="${rec.id}" data-stock-id="${stock.id}" style="background:var(--accent);border:none;border-radius:4px;cursor:pointer;color:white;font-size:12px;padding:2px 8px;">✓ 標記</button>`;
               html += `</div>`;
             });
             html += '</div>';
@@ -2676,13 +2676,13 @@ App.Views = (function () {
           if (done.length > 0) {
             html += '<div style="margin-top: 8px;">';
             done.forEach((rec, idx) => {
-              html += `<div style="padding: 8px; background: var(--gain); border-radius: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; opacity: 0.85;">`;
-              html += `<div style="flex: 1; cursor: pointer; font-size: 12px; color: white; font-weight: 500;" class="done-record-edit" data-rec-id="${rec.id}" data-stock-id="${stock.id}">✓ ${rec.pullbackPct.toFixed(2)}% - ${rec.actualShares || 0}股 @ ${U.formatPrice(rec.actualPrice || 0)}</div>`;
-              html += `<button class="done-record-del" data-rec-id="${rec.id}" data-stock-id="${stock.id}" style="background: none; border: none; cursor: pointer; color: white; font-size: 16px; padding: 0 4px; margin-left: 8px;">✕</button>`;
+              html += `<div style="padding: 8px; background: color-mix(in srgb, var(--loss) 15%, transparent); border: 1px solid var(--loss); border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">`;
+              html += `<div style="flex: 1; cursor: pointer; font-size: 12px; color: var(--loss); font-weight: 600;" class="done-record-edit" data-rec-id="${rec.id}" data-stock-id="${stock.id}">✓ 已加碼 ${rec.pullbackPct.toFixed(2)}% - ${rec.actualShares || 0}股 @ ${U.formatPrice(rec.actualPrice || 0)}</div>`;
+              html += `<button class="done-record-del" data-rec-id="${rec.id}" data-stock-id="${stock.id}" style="background:none;border:none;cursor:pointer;color:var(--sub);font-size:16px;padding:0 4px;margin-left:8px;">✕</button>`;
               html += `</div>`;
             });
             if (done.length > 1) {
-              html += `<button class="clear-all-done" data-stock-id="${stock.id}" style="width: 100%; padding: 6px; margin-top: 6px; background: none; border: 1px solid var(--loss); border-radius: 4px; cursor: pointer; color: var(--loss); font-size: 11px; font-weight: 500;">清除全部</button>`;
+              html += `<button class="clear-all-done" data-stock-id="${stock.id}" style="width: 100%; padding: 6px; margin-top: 6px; background: none; border: 1px solid var(--divider); border-radius: 4px; cursor: pointer; color: var(--sub); font-size: 11px; font-weight: 500;">清除全部已加碼記錄</button>`;
             }
             html += '</div>';
           }
