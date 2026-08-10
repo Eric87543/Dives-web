@@ -970,6 +970,74 @@ App.Calc = (function () {
     return { ok: true, paid: pay };
   }
 
+  // ===== 加碼功能 =====
+  function calcPullback(highPrice, currentPrice) {
+    if (highPrice <= 0) return 0;
+    return Math.max(0, ((highPrice - currentPrice) / highPrice) * 100);
+  }
+
+  function calcSuggestedAmt(balance, allocPct, buyPct) {
+    return Math.round((balance * (allocPct / 100) * (buyPct / 100)) * 100) / 100;
+  }
+
+  function checkAvgDownTriggers(stocks, prices) {
+    const records = S.getAvgdownRecords();
+    const newRecords = [];
+    for (const stock of stocks) {
+      const p = prices[stock.symbol];
+      if (!p) continue;
+      const pullback = calcPullback(stock.highPrice, p.price);
+      for (const rule of stock.rules) {
+        if (pullback >= rule.pullbackPct) {
+          const existing = records.some(r =>
+            r.stockId === stock.id && r.ruleId === rule.id
+          );
+          if (!existing) {
+            newRecords.push({
+              id: S.uuid(),
+              stockId: stock.id,
+              ruleId: rule.id,
+              pullbackPct: pullback,
+              triggerPrice: p.price,
+              suggestedAmt: calcSuggestedAmt(stock.allocatedAmt, 100, rule.buyPct),
+              boughtAt: null,
+            });
+          }
+        }
+      }
+    }
+    if (newRecords.length > 0) {
+      S.setAvgdownRecords([...records, ...newRecords]);
+    }
+    return newRecords;
+  }
+
+  function getHistoricalHighPrice(symbol) {
+    // 1. 交易記錄中的最高價
+    const txs = S.getTransactions().filter(t => t.symbol === symbol);
+    const txPrices = txs.map(t => +t.price || 0);
+
+    // 2. 快照中的最高價
+    const snaps = S.getSnapshots();
+    const snapPrices = [];
+    snaps.forEach(snap => {
+      if (snap.positions) {
+        snap.positions.forEach(pos => {
+          if (pos.symbol === symbol && pos.price) {
+            snapPrices.push(+pos.price);
+          }
+        });
+      }
+    });
+
+    // 3. 當前價格
+    const currentPrices = [S.getPrices()[symbol]?.price || 0];
+
+    // 取所有價格中的最高值
+    const allPrices = [...txPrices, ...snapPrices, ...currentPrices].filter(p => p > 0);
+    return allPrices.length > 0 ? Math.max(...allPrices) : 0;
+  }
+
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
@@ -977,5 +1045,6 @@ App.Calc = (function () {
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
     netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats, xirrRate, buildXirrFlows, portfolioXirr,
     recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment, investedBetween, feesSummary,
+    calcPullback, calcSuggestedAmt, checkAvgDownTriggers, getHistoricalHighPrice,
   };
 })();

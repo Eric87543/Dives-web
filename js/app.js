@@ -5,7 +5,7 @@
   const V = App.Views, S = App.Store, C = App.Calc, UI = App.UI, Api = App.Api;
   App.VERSION = 'v135';
 
-  const TAB_ORDER = ['assets', 'portfolio', 'report', 'history', 'settings'];
+  const TAB_ORDER = ['assets', 'avgdown', 'portfolio', 'report', 'history', 'settings'];
   // 記住當前分頁，避免重新整理/下拉時跳回資產
   let currentTab = (() => { try { return sessionStorage.getItem('dives_tab') || 'assets'; } catch (e) { return 'assets'; } })();
   const TABS = [
@@ -18,6 +18,7 @@
   let slideDir = null; // 換分頁時的滑入方向（next=從右、prev=從左）
   function renderTab(root, tab) {
     switch (tab) {
+      case 'avgdown': V.avgdown(root); break;
       case 'portfolio': V.portfolio(root); break;
       case 'assets': V.assets(root); break;
       case 'history': V.history(root); break;
@@ -48,7 +49,7 @@
     try { sessionStorage.setItem('dives_tab', id); } catch (e) {}
     renderCurrent();
   }
-  function goTab(id) { if (id === 'assets' && V.resetAssetsNav) V.resetAssetsNav(); if (id === 'report' && V.resetReportNav) V.resetReportNav(); if (id === 'portfolio' && V.resetPortfolioNav) V.resetPortfolioNav(); if (id === 'settings' && V.resetSettingsNav) V.resetSettingsNav(); switchTab(id); }
+  function goTab(id) { if (id === 'assets' && V.resetAssetsNav) V.resetAssetsNav(); if (id === 'avgdown' && V.resetAvgdownNav) V.resetAvgdownNav(); if (id === 'report' && V.resetReportNav) V.resetReportNav(); if (id === 'portfolio' && V.resetPortfolioNav) V.resetPortfolioNav(); if (id === 'settings' && V.resetSettingsNav) V.resetSettingsNav(); switchTab(id); }
 
   // 左右滑：互動式換頁（內容跟著手指移動，放開時吸附到新頁或回彈）
   function initSwipe() {
@@ -86,6 +87,7 @@
         if (commit && neighbor != null) {
           const tab = TAB_ORDER[neighbor];
           if (tab === 'assets' && V.resetAssetsNav) V.resetAssetsNav();
+          if (tab === 'avgdown' && V.resetAvgdownNav) V.resetAvgdownNav();
           if (tab === 'report' && V.resetReportNav) V.resetReportNav();
           if (tab === 'portfolio' && V.resetPortfolioNav) V.resetPortfolioNav();
           if (tab === 'settings' && V.resetSettingsNav) V.resetSettingsNav();
@@ -508,6 +510,7 @@
     document.querySelectorAll('.tab-btn').forEach(b =>
       b.addEventListener('click', () => {
         if (b.dataset.tab === 'assets' && V.resetAssetsNav) V.resetAssetsNav();
+        if (b.dataset.tab === 'avgdown' && V.resetAvgdownNav) V.resetAvgdownNav();
         if (b.dataset.tab === 'report' && V.resetReportNav) V.resetReportNav();
         if (b.dataset.tab === 'portfolio' && V.resetPortfolioNav) V.resetPortfolioNav();
         if (b.dataset.tab === 'settings' && V.resetSettingsNav) V.resetSettingsNav();

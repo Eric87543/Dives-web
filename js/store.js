@@ -35,6 +35,9 @@ App.Store = (function () {
     privacy: 'dives_privacy',
     chartRange: 'dives_chart_range',
     theme: 'dives_theme',
+    avgdownCfg: 'dives_avgdown_cfg',
+    avgdownStocks: 'dives_avgdown_stocks',
+    avgdownRecords: 'dives_avgdown_records',
   };
 
   function read(key, fallback) {
@@ -213,6 +216,14 @@ App.Store = (function () {
     setNotifications([]);
   }
 
+  // ---- 加碼功能 ----
+  function getAvgdownCfg() { return read(K.avgdownCfg, { fundAccountId: null }); }
+  function setAvgdownCfg(cfg) { write(K.avgdownCfg, cfg); }
+  function getAvgdownStocks() { return read(K.avgdownStocks, []); }
+  function setAvgdownStocks(stocks) { write(K.avgdownStocks, stocks); }
+  function getAvgdownRecords() { return read(K.avgdownRecords, []); }
+  function setAvgdownRecords(records) { write(K.avgdownRecords, records); }
+
   return {
     uuid,
     getTransactions, setTransactions,
@@ -234,6 +245,7 @@ App.Store = (function () {
     getGroups, setGroups, getGroupMap, setGroupMap,
     getPctBasis, setPctBasis, getDayMode, setDayMode, getTheme, setTheme,
     getPrivacy, setPrivacy, getChartRange, setChartRange,
+    getAvgdownCfg, setAvgdownCfg, getAvgdownStocks, setAvgdownStocks, getAvgdownRecords, setAvgdownRecords,
     clearAll,
   };
 })();
