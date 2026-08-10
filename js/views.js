@@ -935,7 +935,20 @@ App.Views = (function () {
         ${addWithRefreshHtml('as-add-btn', '新增')}
       </div>
     </div>`;
-    let html = ''; // 捲動內容：分類卡
+    // 槓桿比例卡
+    const lev = C.computeLeverageRatio();
+    const levColor = lev.ratio == null ? 'var(--sub)' : lev.ratio > 2 ? '#FF3B30' : lev.ratio > 1.5 ? '#FF9500' : lev.ratio > 1 ? '#FFCC00' : '#34C759';
+    const levTxt = lev.ratio == null ? '–' : lev.ratio.toFixed(2) + 'x';
+    const expMap = S.getExposureMap();
+    const hasCustomExp = Object.keys(expMap).length > 0;
+    let html = `<div class="card lev-card" id="lev-card">
+      <div class="lev-main">
+        <div class="lev-label">槓桿比例</div>
+        <div class="lev-val" style="color:${levColor}">${levTxt}</div>
+        <div class="lev-formula">曝險 ${U.fmtWhole(lev.exposureTwd)} / 淨資產 ${U.fmtWhole(lev.netAssets)}</div>
+      </div>
+      ${hasCustomExp ? `<div class="lev-hint">含自訂曝險標的</div>` : ''}
+    </div>`; // 捲動內容：分類卡
 
     // 收合摘要文字 + 更新日期
     const cashAccts = S.getCashAccounts();
@@ -1032,9 +1045,11 @@ App.Views = (function () {
         const d = basis === 'group' ? sum.investTwd : denom(0); // 未分組無「組內」→ 用投資
         const pct = d > 1e-9 ? mv / d * 100 : 0;
         const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
+        const expMul = expMap[p.symbol] || 1;
+        const expBadge = expMul !== 1 ? `<span class="exp-badge">${expMul}x</span>` : '';
         html += `<div class="as-row member top" data-sym="${p.symbol}">
           <span class="pct-badge sm">${fmtPctBadge(pct)}</span>
-          <div class="as-main"><div class="as-title">${p.symbol} <span class="h-name">${p.name}</span></div>
+          <div class="as-main"><div class="as-title">${p.symbol} <span class="h-name">${p.name}</span>${expBadge}</div>
             <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div></div>
           <div class="as-val">${U.fmtWhole(mv)}</div>
         </div>`;
@@ -1089,7 +1104,7 @@ App.Views = (function () {
       as.detailGroup = g.dataset.gid; assets(root);
     }));
     root.querySelectorAll('.as-row.member').forEach(r => r.addEventListener('click', () =>
-      openGroupAssign(r.dataset.sym, () => assets(root))));
+      openAssetSymbolMenu(r.dataset.sym, () => assets(root))));
     maskAmounts(root);
   }
 
@@ -1250,6 +1265,7 @@ App.Views = (function () {
     const fmtPctBadge = v => (v >= 9.95 ? Math.round(v) : v.toFixed(v >= 1 ? 0 : 1)) + '%';
     const updTs = S.getPricesTs();
     const updDate = updTs ? U.isoDate(new Date(updTs)) : '';
+    const expMap = S.getExposureMap();
 
     const topHtml = `<div class="gd-head">
       <button class="gd-back" aria-label="返回">‹</button>
@@ -1270,10 +1286,12 @@ App.Views = (function () {
       const mv = mvTwdOf(p, rate);
       const pct = denomV > 1e-9 ? mv / denomV * 100 : 0;
       const isUsd = U.normalizeMarketKey(p.market) !== U.Market.tse && U.normalizeMarketKey(p.market) !== U.Market.otc && U.normalizeMarketKey(p.market) !== U.Market.rotc;
+      const expMul = expMap[p.symbol] || 1;
+      const expBadge = expMul !== 1 ? `<span class="exp-badge">${expMul}x</span>` : '';
       listHtml += `<div class="card gd-row" data-sym="${p.symbol}">
         <span class="pct-badge">${fmtPctBadge(pct)}</span>
         <div class="as-main">
-          <div class="gd-sym">${p.symbol} <span class="h-name">${p.name !== p.symbol ? p.name : ''}</span></div>
+          <div class="gd-sym">${p.symbol} <span class="h-name">${p.name !== p.symbol ? p.name : ''}</span>${expBadge}</div>
           <div class="as-sub">持有 ${U.formatShares(p.shares)}, ${isUsd ? '$' : ''}${U.formatPrice(p.lastPrice != null ? p.lastPrice : p.avgCost)}</div>
         </div>
         <div class="gd-val">
@@ -1292,7 +1310,73 @@ App.Views = (function () {
     root.querySelector('.gd-plus').addEventListener('click', () =>
       openTxForm(null, null, { onAdded: sym => { const m = S.getGroupMap(); m[sym] = gid; S.setGroupMap(m); if (App.Sync) App.Sync.markDirty(); } }));
     root.querySelectorAll('.gd-row').forEach(r => r.addEventListener('click', () =>
-      openGroupAssign(r.dataset.sym, () => assets(root))));
+      openAssetSymbolMenu(r.dataset.sym, () => assets(root))));
+  }
+
+  // 資產頁持倉行動選單：群組指派 ＋ 曝險比例設定
+  function openAssetSymbolMenu(sym, onDone) {
+    const expMap = S.getExposureMap();
+    const cur = expMap[sym] || 1;
+    const curLabel = cur === 1 ? '100%（原形）' : (cur * 100).toFixed(0) + '%（' + cur + 'x）';
+    const body = `<div class="chooser">
+      <button class="chooser-row" id="asm-group">
+        <div class="chooser-txt"><div class="chooser-label">加入群組</div><div class="chooser-hint">調整此標的所屬群組</div></div>
+        <span class="s-chev">›</span>
+      </button>
+      <button class="chooser-row" id="asm-exp">
+        <div class="chooser-txt"><div class="chooser-label">曝險比例</div><div class="chooser-hint">目前：${curLabel}</div></div>
+        <span class="s-chev">›</span>
+      </button>
+    </div>`;
+    const ov = UI.openSheet(sym, body, '');
+    ov.querySelector('#asm-group').addEventListener('click', () => {
+      UI.closeSheet();
+      openGroupAssign(sym, onDone);
+    });
+    ov.querySelector('#asm-exp').addEventListener('click', () => {
+      UI.closeSheet();
+      openExposureForm(sym, onDone);
+    });
+  }
+
+  // 曝險比例設定 sheet
+  function openExposureForm(sym, onDone) {
+    const expMap = S.getExposureMap();
+    const cur = expMap[sym] || 1;
+    const presets = [
+      { v: '1', label: '100%', hint: '原形股票、一般 ETF' },
+      { v: '2', label: '200%', hint: '正二 ETF（例：00631L）' },
+      { v: '3', label: '300%', hint: '三倍槓桿（例：TQQQ）' },
+      { v: '-1', label: '-100%', hint: '反向 ETF（例：00632R）' },
+      { v: '-2', label: '-200%', hint: '反二 ETF' },
+    ];
+    const presetRows = presets.map(p => `<button class="chooser-row exp-preset" data-v="${p.v}">
+      <div class="chooser-txt"><div class="chooser-label">${p.label}</div><div class="chooser-hint">${p.hint}</div></div>
+      <span class="chooser-check">${parseFloat(p.v) === cur ? '✓' : ''}</span>
+    </button>`).join('');
+    const body = `<div class="exp-form">
+      <div class="fld" style="margin:0 0 12px">
+        <label style="font-size:13px;color:var(--sub);display:block;margin-bottom:6px">自訂倍數（如 1.5）</label>
+        <input class="input" id="exp-custom" type="number" step="0.1" min="-10" max="10" placeholder="例：1.5" value="${cur !== 1 ? cur : ''}">
+      </div>
+      <div style="font-size:13px;color:var(--sub);margin-bottom:6px">快速選擇</div>
+      <div class="chooser">${presetRows}</div>
+    </div>`;
+    const ov = UI.openSheet(`${sym} 曝險比例`, body, `<button class="btn btn-ghost" id="exp-reset">重設為 1x</button><button class="btn btn-primary" id="exp-save">儲存</button>`);
+    const doSave = v => {
+      const n = parseFloat(v);
+      if (!isFinite(n) || n === 0) { UI.toast('請輸入有效的倍數', 'error'); return; }
+      S.setExposureMul(sym, n === 1 ? null : n);
+      if (App.Sync) App.Sync.markDirty();
+      UI.closeSheet(); onDone();
+    };
+    ov.querySelectorAll('.exp-preset').forEach(b => b.addEventListener('click', () => doSave(b.dataset.v)));
+    ov.querySelector('#exp-save').addEventListener('click', () => doSave(ov.querySelector('#exp-custom').value || cur));
+    ov.querySelector('#exp-reset').addEventListener('click', () => {
+      S.setExposureMul(sym, null);
+      if (App.Sync) App.Sync.markDirty();
+      UI.closeSheet(); onDone();
+    });
   }
 
   // 群組走勢頁：折線（市值走勢）/ 長條（漲幅），X 軸 天/週/月/年
@@ -2476,5 +2560,686 @@ App.Views = (function () {
   }
   function isUsSym(s) { return U.guessMarketBySymbol(U.sanitizeSymbol(s)) === U.Market.us; }
 
-  return { portfolio, history, report, assets, settings, openTxForm, resetAssetsNav, resetReportNav, resetPortfolioNav, resetSettingsNav };
+  // ===== 加碼頁 =====
+  let avgd = { sub: null, stockId: null };
+  function resetAvgdownNav() { avgd = { sub: null, stockId: null }; }
+
+  function avgdown(root) {
+    const cfg = S.getAvgdownCfg();
+    const stocks = S.getAvgdownStocks();
+    const records = S.getAvgdownRecords();
+    const prices = S.getPrices();
+    const cashAccts = S.getCashAccounts();
+
+    // 檢查是否有新觸發的加碼規則
+    C.checkAvgDownTriggers(stocks, prices);
+
+    // 清理不再符合條件的加碼記錄（未標記、且已經回到高點或超過高點）
+    const allRecords = S.getAvgdownRecords();
+    const cleanedRecords = allRecords.filter(rec => {
+      if (rec.boughtAt) return true; // 已標記的保留
+
+      const stock = stocks.find(s => s.id === rec.stockId);
+      if (!stock) return false; // 標的被刪除則刪除記錄
+
+      const p = prices[stock.symbol];
+      if (!p) return true; // 沒有價格資料就保留
+
+      // 檢查是否還符合觸發條件
+      const currentPullback = C.calcPullback(stock.highPrice, p.price);
+      const rule = stock.rules.find(r => r.id === rec.ruleId);
+      if (!rule) return false; // 規則被刪除則刪除記錄
+
+      // 如果現在的跌幅 < 規則的跌幅，就刪除記錄（回漲了）
+      return currentPullback >= rule.pullbackPct - 0.01; // 留一點誤差
+    });
+    S.setAvgdownRecords(cleanedRecords);
+
+    // 如果是直接進入加碼頁但沒有選擇標的，重置狀態回主列表
+    if (avgd.sub === 'viewstock' && !stocks.find(s => s.id === avgd.stockId)) {
+      avgd.sub = null;
+      avgd.stockId = null;
+    }
+
+    if (avgd.sub === 'addstock') return addStockForm(root);
+    if (avgd.sub === 'viewstock') return viewStockDetail(root);
+
+    let html = '<div class="page"><div class="page-top">';
+    html += '<div style="padding: 16px; background: var(--card);">';
+    html += '<div style="display: flex; justify-content: space-between; align-items: center;">';
+    html += '<label style="flex: 1;">資金來源：</label>';
+    html += '<select id="acctSelect" style="flex: 2; padding: 8px; border-radius: 4px; border: 1px solid var(--border);">';
+    html += '<option value="">-- 選擇帳戶 --</option>';
+    cashAccts.forEach(a => {
+      const sel = cfg.fundAccountId === a.id ? ' selected' : '';
+      html += `<option value="${a.id}"${sel}>${a.name} (${a.currency})</option>`;
+    });
+    html += '</select></div>';
+
+    if (cfg.fundAccountId) {
+      const acct = cashAccts.find(a => a.id === cfg.fundAccountId);
+      if (acct) {
+        const alloc = stocks.reduce((s, x) => s + (x.allocatedAmt || 0), 0);
+        html += `<div style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">已分配: ${U.fmtKMBB(alloc)} / 總額: ${U.fmtKMBB(acct.balance)}</div>`;
+      }
+    }
+
+    html += '</div></div><div class="page-list">';
+
+    if (stocks.length === 0) {
+      html += '<div style="padding: 24px; text-align: center; color: var(--text-muted);">尚未新增標的</div>';
+    } else {
+      stocks.forEach(stock => {
+        const stockRecords = records.filter(r => r.stockId === stock.id);
+        const p = prices[stock.symbol];
+        const pullback = p ? C.calcPullback(stock.highPrice, p.price) : 0;
+
+        html += '<div class="card" style="margin: 12px; padding: 16px;">';
+        html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">`;
+        html += `<div style="font-weight: 600;">${stock.symbol}</div>`;
+        html += `<button class="link-edit edit-btn" data-stock-id="${stock.id}" style="padding: 4px 8px;">編輯</button>`;
+        html += `</div>`;
+        html += `<div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">創高: ${U.formatPrice(stock.highPrice)}</div>`;
+        html += `<div style="font-size: 12px; margin-bottom: 8px;">目前: ${p?.price ? U.formatPrice(p.price) : '--'} | 跌幅: ${pullback.toFixed(2)}%</div>`;
+        html += `<div style="font-size: 12px; margin-bottom: 12px;">分配: ${U.fmtKMBB(stock.allocatedAmt)} (${stock.allocationPct}%)</div>`;
+
+        if (stock.rules.length > 0) {
+          html += '<div style="font-size: 12px; margin-bottom: 12px; padding: 8px; background: var(--bg); border-radius: 4px;">';
+          stock.rules.forEach(rule => {
+            const triggerPrice = stock.highPrice * (1 - rule.pullbackPct / 100);
+            const allocAmt = stock.allocatedAmt || 0;
+            const investAmt = allocAmt * (rule.buyPct / 100);
+            html += `<div style="margin-bottom: 4px;">跌 ${rule.pullbackPct}% (→ ${U.formatPrice(triggerPrice)}) → 投入 ${rule.buyPct}% (${U.fmtKMBB(investAmt)})</div>`;
+          });
+          html += '</div>';
+        }
+
+        if (stockRecords.length > 0) {
+          const pending = stockRecords.filter(r => !r.boughtAt);
+          const done = stockRecords.filter(r => r.boughtAt);
+
+          if (pending.length > 0) {
+            html += '<div style="margin-top: 12px; padding: 8px; background: var(--accent); border-radius: 4px; color: white; font-size: 12px;">';
+            pending.forEach(rec => {
+              const rule = stock.rules.find(r => r.id === rec.ruleId);
+              const rulePullbackPct = rule?.pullbackPct || rec.pullbackPct;
+              const ruleTargetPrice = stock.highPrice * (1 - rulePullbackPct / 100);
+              const investAmt = (stock.allocatedAmt || 0) * ((rule?.buyPct || 0) / 100);
+              html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">`;
+              html += `<span>跌 ${rulePullbackPct}% (→ ${U.formatPrice(ruleTargetPrice)}) → 投入 ${rule?.buyPct || 0}% (${U.fmtKMBB(investAmt)})</span>`;
+              html += ` <button class="link-edit bought-btn" data-rec-id="${rec.id}" data-stock-id="${stock.id}" style="background: none; border: none; cursor: pointer; color: white; font-size: 14px; padding: 0 4px;">✓ 標記</button>`;
+              html += `</div>`;
+            });
+            html += '</div>';
+          }
+
+          if (done.length > 0) {
+            html += '<div style="margin-top: 8px;">';
+            done.forEach((rec, idx) => {
+              html += `<div style="padding: 8px; background: var(--gain); border-radius: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; opacity: 0.85;">`;
+              html += `<div style="flex: 1; cursor: pointer; font-size: 12px; color: white; font-weight: 500;" class="done-record-edit" data-rec-id="${rec.id}" data-stock-id="${stock.id}">✓ ${rec.pullbackPct.toFixed(2)}% - ${rec.actualShares || 0}股 @ ${U.formatPrice(rec.actualPrice || 0)}</div>`;
+              html += `<button class="done-record-del" data-rec-id="${rec.id}" data-stock-id="${stock.id}" style="background: none; border: none; cursor: pointer; color: white; font-size: 16px; padding: 0 4px; margin-left: 8px;">✕</button>`;
+              html += `</div>`;
+            });
+            if (done.length > 1) {
+              html += `<button class="clear-all-done" data-stock-id="${stock.id}" style="width: 100%; padding: 6px; margin-top: 6px; background: none; border: 1px solid var(--loss); border-radius: 4px; cursor: pointer; color: var(--loss); font-size: 11px; font-weight: 500;">清除全部</button>`;
+            }
+            html += '</div>';
+          }
+        }
+
+        html += '</div>';
+      });
+    }
+
+    html += '</div>';
+    if (cfg.fundAccountId) html += '<button class="btn btn-primary" style="margin: 16px; width: calc(100% - 32px);">+ 新增標的</button>';
+    html += '</div>';
+
+    root.innerHTML = html;
+
+    document.getElementById('acctSelect')?.addEventListener('change', e => {
+      const cfg = S.getAvgdownCfg();
+      cfg.fundAccountId = e.target.value;
+      S.setAvgdownCfg(cfg);
+      avgdown(root);
+    });
+
+    root.querySelector('.btn-primary')?.addEventListener('click', () => {
+      avgd.sub = 'addstock';
+      addStockForm(root);
+    });
+
+    root.querySelectorAll('.edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        avgd.sub = 'viewstock';
+        avgd.stockId = btn.dataset.stockId;
+        viewStockDetail(root);
+      });
+    });
+
+    root.querySelectorAll('.bought-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const recId = btn.dataset.recId;
+        const stockId = btn.dataset.stockId;
+        const records = S.getAvgdownRecords();
+        const rec = records.find(r => r.id === recId);
+        const stock = stocks.find(s => s.id === stockId);
+        if (rec && stock) openBoughtSheet(rec, stock, root);
+      });
+    });
+
+    root.querySelectorAll('.done-record-edit').forEach(el => {
+      el.addEventListener('click', () => {
+        const recId = el.dataset.recId;
+        const stockId = el.dataset.stockId;
+        const records = S.getAvgdownRecords();
+        const rec = records.find(r => r.id === recId);
+        const stock = stocks.find(s => s.id === stockId);
+        if (rec && stock) openEditDoneRecordSheet(rec, stock, root);
+      });
+    });
+
+    root.querySelectorAll('.done-record-del').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const recId = btn.dataset.recId;
+        UI.confirmDialog('確定刪除此加碼記錄？', () => {
+          const records = S.getAvgdownRecords();
+          const idx = records.findIndex(r => r.id === recId);
+          if (idx >= 0) {
+            records.splice(idx, 1);
+            S.setAvgdownRecords(records);
+            UI.toast('已刪除');
+            avgdown(root);
+          }
+        });
+      });
+    });
+
+    root.querySelectorAll('.clear-all-done').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const stockId = btn.dataset.stockId;
+        UI.confirmDialog('確定清除此標的所有已加碼記錄？', () => {
+          const records = S.getAvgdownRecords();
+          const filtered = records.filter(r => r.stockId !== stockId || !r.boughtAt);
+          S.setAvgdownRecords(filtered);
+          UI.toast('已清除');
+          avgdown(root);
+        });
+      });
+    });
+  }
+
+  function addStockForm(root) {
+    let picked = null;
+    const body = `
+      <label class="fld">股票代碼
+        <input class="input" id="newSymbol" autocomplete="off" placeholder="代碼或名稱（2330、台積電、AAPL…）">
+        <div class="suggest" id="newSuggest"></div>
+      </label>
+      <label class="fld">分配比例 (%)
+        <input class="input" id="newAlloc" type="number" inputmode="decimal" value="10" placeholder="0">
+      </label>
+    `;
+    const footer = `<button class="btn btn-ghost" id="stock-cancel">取消</button><button class="btn btn-primary" id="stock-submit">新增</button>`;
+    const ov = UI.openSheet('新增標的', body, footer);
+    const $ = s => ov.querySelector(s);
+
+    const symInput = $('#newSymbol');
+    const sug = $('#newSuggest');
+    let timer = null;
+
+    symInput.addEventListener('input', () => {
+      const q = symInput.value.trim();
+      clearTimeout(timer);
+      if (!q) { sug.innerHTML = ''; picked = null; return; }
+      timer = setTimeout(async () => {
+        const res = await App.Api.searchSymbols(q);
+        sug.innerHTML = res.map(r => `<div class="sug-item" data-code="${r.code}" data-name="${encodeURIComponent(r.name)}" data-mk="${r.market}"${r.cgid ? ` data-cgid="${r.cgid}"` : ''}>
+          <span class="sc">${r.code}</span><span class="sn">${r.name}</span><span class="sm">${U.marketLabel(r.market)}</span></div>`).join('');
+        sug.querySelectorAll('.sug-item').forEach(it => it.addEventListener('click', () => {
+          const name = decodeURIComponent(it.dataset.name);
+          symInput.value = it.dataset.code + ' ' + name;
+          sug.innerHTML = '';
+          picked = { code: it.dataset.code, name, market: it.dataset.mk };
+          if (it.dataset.cgid) App.Api.cacheCgId(it.dataset.code, it.dataset.cgid);
+          ov.querySelector('.sheet-title').textContent = '新增標的 - ' + it.dataset.code;
+        }));
+      }, 220);
+    });
+
+    $('#stock-cancel').addEventListener('click', () => {
+      UI.closeSheet();
+      avgd.sub = null;
+      avgd.stockId = null;
+      avgdown(root);
+    });
+    $('#stock-submit').addEventListener('click', () => {
+      const symbol = U.sanitizeSymbol(symInput.value);
+      const alloc = +$('#newAlloc').value || 10;
+      if (!symbol || !(alloc > 0)) return UI.toast('請輸入正確的代號和分配比例');
+
+      const cfg = S.getAvgdownCfg();
+      const acct = S.getCashAccounts().find(a => a.id === cfg.fundAccountId);
+      if (!acct) return UI.toast('請先選擇現金帳戶');
+
+      const stocks = S.getAvgdownStocks();
+      const prices = S.getPrices();
+      const allocAmt = (acct.balance * alloc) / 100;
+      const historicalHigh = C.getHistoricalHighPrice(symbol) || prices[symbol]?.price || 0;
+      stocks.push({
+        id: S.uuid(),
+        symbol,
+        name: picked?.name || symbol,
+        highPrice: historicalHigh,
+        highMode: 'auto',
+        allocationPct: alloc,
+        allocatedAmt: allocAmt,
+        rules: [],
+      });
+      S.setAvgdownStocks(stocks);
+      UI.closeSheet();
+      UI.toast('標的已新增');
+      avgd.sub = null;
+      avgdown(root);
+    });
+  }
+
+  function viewStockDetail(root) {
+    const stocks = S.getAvgdownStocks();
+    const stock = stocks.find(s => s.id === avgd.stockId);
+    if (!stock) return UI.toast('標的不存在');
+
+    const cfg = S.getAvgdownCfg();
+    const acct = S.getCashAccounts().find(a => a.id === cfg.fundAccountId);
+    const prices = S.getPrices();
+
+    let rulesHtml = '';
+    const allocAmt = acct ? (acct.balance * stock.allocationPct / 100) : 0;
+
+    const renderRules = () => {
+      rulesHtml = stock.rules.map((r, i) => {
+        const triggerPrice = stock.highPrice * (1 - r.pullbackPct / 100);
+        const suggestedAmt = allocAmt * (r.buyPct / 100);
+        return `
+          <div class="rule-item" data-idx="${i}" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; padding: 8px; background: var(--bg); border-radius: 4px;">
+            <div style="flex: 1;">
+              <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
+                <span>跌</span>
+                <input type="number" class="input rule-pullback" data-idx="${i}" value="${r.pullbackPct}" style="width: 45px; padding: 4px;">
+                <span>% → 投入</span>
+                <input type="number" class="input rule-buy" data-idx="${i}" value="${r.buyPct}" style="width: 45px; padding: 4px;">
+                <span>%</span>
+              </div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px; line-height: 1.4;">
+                <div>目標價: <b style="color: var(--text);" class="rule-price-display">${U.formatPrice(triggerPrice)}</b></div>
+                <div>投入金額: <b style="color: var(--accent); font-size: 12px;" class="rule-amt-display">${U.fmtKMBB(suggestedAmt)}</b> (分配 ${U.fmtKMBB(allocAmt)} 的 <span class="rule-pct-display">${r.buyPct}</span>%)</div>
+              </div>
+            </div>
+            <button class="rule-del" data-idx="${i}" style="background: none; border: none; cursor: pointer; color: var(--loss); font-size: 18px; padding: 0; margin-top: 2px;">✕</button>
+          </div>
+        `;
+      }).join('');
+    };
+    renderRules();
+
+    const body = `
+      <label class="fld">股票代碼
+        <div class="locked">${stock.symbol} <span>🔒</span></div>
+      </label>
+      <label class="fld">顯示名稱
+        <input class="input" id="stock-name" value="${stock.name}" placeholder="名稱">
+      </label>
+      <label class="fld">創高模式
+        <div class="fee-mode">
+          <button class="fm-btn ${stock.highMode === 'auto' ? 'active' : ''}" data-mode="auto">自動</button>
+          <button class="fm-btn ${stock.highMode === 'manual' ? 'active' : ''}" data-mode="manual">手動</button>
+        </div>
+      </label>
+      <label class="fld" id="highprice-fld">創高價格
+        ${stock.highMode === 'manual'
+          ? `<input class="input" id="stock-highprice" type="number" inputmode="decimal" value="${stock.highPrice}" placeholder="0.00">`
+          : `<div style="padding: 8px; background: var(--bg); border-radius: 4px;">
+              <div style="color: var(--text); font-weight: 600; margin-bottom: 4px;">${U.formatPrice(C.getHistoricalHighPrice(stock.symbol))}</div>
+              <div style="font-size: 11px; color: var(--text-muted);">歷史最高 (${U.formatPrice(prices[stock.symbol]?.price || stock.highPrice)} 現價)</div>
+            </div>`}
+      </label>
+      <label class="fld">分配比例 (%)
+        <input class="input" id="stock-alloc-pct" type="number" inputmode="decimal" value="${stock.allocationPct}" placeholder="0">
+      </label>
+      <label class="fld">分配金額（自動計算）
+        <div style="padding: 8px; background: var(--bg); border-radius: 4px; color: var(--text-muted);" id="alloc-amt-preview">${acct ? U.fmtKMBB((acct.balance * stock.allocationPct) / 100) : '0'}</div>
+      </label>
+      <label class="fld" style="margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px;">加碼規則
+        <div id="rules-list">${rulesHtml}</div>
+        <button class="btn btn-ghost" id="add-rule" style="width: 100%; margin-top: 8px;">＋ 加規則</button>
+      </label>
+    `;
+    const footer = `<button class="btn btn-danger" id="stock-delete" style="flex: 0;">刪除</button><button class="btn btn-ghost" id="stock-cancel" style="flex: 1;">取消</button><button class="btn btn-primary" id="stock-save" style="flex: 1;">儲存</button>`;
+    const ov = UI.openSheet('編輯標的 - ' + stock.symbol, body, footer);
+    const $ = s => ov.querySelector(s);
+    const $$ = s => ov.querySelectorAll(s);
+
+    // 創高模式切換
+    $$('.fee-mode button').forEach(btn => btn.addEventListener('click', () => {
+      stock.highMode = btn.dataset.mode;
+      $$('.fee-mode button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const fld = $('#highprice-fld');
+      if (stock.highMode === 'manual') {
+        fld.innerHTML = `<input class="input" id="stock-highprice" type="number" inputmode="decimal" value="${stock.highPrice}" placeholder="0.00">`;
+      } else {
+        fld.innerHTML = `<div style="padding: 8px; background: var(--bg); border-radius: 4px; color: var(--text-muted);">目前價格 ${U.formatPrice(prices[stock.symbol]?.price || stock.highPrice)}</div>`;
+      }
+    }));
+
+    // 分配比例更新預覽與規則
+    $('#stock-alloc-pct').addEventListener('input', () => {
+      const pct = +$('#stock-alloc-pct').value || 0;
+      const newAllocAmt = acct ? (acct.balance * pct) / 100 : 0;
+      $('#alloc-amt-preview').textContent = U.fmtKMBB(newAllocAmt);
+
+      // 更新規則中的投入金額
+      stock.rules.forEach((r, i) => {
+        const suggestedAmt = newAllocAmt * (r.buyPct / 100);
+        const ruleItem = $$('.rule-item')[i];
+        if (ruleItem) {
+          const display = ruleItem.querySelector('.rule-amt-display');
+          if (display) display.textContent = U.fmtKMBB(suggestedAmt);
+        }
+      });
+    });
+
+    // 加規則
+    $('#add-rule').addEventListener('click', () => {
+      stock.rules.push({ id: S.uuid(), pullbackPct: 10, buyPct: 10 });
+      renderRules();
+      $('#rules-list').innerHTML = rulesHtml;
+      attachRuleListeners();
+    });
+
+    const attachRuleListeners = () => {
+      $$('.rule-del').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = +btn.dataset.idx;
+          const deletedRuleId = stock.rules[idx].id;
+          stock.rules.splice(idx, 1);
+
+          // 刪除該規則相關的加碼記錄
+          const records = S.getAvgdownRecords();
+          const filtered = records.filter(r => r.stockId !== stock.id || r.ruleId !== deletedRuleId);
+          S.setAvgdownRecords(filtered);
+
+          renderRules();
+          $('#rules-list').innerHTML = rulesHtml;
+          attachRuleListeners();
+        });
+      });
+      $$('.rule-pullback, .rule-buy').forEach(input => {
+        input.addEventListener('input', () => {
+          const idx = +input.dataset.idx;
+          if (input.classList.contains('rule-pullback')) {
+            stock.rules[idx].pullbackPct = +input.value || 0;
+            const triggerPrice = stock.highPrice * (1 - stock.rules[idx].pullbackPct / 100);
+            const ruleItem = $$('.rule-item')[idx];
+            if (ruleItem) {
+              const priceDisplay = ruleItem.querySelector('.rule-price-display');
+              if (priceDisplay) priceDisplay.textContent = U.formatPrice(triggerPrice);
+            }
+          } else {
+            stock.rules[idx].buyPct = +input.value || 0;
+            const suggestedAmt = allocAmt * (stock.rules[idx].buyPct / 100);
+            const ruleItem = $$('.rule-item')[idx];
+            if (ruleItem) {
+              const amtDisplay = ruleItem.querySelector('.rule-amt-display');
+              const pctDisplay = ruleItem.querySelector('.rule-pct-display');
+              if (amtDisplay) amtDisplay.textContent = U.fmtKMBB(suggestedAmt);
+              if (pctDisplay) pctDisplay.textContent = stock.rules[idx].buyPct;
+            }
+          }
+        });
+      });
+    };
+    attachRuleListeners();
+
+    // 儲存
+    $('#stock-save').addEventListener('click', () => {
+      stock.name = $('#stock-name').value || stock.symbol;
+      if (stock.highMode === 'manual') {
+        stock.highPrice = +$('#stock-highprice').value || 0;
+      } else {
+        stock.highPrice = C.getHistoricalHighPrice(stock.symbol) || prices[stock.symbol]?.price || stock.highPrice;
+      }
+      stock.allocationPct = +$('#stock-alloc-pct').value || 0;
+      stock.allocatedAmt = acct ? (acct.balance * stock.allocationPct) / 100 : 0;
+
+      S.setAvgdownStocks(stocks);
+
+      // 同步更新未標記的加碼記錄（triggerPrice 和 suggestedAmt）
+      const recs = S.getAvgdownRecords();
+      recs.forEach(rec => {
+        if (rec.stockId !== stock.id || rec.boughtAt) return;
+        const rule = stock.rules.find(r => r.id === rec.ruleId);
+        if (!rule) return;
+        rec.triggerPrice = stock.highPrice * (1 - rule.pullbackPct / 100);
+        rec.suggestedAmt = C.calcSuggestedAmt(stock.allocatedAmt, 100, rule.buyPct);
+      });
+      S.setAvgdownRecords(recs);
+
+      UI.closeSheet();
+      UI.toast('已儲存');
+      avgd.sub = null;
+      avgdown(root);
+    });
+
+    // 取消
+    $('#stock-cancel').addEventListener('click', () => {
+      UI.closeSheet();
+      avgd.sub = null;
+      avgd.stockId = null;
+      avgdown(root);
+    });
+
+    // 刪除
+    $('#stock-delete').addEventListener('click', () => {
+      UI.confirmDialog('確定刪除此標的？', () => {
+        const idx = stocks.findIndex(s => s.id === avgd.stockId);
+        stocks.splice(idx, 1);
+        const records = S.getAvgdownRecords();
+        const filtered = records.filter(r => r.stockId !== stock.id);
+        S.setAvgdownStocks(stocks);
+        S.setAvgdownRecords(filtered);
+        UI.closeSheet();
+        UI.toast('已刪除');
+        avgd.sub = null;
+        avgdown(root);
+      });
+    });
+  }
+
+  function openEditDoneRecordSheet(rec, stock, root) {
+    const body = `
+      <label class="fld">股票代碼
+        <div class="locked">${stock.symbol} <span>🔒</span></div>
+      </label>
+      <label class="fld">加碼日期
+        <div style="padding: 8px; background: var(--bg); border-radius: 4px; color: var(--text-muted);">${new Date(rec.boughtAt).toLocaleDateString('zh-TW')}</div>
+      </label>
+      <label class="fld">實際股數
+        <input class="input" id="edit-shares" type="number" inputmode="decimal" value="${rec.actualShares || 0}" placeholder="0">
+      </label>
+      <label class="fld">成交價
+        <input class="input" id="edit-price" type="number" inputmode="decimal" value="${rec.actualPrice || 0}" placeholder="0.00">
+      </label>
+      <div class="tx-preview" id="edit-preview"></div>
+    `;
+    const footer = `<button class="btn btn-danger" id="edit-del">取消標記</button><button class="btn btn-ghost" id="edit-cancel">取消</button><button class="btn btn-primary" id="edit-save">儲存</button>`;
+    const ov = UI.openSheet('編輯加碼 - ' + stock.symbol, body, footer);
+    const $ = s => ov.querySelector(s);
+
+    const updatePreview = () => {
+      const sh = +$('#edit-shares').value || 0;
+      const pr = +$('#edit-price').value || 0;
+      if (sh > 0 && pr > 0) {
+        const cost = sh * pr;
+        $('#edit-preview').innerHTML = `<div style="margin-top: 12px; padding: 8px; background: var(--bg); border-radius: 4px; font-size: 12px;">
+          <div>成本: <b>NT$ ${U.fmtKMBB(cost)}</b></div>
+        </div>`;
+      } else {
+        $('#edit-preview').innerHTML = '';
+      }
+    };
+
+    ['#edit-shares', '#edit-price'].forEach(s => $(s).addEventListener('input', updatePreview));
+
+    $('#edit-cancel').addEventListener('click', () => {
+      UI.closeSheet();
+      avgdown(root);
+    });
+
+    $('#edit-del').addEventListener('click', () => {
+      UI.confirmDialog('確定取消此加碼標記？', () => {
+        const records = S.getAvgdownRecords();
+        const idx = records.findIndex(r => r.id === rec.id);
+        if (idx >= 0) {
+          records[idx].boughtAt = null;
+          records[idx].actualShares = 0;
+          records[idx].actualPrice = 0;
+          S.setAvgdownRecords(records);
+          UI.closeSheet();
+          UI.toast('已取消標記');
+          avgdown(root);
+        }
+      });
+    });
+
+    $('#edit-save').addEventListener('click', () => {
+      const shares = +$('#edit-shares').value || 0;
+      const price = +$('#edit-price').value || 0;
+      if (shares <= 0 || price <= 0) return UI.toast('請輸入股數和成交價');
+
+      const records = S.getAvgdownRecords();
+      const idx = records.findIndex(r => r.id === rec.id);
+      if (idx >= 0) {
+        const oldShares = records[idx].actualShares || 0;
+        const oldPrice = records[idx].actualPrice || 0;
+        records[idx].actualShares = shares;
+        records[idx].actualPrice = price;
+        S.setAvgdownRecords(records);
+
+        // 如果是首次更新（原本是 0），創建交易記錄
+        if (oldShares === 0 || oldPrice === 0) {
+          const result = C.addTransaction({
+            symbolInput: stock.symbol,
+            type: 'BUY',
+            shares: shares,
+            price: price,
+            time: rec.boughtAt,
+            fee: 0,
+            source: 'avgdown'
+          });
+          if (!result.ok) {
+            UI.toast('交易同步失敗: ' + result.msg);
+            return;
+          }
+        }
+
+        UI.closeSheet();
+        UI.toast('已更新並同步到資產');
+        avgdown(root);
+      }
+    });
+  }
+
+  function openBoughtSheet(rec, stock, root) {
+    let actualShares = 0, actualPrice = rec.triggerPrice || 0;
+    const rule = stock.rules.find(r => r.id === rec.ruleId);
+    const body = `
+      <label class="fld">股票代碼
+        <div class="locked">${stock.symbol} <span>🔒</span></div>
+      </label>
+      <label class="fld">加碼規則
+        <div style="padding: 8px; background: var(--bg); border-radius: 4px; font-size: 12px;">
+          <div>跌幅: <b>${rec.pullbackPct.toFixed(2)}%</b></div>
+          <div>觸發價: <b>${U.formatPrice(rec.triggerPrice)}</b></div>
+          <div>投入比例: <b>${rule?.buyPct || 0}%</b></div>
+        </div>
+      </label>
+      <label class="fld">建議投入
+        <div style="padding: 8px; background: var(--accent); color: white; border-radius: 4px; font-weight: 600;">NT$ ${U.fmtKMBB(rec.suggestedAmt)}</div>
+      </label>
+      <div class="fld-row">
+        <label class="fld">實際股數<input class="input" id="bought-shares" type="number" inputmode="decimal" value="0" placeholder="0"></label>
+        <label class="fld">成交價<input class="input" id="bought-price" type="number" inputmode="decimal" value="${actualPrice}" placeholder="0.00"></label>
+      </div>
+      <div class="tx-preview" id="bought-preview"></div>
+    `;
+    const footer = `<button class="btn btn-ghost" id="bought-cancel">取消</button><button class="btn btn-primary" id="bought-submit">確認加碼</button>`;
+    const ov = UI.openSheet('標記加碼 - ' + stock.symbol, body, footer);
+    const $ = s => ov.querySelector(s);
+
+    const updatePreview = () => {
+      const sh = +$('#bought-shares').value || 0;
+      const pr = +$('#bought-price').value || 0;
+      if (sh > 0 && pr > 0) {
+        const cost = sh * pr;
+        const suggestedDiff = cost - rec.suggestedAmt;
+        const diffPct = rec.suggestedAmt > 0 ? ((suggestedDiff / rec.suggestedAmt) * 100).toFixed(1) : 0;
+        const diffStyle = suggestedDiff >= 0 ? 'color: var(--loss);' : 'color: var(--gain);';
+        $('#bought-preview').innerHTML = `
+          <div style="margin-top: 12px; padding: 8px; background: var(--bg); border-radius: 4px; font-size: 12px;">
+            <div>實際投入: <b>NT$ ${U.fmtKMBB(cost)}</b></div>
+            <div style="${diffStyle}">建議 NT$ ${U.fmtKMBB(rec.suggestedAmt)} <span>${suggestedDiff >= 0 ? '+' : ''}${U.fmtKMBB(suggestedDiff)} (${diffPct}%)</span></div>
+            <div style="margin-top: 4px; color: var(--text-muted);">單價: ${U.formatPrice(pr)}</div>
+          </div>
+        `;
+      } else {
+        $('#bought-preview').innerHTML = '';
+      }
+    };
+
+    ['#bought-shares', '#bought-price'].forEach(s => $(s).addEventListener('input', updatePreview));
+
+    $('#bought-cancel').addEventListener('click', () => {
+      UI.closeSheet();
+      avgdown(root);
+    });
+    $('#bought-submit').addEventListener('click', () => {
+      actualShares = +$('#bought-shares').value || 0;
+      actualPrice = +$('#bought-price').value || 0;
+      if (actualShares <= 0 || actualPrice <= 0) return UI.toast('請輸入股數和成交價');
+
+      const records = S.getAvgdownRecords();
+      const idx = records.findIndex(r => r.id === rec.id);
+      if (idx >= 0) {
+        records[idx].boughtAt = Date.now();
+        records[idx].actualShares = actualShares;
+        records[idx].actualPrice = actualPrice;
+        S.setAvgdownRecords(records);
+      }
+
+      // 創建買入交易記錄
+      const result = C.addTransaction({
+        symbolInput: stock.symbol,
+        type: 'BUY',
+        shares: actualShares,
+        price: actualPrice,
+        time: Date.now(),
+        fee: 0,
+        source: 'avgdown'
+      });
+      if (!result.ok) {
+        UI.toast('交易同步失敗: ' + result.msg);
+        return;
+      }
+
+      UI.closeSheet();
+      UI.toast('已標記加碼並同步到資產');
+      // 強制重新取得數據後重新渲染
+      setTimeout(() => avgdown(root), 100);
+    });
+  }
+
+  return { portfolio, history, report, assets, settings, avgdown, openTxForm, resetAssetsNav, resetReportNav, resetPortfolioNav, resetAvgdownNav, resetSettingsNav };
 })();

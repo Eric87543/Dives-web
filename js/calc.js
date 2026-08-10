@@ -970,6 +970,97 @@ App.Calc = (function () {
     return { ok: true, paid: pay };
   }
 
+  // ===== 加碼功能 =====
+  function calcPullback(highPrice, currentPrice) {
+    if (highPrice <= 0) return 0;
+    return Math.max(0, ((highPrice - currentPrice) / highPrice) * 100);
+  }
+
+  function calcSuggestedAmt(balance, allocPct, buyPct) {
+    return Math.round((balance * (allocPct / 100) * (buyPct / 100)) * 100) / 100;
+  }
+
+  function checkAvgDownTriggers(stocks, prices) {
+    const records = S.getAvgdownRecords();
+    const newRecords = [];
+    for (const stock of stocks) {
+      const p = prices[stock.symbol];
+      if (!p) continue;
+      const pullback = calcPullback(stock.highPrice, p.price);
+      for (const rule of stock.rules) {
+        if (pullback >= rule.pullbackPct) {
+          const existing = records.some(r =>
+            r.stockId === stock.id && r.ruleId === rule.id
+          );
+          if (!existing) {
+            newRecords.push({
+              id: S.uuid(),
+              stockId: stock.id,
+              ruleId: rule.id,
+              pullbackPct: pullback,
+              triggerPrice: p.price,
+              suggestedAmt: calcSuggestedAmt(stock.allocatedAmt, 100, rule.buyPct),
+              boughtAt: null,
+            });
+          }
+        }
+      }
+    }
+    if (newRecords.length > 0) {
+      S.setAvgdownRecords([...records, ...newRecords]);
+    }
+    return newRecords;
+  }
+
+  function getHistoricalHighPrice(symbol) {
+    // 1. 交易記錄中的最高價
+    const txs = S.getTransactions().filter(t => t.symbol === symbol);
+    const txPrices = txs.map(t => +t.price || 0);
+
+    // 2. 快照中的最高價
+    const snaps = S.getSnapshots();
+    const snapPrices = [];
+    snaps.forEach(snap => {
+      if (snap.positions) {
+        snap.positions.forEach(pos => {
+          if (pos.symbol === symbol && pos.price) {
+            snapPrices.push(+pos.price);
+          }
+        });
+      }
+    });
+
+    // 3. 當前價格
+    const currentPrices = [S.getPrices()[symbol]?.price || 0];
+
+    // 取所有價格中的最高值
+    const allPrices = [...txPrices, ...snapPrices, ...currentPrices].filter(p => p > 0);
+    return allPrices.length > 0 ? Math.max(...allPrices) : 0;
+  }
+
+  // 槓桿比例 = 曝險市值 / (資產 - 負債)
+  // 曝險市值：每支持倉市值 × 使用者設定的曝險倍數（正二=2，原形=1）
+  // 資產 - 負債 = 流動資金 + 投資市值 - 負債
+  function computeLeverageRatio() {
+    const rate = S.getFxRate() || 31.5;
+    const positions = buildPositions();
+    const expMap = S.getExposureMap();
+    const toTwd = a => (a.currency === 'USD' ? (a.balance || 0) * rate : (a.balance || 0));
+    const cashTwd = S.getCashAccounts().reduce((s, a) => s + toTwd(a), 0);
+    const liabTwd = S.getLiabilities().reduce((s, a) => s + toTwd(a), 0);
+    let investTwd = 0, exposureTwd = 0;
+    for (const p of positions) {
+      const mk = U.normalizeMarketKey(p.market);
+      const mv = (mk === U.Market.us || mk === U.Market.crypto) ? p.marketValue * rate : p.marketValue;
+      const mul = expMap[p.symbol] || 1;
+      investTwd += mv;
+      exposureTwd += mv * mul;
+    }
+    const netAssets = cashTwd + investTwd - liabTwd;
+    const ratio = netAssets > 1e-9 ? exposureTwd / netAssets : null;
+    return { ratio, exposureTwd, netAssets, investTwd, cashTwd, liabTwd };
+  }
+
   return {
     computeAvgCostPosition, buildPositions, buildSummary,
     addTransaction, updateTransaction, deleteTransaction, recomputeRealized,
@@ -977,5 +1068,7 @@ App.Calc = (function () {
     deleteSymbol, saveTodaySnapshot, rebuildSnapshots, assetsSummary, txCashDelta, cashLiabTwd,
     netWorthBuckets, findAbsurdFees, repairFees, buildGroupSeries, tradingStats, scopedStats, xirrRate, buildXirrFlows, portfolioXirr,
     recurringDueDates, isoAddDays, priceOnOrBefore, planFee, applyLiabilityPayment, investedBetween, feesSummary,
+    calcPullback, calcSuggestedAmt, checkAvgDownTriggers, getHistoricalHighPrice,
+    computeLeverageRatio,
   };
 })();

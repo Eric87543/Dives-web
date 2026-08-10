@@ -62,5 +62,28 @@ App.UI = (function () {
     ov.querySelector('#cd-yes').addEventListener('click', () => { closeSheet(); onYes && onYes(); });
   }
 
-  return { GAIN, LOSS, pnlColor, toast, money, openSheet, closeSheet, confirmDialog };
+  function setSubHead(title) {
+    let header = document.getElementById('sub-header');
+    if (!header) {
+      header = document.createElement('div');
+      header.id = 'sub-header';
+      header.style.cssText = 'display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg);';
+      const view = document.getElementById('view');
+      if (view && view.firstChild) {
+        view.insertBefore(header, view.firstChild);
+      } else {
+        view?.appendChild(header);
+      }
+    }
+    header.innerHTML = `<button class="link-back" id="sub-back" style="margin-right: 12px; background: none; border: none; cursor: pointer; font-size: 18px;">←</button><h2 style="margin: 0; font-size: 18px; font-weight: 600;">${title}</h2>`;
+  }
+
+  function setSubBack(root, callback) {
+    const btn = document.getElementById('sub-back');
+    if (btn) {
+      btn.addEventListener('click', callback);
+    }
+  }
+
+  return { GAIN, LOSS, pnlColor, toast, money, openSheet, closeSheet, confirmDialog, setSubHead, setSubBack };
 })();
