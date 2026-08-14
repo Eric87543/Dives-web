@@ -959,8 +959,8 @@ App.Views = (function () {
     const investSummary = [...groups.map(g => g.name), ungrouped.length ? '獨立持股' : null].filter(Boolean).join('、') || '尚無持倉';
     const liabSummary = liabs.map(a => a.name).join('、') || '尚無負債';
 
-    // 佔總資產比例（總資產 = 流動資金 + 投資）
-    const grossAssets = sum.cashTwd + sum.investTwd;
+    // 佔總資產比例（總資產 = 流動資金 + 投資 + 負債；三類加總 = 100%）
+    const grossAssets = sum.cashTwd + sum.investTwd + sum.liabTwd;
     const pctOfAssets = v => grossAssets > 1e-9 ? v / grossAssets * 100 : 0;
 
     // 佔比環形圈（依類別上色、圈內顯示百分比；放大以容納 100%）
@@ -1260,7 +1260,7 @@ App.Views = (function () {
     const members = C.buildPositions().filter(p => gmap[p.symbol] === gid);
     const gTotal = members.reduce((s, p) => s + mvTwdOf(p, rate), 0);
     const basis = S.getPctBasis();
-    const denomV = basis === 'group' ? (gTotal || 1) : basis === 'invest' ? sum.investTwd : sum.netWorth;
+    const denomV = gTotal || 1; // 群組詳情頁一律以組內合計為分母，確保持倉佔比加總 = 100%
     members.sort((a, b) => as.detailAsc ? mvTwdOf(a, rate) - mvTwdOf(b, rate) : mvTwdOf(b, rate) - mvTwdOf(a, rate));
     const fmtPctBadge = v => (v >= 9.95 ? Math.round(v) : v.toFixed(v >= 1 ? 0 : 1)) + '%';
     const updTs = S.getPricesTs();
